@@ -1,0 +1,83 @@
+// Guruji bootstrap: service worker registration, hash router, view mounting.
+import { clear } from './util.js';
+import { ensureSchedule } from './schedule.js';
+import { renderNow } from './views/now.js';
+import { renderFocus } from './views/focus.js';
+import { renderWeek } from './views/week.js';
+import { renderSchedule } from './views/scheduleView.js';
+import { renderPlan } from './views/plan.js';
+import { renderData } from './views/data.js';
+
+const viewEl = () => document.getElementById('view');
+const navEl = () => document.getElementById('nav');
+
+const ROUTES = {
+  now: renderNow,
+  week: renderWeek,
+  plan: renderPlan,
+  schedule: renderSchedule,
+  data: renderData,
+  focus: renderFocus,
+};
+
+function parseHash() {
+  const raw = location.hash.replace(/^#\/?/, '');
+  const [name, ...rest] = raw.split('/');
+  return { name: name || 'now', arg: rest.join('/') || '' };
+}
+
+let currentCleanup = null;
+
+async function router() {
+  const { name, arg } = parseHash();
+  const render = ROUTES[name] || renderNow;
+
+  // Let a view tear down timers/listeners before we replace it.
+  if (typeof currentCleanup === 'function') {
+    try { currentCleanup(); } catch { /* ignore */ }
+    currentCleanup = null;
+  }
+
+  const mount = clear(viewEl());
+
+  // Focus is a full-screen distraction-free view: hide the nav entirely.
+  const isFocus = name === 'focus';
+  navEl().hidden = isFocus;
+
+  // Highlight active nav item.
+  document.querySelectorAll('.nav-item').forEach((a) => {
+    a.classList.toggle('active', a.dataset.route === name);
+  });
+
+  try {
+    const cleanup = await render(mount, { arg, navigate });
+    if (typeof cleanup === 'function') currentCleanup = cleanup;
+  } catch (err) {
+    console.error('view error', err);
+    mount.innerHTML = `<div class="center-state"><h2>Something went wrong</h2><p class="muted">${String(err.message || err)}</p></div>`;
+  }
+  // Scroll to top on navigation.
+  window.scrollTo(0, 0);
+}
+
+export function navigate(path) {
+  if (location.hash === `#${path}`) router();
+  else location.hash = path;
+}
+
+async function boot() {
+  // Seed a schedule on first run so Now has something to reason about.
+  try { await ensureSchedule(); } catch (e) { console.warn('schedule seed failed', e); }
+
+  window.addEventListener('hashchange', router);
+  await router();
+
+  // Register the service worker (offline shell). Non-fatal if it fails.
+  // Register directly — this module is deferred, so the window 'load' event may
+  // have already fired by now and a listener would never run.
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('sw failed', e));
+  }
+}
+
+boot();

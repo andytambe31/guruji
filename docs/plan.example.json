@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "owner": "Example",
+    "target": "Sample goal",
+    "role": "Sample role",
+    "startWeekOf": "2026-01-05"
+  },
+  "schedule": [
+    { "day": "MON", "start": "10:00", "end": "13:00", "mode": "DESK" },
+    { "day": "TUE", "start": "08:00", "end": "09:00", "mode": "TRANSIT" },
+    { "day": "TUE", "start": "19:00", "end": "20:15", "mode": "WIND_DOWN" },
+    { "day": "SAT", "start": "14:00", "end": "17:00", "mode": "DESK" }
+  ],
+  "phases": [
+    {
+      "id": "phase-1",
+      "name": "Example Phase",
+      "weeks": ["1-2"],
+      "dateRange": "2026-01-05 to 2026-01-18",
+      "items": [
+        {
+          "id": "ex-desk-1",
+          "title": "First deep-work task",
+          "phase": "phase-1", "week": 1,
+          "mode": "DESK", "estMinutes": 60,
+          "dependsOn": [], "status": "todo"
+        },
+        {
+          "id": "ex-desk-2",
+          "title": "Follow-up task (needs the first done)",
+          "phase": "phase-1", "week": 1,
+          "mode": "DESK", "estMinutes": 60,
+          "dependsOn": ["ex-desk-1"], "status": "todo"
+        },
+        {
+          "id": "ex-transit-1",
+          "title": "A concept to read on the commute",
+          "phase": "phase-1", "week": 1,
+          "mode": "TRANSIT", "estMinutes": 45,
+          "dependsOn": [], "status": "todo"
+        },
+        {
+          "id": "ex-wind-1",
+          "title": "Light reading before sleep",
+          "phase": "phase-1", "week": 1,
+          "mode": "WIND_DOWN", "estMinutes": 20,
+          "dependsOn": [], "status": "todo"
+        }
+      ]
+    }
+  ]
+}

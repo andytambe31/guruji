@@ -1,0 +1,20 @@
+# Guruji is a PUBLIC repo deployed to GitHub Pages.
+# NEVER commit personal data. The plan and all user data live only in
+# IndexedDB / the exported JSON file — never in the repo.
+
+# The owner's real study plan
+plan.json
+
+# Any exported / imported user data files
+*-export.json
+*export*.json
+data/
+*.data.json
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+node_modules/
