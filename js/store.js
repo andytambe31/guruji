@@ -51,6 +51,34 @@ export async function nextItemForMode(mode) {
   return null;
 }
 
+export function areaOf(item) { return (item && item.area) || 'Study'; }
+
+// Next surfaceable todo item within an area (deps satisfied), in plan order.
+export async function nextItemForArea(area) {
+  const items = await getItems();
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+  for (const it of items) {
+    if (areaOf(it) !== area) continue;
+    if (it.status !== 'todo') continue;
+    if ((it.dependsOn || []).every((d) => statusById.get(d) === 'done')) return it;
+  }
+  return null;
+}
+
+// Areas that have at least one surfaceable item, in plan order of first item.
+export async function availableAreas() {
+  const items = await getItems();
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+  const seen = [];
+  for (const it of items) {
+    if (it.status !== 'todo') continue;
+    if (!(it.dependsOn || []).every((d) => statusById.get(d) === 'done')) continue;
+    const a = areaOf(it);
+    if (!seen.includes(a)) seen.push(a);
+  }
+  return seen;
+}
+
 // Is an item currently surfaceable (deps satisfied)?
 export function depsSatisfied(item, statusById) {
   return (item.dependsOn || []).every((d) => statusById.get(d) === 'done');
@@ -125,6 +153,7 @@ export async function ingestPlan(plan, { replaceSchedule = true, mergeStatus = t
         title: it.title || '(untitled)',
         phase: it.phase || ph.id,
         week: it.week ?? null,
+        area: it.area || null,
         mode: it.mode,
         estMinutes: it.estMinutes ?? null,
         dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
@@ -170,6 +199,7 @@ export async function buildExport() {
       title: it.title,
       phase: it.phase,
       week: it.week,
+      area: it.area || undefined,
       mode: it.mode,
       estMinutes: it.estMinutes,
       dependsOn: it.dependsOn || [],

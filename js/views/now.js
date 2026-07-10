@@ -1,16 +1,17 @@
-// Now — the dashboard. No schedule: it shows the one next thing and lets you
-// say "I'm sitting down for N minutes" right here. Modes are just a lightweight
-// "what are you doing right now" switch so it hands you an appropriate task.
-import { el, clear, MODES, MODE_LABEL } from '../util.js';
-import { hasPlan, getItems, getPhases, nextItemForMode } from '../store.js';
+// Now — the dashboard. High level on purpose: it suggests an *area* to study
+// (never the specific topic), nudged by your recent history. The actual "what"
+// and "how" is revealed only once you commit, in the prep flow.
+import { el, clear } from '../util.js';
+import { hasPlan, getItems, getLog, availableAreas, nextItemForArea } from '../store.js';
 
-const DURATIONS = [25, 50, 90];
-
-// The coach's voice — an authoritative directive framing the one thing.
-const COACH = {
-  DESK: 'Go deep now. This is the rep that moves you.',
-  TRANSIT: 'You’ve got a pocket — put it into this.',
-  WIND_DOWN: 'Ease off the day. Keep it light with this.',
+// A directive line per area, used when you pick an area yourself.
+const AREA_LINE = {
+  'DSA': 'Patterns only stick with reps. Get one in.',
+  'System Design': 'Think in tradeoffs — one system at a time.',
+  'Behavioral': 'Your stories win the room. Shape one.',
+  'Reading': 'Wind down with the book. Small and steady.',
+  'Applications': 'Momentum matters. Push this forward.',
+  'Study': 'One thing. Let’s go.',
 };
 
 export async function renderNow(mount, { navigate }) {
@@ -23,86 +24,91 @@ export async function renderNow(mount, { navigate }) {
     return;
   }
 
-  const phases = await getPhases();
-  const phaseName = (id) => (phases.find((p) => p.id === id) || {}).name || '';
-
-  // Which modes have a surfaceable next item right now?
-  const nextByMode = {};
-  for (const m of MODES) nextByMode[m] = await nextItemForMode(m);
-  const availableModes = MODES.filter((m) => nextByMode[m]);
-
-  if (availableModes.length === 0) {
+  const areas = await availableAreas();
+  if (areas.length === 0) {
     const items = await getItems();
     const anyLeft = items.some((i) => i.status === 'todo');
     mount.append(el('div', { class: 'center-state' }, [
-      el('p', { class: 'eyebrow', text: 'Guruji' }),
       el('h1', { text: anyLeft ? 'Nothing unlocked' : 'All clear' }),
       el('p', { class: 'muted', text: anyLeft
-        ? 'The next items are still waiting on their dependencies. Finish what unlocks them, or review the plan.'
+        ? 'The next items are waiting on their dependencies. Finish what unlocks them, or review the plan.'
         : 'Everything in the plan is done or skipped. Time to update the plan.' }),
       el('button', { class: 'btn btn-ghost', style: 'margin-top:12px', text: 'Review plan', onclick: () => navigate('/plan') }),
     ]));
     return;
   }
 
-  // Default context: the mode of the earliest available item in plan order.
-  let selectedMode = availableModes.reduce((best, m) =>
-    (nextByMode[m].order < nextByMode[best].order ? m : best), availableModes[0]);
-  let selectedMinutes = null; // null => derive a default from the item's estimate
+  const log = await getLog();
+  const suggestion = suggest(areas, log);
+  let selectedArea = suggestion.area;
 
   const wrap = el('div', { class: 'now-wrap' });
   mount.append(wrap);
   render();
 
-  function defaultMinutesFor(item) {
-    if (!item.estMinutes) return DURATIONS[0];
-    // nearest offered duration to the estimate
-    return DURATIONS.reduce((best, d) =>
-      Math.abs(d - item.estMinutes) < Math.abs(best - item.estMinutes) ? d : best, DURATIONS[0]);
-  }
+  async function render() {
+    const item = await nextItemForArea(selectedArea);
+    const coachText = selectedArea === suggestion.area
+      ? suggestion.nudge
+      : (AREA_LINE[selectedArea] || AREA_LINE.Study);
 
-  function render() {
-    const item = nextByMode[selectedMode];
-    const minutes = selectedMinutes ?? defaultMinutesFor(item);
-
-    const ctxBits = [];
-    const pn = phaseName(item.phase);
-    if (pn) ctxBits.push(pn);
-    if (item.week != null && item.week > 0) ctxBits.push(`Week ${item.week}`);
-
-    const ctx = el('div', { class: 'ctx' }, availableModes.map((m) =>
+    const areaChips = el('div', { class: 'areas' }, areas.map((a) =>
       el('button', {
-        class: 'ctx-chip' + (m === selectedMode ? ' on' : ''),
-        onclick: () => { selectedMode = m; selectedMinutes = null; render(); },
-      }, [el('span', { class: `d ${m}` }), MODE_LABEL[m]])));
-
-    const hero = el('div', { class: 'hero' }, [
-      el('div', { class: 'title', text: item.title }),
-      item.estMinutes ? el('div', { class: 'meta', text: `~${item.estMinutes} min` }) : null,
-    ]);
-
-    const dur = el('div', { class: 'dur' }, DURATIONS.map((d) =>
-      el('button', {
-        class: 'dur-chip' + (d === minutes ? ' on' : ''),
-        text: `${d} min`,
-        onclick: () => { selectedMinutes = d; render(); },
+        class: 'ctx-chip' + (a === selectedArea ? ' on' : ''),
+        text: a,
+        onclick: () => { selectedArea = a; render(); },
       })));
 
-    const start = el('button', {
-      class: 'btn btn-primary btn-lg btn-block',
-      text: `Sit down for ${minutes} min`,
-      onclick: () => navigate(`/focus/${item.id}/${minutes}`),
-    });
-
     clear(wrap).append(
-      ctxBits.length ? el('p', { class: 'eyebrow', text: ctxBits.join(' · ') }) : null,
-      el('div', { class: 'coach', text: COACH[selectedMode] || 'Here’s what needs doing right now.' }),
-      ctx,
-      hero,
-      el('div', { class: 'dur-label', text: 'How long are you sitting?' }),
-      dur,
-      start,
-      el('p', { class: 'now-foot muted', text: 'One thing. That is the whole job right now.' }),
+      item && item.phase ? el('p', { class: 'eyebrow', text: phaseEyebrow(item) }) : null,
+      el('div', { class: 'coach', text: coachText }),
+      el('div', { class: 'dur-label', text: 'What are you studying?' }),
+      areaChips,
+      el('button', {
+        class: 'btn btn-primary btn-lg btn-block',
+        text: 'Start studying',
+        onclick: () => item && navigate(`/prep/${item.id}`),
+      }),
+      el('p', { class: 'now-foot muted', text: 'High level for now — the what and how come when you sit down.' }),
     );
   }
+}
+
+function phaseEyebrow(item) {
+  const bits = [];
+  // We surface phase/week only (never the topic) to keep the dashboard high level.
+  if (item.week != null && item.week > 0) bits.push(`Week ${item.week}`);
+  return bits.join(' · ');
+}
+
+// Choose an area to suggest and a coaching nudge, from recent history.
+function suggest(areas, log) {
+  const recent = [...log].reverse().map((e) => e.area).filter(Boolean); // most recent first
+  if (areas.length === 1) {
+    return { area: areas[0], nudge: `Let’s get into ${areas[0]}.` };
+  }
+
+  // streak of the most-recent area
+  const streakArea = recent[0] || null;
+  let streak = 0;
+  for (const a of recent) { if (a === streakArea) streak++; else break; }
+
+  // prefer the available area you've touched least recently
+  let best = areas[0];
+  let bestScore = -1;
+  for (const a of areas) {
+    const idx = recent.indexOf(a);
+    const score = idx === -1 ? Infinity : idx; // not seen recently => most neglected
+    if (score > bestScore) { bestScore = score; best = a; }
+  }
+
+  let nudge;
+  if (streakArea && streak >= 2 && areas.includes(streakArea) && best !== streakArea) {
+    nudge = `You’ve been deep in ${streakArea} — ${streak} in a row. Ease into ${best} today.`;
+  } else if (recent.length === 0) {
+    nudge = 'Fresh start. Let’s get the first rep in.';
+  } else {
+    nudge = `Good momentum. ${best} is up next.`;
+  }
+  return { area: best, nudge };
 }

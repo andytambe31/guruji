@@ -4,7 +4,7 @@
 import { el, clear, fmtClock, toast } from '../util.js';
 import { getItem, setItemStatus, addLogEntry } from '../store.js';
 
-const RITUAL = 'Phone on Focus mode. One thing on screen.';
+const RITUAL = 'Stay with it. One thing.';
 const NUDGES = [
   'One thing. Stay here.',
   'You only owe it this block.',
@@ -109,6 +109,7 @@ export async function renderFocus(mount, { arg, navigate }) {
       itemId: item.id,
       itemTitle: item.title,
       mode: item.mode,
+      area: item.area || null,
       phase: item.phase,
       week: item.week,
       date: started.toISOString().slice(0, 10),

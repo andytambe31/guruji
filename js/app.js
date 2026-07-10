@@ -1,6 +1,7 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
 import { clear } from './util.js';
 import { renderNow } from './views/now.js';
+import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
 import { renderPlan } from './views/plan.js';
 import { renderData } from './views/data.js';
@@ -11,10 +12,14 @@ const topbarEl = () => document.getElementById('topbar');
 
 const ROUTES = {
   now: renderNow,
+  prep: renderPrep,
   plan: renderPlan,
   data: renderData,
   focus: renderFocus,
 };
+
+// Full-screen, distraction-free views hide the app chrome (nav + top bar).
+const CHROMELESS = new Set(['focus', 'prep']);
 
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '');
@@ -36,10 +41,10 @@ async function router() {
 
   const mount = clear(viewEl());
 
-  // Focus is a full-screen distraction-free view: hide the chrome entirely.
-  const isFocus = name === 'focus';
-  navEl().hidden = isFocus;
-  topbarEl().hidden = isFocus;
+  // Focus + prep are full-screen distraction-free views: hide the chrome.
+  const chromeless = CHROMELESS.has(name);
+  navEl().hidden = chromeless;
+  topbarEl().hidden = chromeless;
 
   // Highlight active nav + top-bar items.
   document.querySelectorAll('.nav-item, .topbar-action').forEach((a) => {
