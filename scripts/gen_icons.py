@@ -12,9 +12,9 @@ import zlib
 OUT = os.path.join(os.path.dirname(__file__), "..", "icons")
 os.makedirs(OUT, exist_ok=True)
 
-BG = (15, 17, 21)            # #0f1115 deep night
-GLOW = (233, 184, 114)       # #e9b872 warm lamp gold
-CORE = (247, 224, 178)       # soft warm core
+BG = (194, 112, 61)          # #c2703d terracotta tile
+GLOW = (240, 205, 160)       # warm lamp light
+CORE = (250, 244, 233)       # soft cream core
 
 
 def lerp(a, b, t):
