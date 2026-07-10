@@ -1,7 +1,7 @@
 // Prep — the drill-in from "Start studying". This is where the specific topic
 // is finally revealed, along with a short ritual and how to approach it. Then
 // you pick a length and begin the timer.
-import { el, clear } from '../util.js';
+import { el, clear, fill } from '../util.js';
 import { getItem, getPhases } from '../store.js';
 
 const DURATIONS = [25, 50, 90];
@@ -54,10 +54,10 @@ export async function renderPrep(mount, { arg, navigate }) {
         onclick: () => { minutes = d; render(); },
       })));
 
-    clear(wrap).append(
+    fill(clear(wrap), [
       el('button', { class: 'prep-back', text: '← Not now', onclick: () => navigate('/now') }),
 
-      el('p', { class: 'eyebrow', text: ctxBits.join(' · ') }),
+      ctxBits.length ? el('p', { class: 'eyebrow', text: ctxBits.join(' · ') }) : null,
       el('p', { class: 'prep-lead', text: 'Focus on this' }),
       el('h1', { class: 'prep-title', text: item.title }),
 
@@ -76,7 +76,7 @@ export async function renderPrep(mount, { arg, navigate }) {
         text: `Begin — ${minutes} min`,
         onclick: () => navigate(`/focus/${item.id}/${minutes}`),
       }),
-    );
+    ]);
   }
 }
 

@@ -223,25 +223,24 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .progress-track { height: 3px; background: var(--line); border-radius: 3px; margin: 16px 0 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--text); border-radius: 3px; }
 
-.phase-block { margin-bottom: 28px; }
-.phase-block > h2 { margin-bottom: 2px; }
-.plan-item { display: flex; align-items: flex-start; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--line-soft); }
+.phase-block { margin-bottom: 30px; }
+.phase-block > h2 { margin-bottom: 6px; }
+.plan-item { display: flex; align-items: flex-start; gap: 11px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+.plan-item.locked { opacity: .45; }
+.pdot { width: 7px; height: 7px; border-radius: 50%; margin-top: 7px; flex: 0 0 auto; background: var(--text-faint); }
+.pdot.DESK { background: var(--desk); }
+.pdot.TRANSIT { background: var(--transit); }
+.pdot.WIND_DOWN { background: var(--wind); }
 .plan-item .body { flex: 1; min-width: 0; }
 .plan-item .t { color: var(--text); font-size: 15px; line-height: 1.4; }
 .plan-item.done .t { color: var(--text-faint); text-decoration: line-through; }
 .plan-item.skipped .t { color: var(--text-faint); }
-.plan-item .sub { font-size: 12px; color: var(--text-faint); margin-top: 4px; display: flex; gap: 10px; flex-wrap: wrap; }
-.mdot { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: .05em; }
-.mdot .d { width: 6px; height: 6px; border-radius: 50%; }
-.mdot .d.DESK { background: var(--desk); }
-.mdot .d.TRANSIT { background: var(--transit); }
-.mdot .d.WIND_DOWN { background: var(--wind); }
-.mdot.locked { color: var(--text-faint); }
-.mdot.locked .d { background: var(--text-faint); }
-.plan-item .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.mini-btn { font-size: 12px; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); cursor: pointer; }
-.mini-btn.active-done { background: var(--text); color: #fff; border-color: var(--text); }
-.mini-btn.active-skip { background: var(--bg-soft); color: var(--text); }
+.plan-item .sub { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
+.plan-item .row-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.mini-btn { font-size: 12px; padding: 6px 9px; border-radius: 8px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; }
+.mini-btn:hover { color: var(--text); }
+.mini-btn.active-done { color: var(--text); font-weight: 650; }
+.mini-btn.active-skip { color: var(--text); }
 
 /* ---------- Data (import/export) ---------- */
 .field { margin-bottom: 18px; }

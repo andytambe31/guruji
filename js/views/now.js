@@ -1,7 +1,7 @@
 // Now — the dashboard. High level: it suggests a study *area* (never the topic),
 // nudged by recent history, and separately keeps a persistent reading-habit
 // strip going by streak/recency. The actual "what/how" is revealed in prep.
-import { el, clear, habitStats, todayISO } from '../util.js';
+import { el, clear, fill, habitStats, todayISO } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied } from '../store.js';
 
 const AREA_LINE = {
@@ -79,7 +79,7 @@ export async function renderNow(mount, { navigate }) {
         onclick: () => { selectedArea = a; render(); },
       })));
 
-    clear(wrap).append(
+    fill(clear(wrap), [
       item && item.week != null && item.week > 0 ? el('p', { class: 'eyebrow', text: `Week ${item.week}` }) : null,
       el('div', { class: 'coach', text: coachText }),
       el('div', { class: 'dur-label', text: 'What are you studying?' }),
@@ -90,7 +90,7 @@ export async function renderNow(mount, { navigate }) {
         onclick: () => item && navigate(`/prep/${item.id}`),
       }),
       readingStrip,
-    );
+    ]);
   }
 }
 

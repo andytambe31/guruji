@@ -42,6 +42,16 @@ export function clear(node) {
   return node;
 }
 
+// Append children, skipping null/false/undefined. Native node.append() would
+// otherwise stringify them and render literal "null"/"false" text.
+export function fill(node, children) {
+  for (const c of (Array.isArray(children) ? children : [children])) {
+    if (c == null || c === false) continue;
+    node.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
 // "HH:MM" -> minutes since midnight
 export function toMinutes(hhmm) {
   const [h, m] = String(hhmm).split(':').map(Number);
