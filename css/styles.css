@@ -283,37 +283,49 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-dim); }
 .legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
 
-/* ---------- Schedule editor (minimal: borderless, two quiet lines) ---------- */
+/* ---------- Schedule editor (minimal, neatly aligned columns) ---------- */
+.sched-head {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 96px 16px;
+  column-gap: 6px;
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding-bottom: 6px;
+}
 .sched-list { display: flex; flex-direction: column; }
+/* Identical grid on every row => day / time / mode / × line up down the list. */
 .sched-pocket {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 16px 2px;
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) 96px 16px;
+  column-gap: 6px;
+  align-items: center;
+  padding: 15px 0;
   border-bottom: 1px solid var(--line);
 }
 .sched-list .sched-pocket:first-child { border-top: 1px solid var(--line); }
-.sched-top { display: flex; align-items: center; gap: 10px; }
-.sched-times { display: flex; align-items: center; gap: 8px; }
 
-/* Borderless, transparent controls that read as plain text — none shrink. */
+/* Borderless, transparent controls that read as plain text. */
 .fld {
-  flex: 0 0 auto;
   -webkit-appearance: none;
   appearance: none;
   background: transparent;
   border: none;
   color: var(--text);
   font: inherit;
-  font-size: 16px;
+  font-size: 14px;
   padding: 2px 0;
   cursor: pointer;
+  min-width: 0;
+  width: 100%;
 }
 .fld:focus { outline: none; }
-.fld-day { font-weight: 640; font-size: 17px; }
+.fld-day { font-weight: 640; }
 select.fld {
-  padding-right: 18px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='11' height='7' viewBox='0 0 11 7'%3E%3Cpath fill='none' stroke='%23a99e8d' stroke-width='1.5' d='M1 1 5.5 5.5 10 1'/%3E%3C/svg%3E");
+  padding-right: 15px;
+  text-overflow: ellipsis;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath fill='none' stroke='%23a99e8d' stroke-width='1.5' d='M1 1 5 5 9 1'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right center;
 }
@@ -321,19 +333,25 @@ select.fld {
 .fld-mode.DESK { color: var(--desk); }
 .fld-mode.TRANSIT { color: var(--transit); }
 .fld-mode.WIND_DOWN { color: var(--wind); }
-.fld-time { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.sched-times {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-dim);
+}
+.fld-time { width: auto; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .fld-time::-webkit-calendar-picker-indicator { display: none; -webkit-appearance: none; }
 .fld-time::-webkit-date-and-time-value { text-align: left; margin: 0; padding: 0; }
-.sched-dash { color: var(--text-faint); }
-.sched-spacer { flex: 1 1 auto; }
+.sched-dash { color: var(--text-faint); flex: 0 0 auto; }
 .sched-x {
-  flex: 0 0 auto;
+  justify-self: end;
   background: transparent;
   border: none;
   color: var(--text-faint);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1;
-  padding: 6px 2px;
+  padding: 6px 0;
   cursor: pointer;
   opacity: .5;
 }

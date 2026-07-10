@@ -25,15 +25,12 @@ export async function renderSchedule(mount, { navigate }) {
     });
 
     return el('div', { class: 'sched-pocket' }, [
-      el('div', { class: 'sched-top' }, [
-        daySel,
-        el('span', { class: 'sched-spacer' }),
-        modeSel,
-        removeBtn,
-      ]),
+      daySel,
       el('div', { class: 'sched-times' }, [
         startInput, el('span', { class: 'sched-dash', text: '–' }), endInput,
       ]),
+      modeSel,
+      removeBtn,
     ]);
   }
 
@@ -74,6 +71,12 @@ export async function renderSchedule(mount, { navigate }) {
     el('p', { class: 'eyebrow', text: 'Your weekly pockets' }),
     el('h1', { text: 'Schedule' }),
     el('p', { class: 'muted', style: 'margin-bottom:20px', text: 'Define when you study and in what mode. Now uses this to know what pocket you are in.' }),
+    el('div', { class: 'sched-head' }, [
+      el('span', { text: 'Day' }),
+      el('span', { text: 'Time' }),
+      el('span', { text: 'Mode' }),
+      el('span', {}),
+    ]),
     list,
     el('div', { class: 'row', style: 'margin-top:16px' }, [addBtn]),
     el('hr', { class: 'sep' }),
