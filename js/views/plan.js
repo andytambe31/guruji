@@ -21,10 +21,12 @@ export async function renderPlan(mount, { navigate }) {
     const titleById = new Map(items.map((i) => [i.id, i.title]));
     const doneCount = items.filter((i) => i.status === 'done').length;
 
+    const pct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
     mount.append(
       el('p', { class: 'eyebrow', text: `${doneCount} of ${items.length} done` }),
       el('h1', { text: 'Plan' }),
-      el('p', { class: 'muted', text: 'Everything in the current plan. Mark items done or skipped by hand if you need to.' }),
+      el('div', { class: 'progress-track' }, [el('div', { class: 'progress-fill', style: `width:${pct}%` })]),
+      el('p', { class: 'muted', style: 'margin-top:14px', text: 'Everything in the current plan. Mark items done or skipped by hand if you need to.' }),
     );
 
     const itemsByPhase = new Map();
@@ -71,7 +73,10 @@ export async function renderPlan(mount, { navigate }) {
       return el('div', { class: `plan-item ${it.status}` }, [
         el('div', { class: 'body' }, [
           el('div', { style: 'display:flex;gap:8px;align-items:center;flex-wrap:wrap' }, [
-            el('span', { class: `chip ${locked ? 'locked' : it.mode}`, text: locked ? '🔒 ' + MODE_LABEL[it.mode] : MODE_LABEL[it.mode] }),
+            el('span', { class: `mdot ${locked ? 'locked' : ''}` }, [
+              el('span', { class: `d ${it.mode}` }),
+              locked ? '🔒 ' + MODE_LABEL[it.mode] : MODE_LABEL[it.mode],
+            ]),
             el('span', { class: 't', text: it.title }),
           ]),
           sub.length ? el('div', { class: 'sub' }, sub) : null,

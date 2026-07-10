@@ -1,10 +1,7 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
 import { clear } from './util.js';
-import { ensureSchedule } from './schedule.js';
 import { renderNow } from './views/now.js';
 import { renderFocus } from './views/focus.js';
-import { renderWeek } from './views/week.js';
-import { renderSchedule } from './views/scheduleView.js';
 import { renderPlan } from './views/plan.js';
 import { renderData } from './views/data.js';
 
@@ -13,9 +10,7 @@ const navEl = () => document.getElementById('nav');
 
 const ROUTES = {
   now: renderNow,
-  week: renderWeek,
   plan: renderPlan,
-  schedule: renderSchedule,
   data: renderData,
   focus: renderFocus,
 };
@@ -66,9 +61,6 @@ export function navigate(path) {
 }
 
 async function boot() {
-  // Seed a schedule on first run so Now has something to reason about.
-  try { await ensureSchedule(); } catch (e) { console.warn('schedule seed failed', e); }
-
   window.addEventListener('hashchange', router);
   await router();
 
