@@ -7,24 +7,41 @@ import { SEED_SCHEDULE } from '../schedule.js';
 export async function renderSchedule(mount, { navigate }) {
   let rows = (await getSchedule()).map((r) => ({ ...r }));
 
-  const list = el('div', { class: 'stack' });
+  const list = el('div', { class: 'sched-list' });
+
+  function field(labelText, control) {
+    return el('label', { class: 'sched-field' }, [
+      el('span', { class: 'sched-flabel', text: labelText }),
+      control,
+    ]);
+  }
 
   function rowEditor(row, idx) {
-    const daySel = el('select', { onchange: (e) => { row.day = e.target.value; } },
+    const daySel = el('select', { class: 'ctl', onchange: (e) => { row.day = e.target.value; } },
       DAYS.map((d) => el('option', { value: d, selected: d === row.day, text: DAY_LABEL[d] })));
 
-    const startInput = el('input', { type: 'time', value: row.start, onchange: (e) => { row.start = e.target.value; } });
-    const endInput = el('input', { type: 'time', value: row.end, onchange: (e) => { row.end = e.target.value; } });
-
-    const modeSel = el('select', { onchange: (e) => { row.mode = e.target.value; } },
+    const modeSel = el('select', { class: 'ctl', onchange: (e) => { row.mode = e.target.value; } },
       MODES.map((m) => el('option', { value: m, selected: m === row.mode, text: MODE_LABEL[m] })));
 
+    const startInput = el('input', { class: 'ctl', type: 'time', value: row.start, onchange: (e) => { row.start = e.target.value; } });
+    const endInput = el('input', { class: 'ctl', type: 'time', value: row.end, onchange: (e) => { row.end = e.target.value; } });
+
     const removeBtn = el('button', {
-      class: 'icon-btn', title: 'Remove', text: '✕',
+      class: 'sched-remove', title: 'Remove pocket', text: '✕',
       onclick: () => { rows.splice(idx, 1); repaint(); },
     });
 
-    return el('div', { class: 'sched-row' }, [daySel, startInput, endInput, modeSel, removeBtn]);
+    return el('div', { class: 'sched-card' }, [
+      el('div', { class: 'sched-line' }, [
+        field('Day', daySel),
+        field('Mode', modeSel),
+        removeBtn,
+      ]),
+      el('div', { class: 'sched-line' }, [
+        field('Start', startInput),
+        field('End', endInput),
+      ]),
+    ]);
   }
 
   function repaint() {
@@ -63,9 +80,7 @@ export async function renderSchedule(mount, { navigate }) {
   mount.append(
     el('p', { class: 'eyebrow', text: 'Your weekly pockets' }),
     el('h1', { text: 'Schedule' }),
-    el('p', { class: 'muted', text: 'Define when you study and in what mode. Now uses this to know what pocket you are in.' }),
-    el('div', { class: 'sched-row', style: 'color:var(--text-faint);font-size:11px;text-transform:uppercase;letter-spacing:.08em;border:none;padding-bottom:0' },
-      [el('span', { text: 'Day' }), el('span', { text: 'Start' }), el('span', { text: 'End' }), el('span', { text: 'Mode' }), el('span', {})]),
+    el('p', { class: 'muted', style: 'margin-bottom:20px', text: 'Define when you study and in what mode. Now uses this to know what pocket you are in.' }),
     list,
     el('div', { class: 'row', style: 'margin-top:16px' }, [addBtn]),
     el('hr', { class: 'sep' }),
