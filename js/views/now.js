@@ -6,13 +6,19 @@ import { hasPlan, getItems, getPhases, nextItemForMode } from '../store.js';
 
 const DURATIONS = [25, 50, 90];
 
+// The coach's voice — an authoritative directive framing the one thing.
+const COACH = {
+  DESK: 'Go deep now. This is the rep that moves you.',
+  TRANSIT: 'You’ve got a pocket — put it into this.',
+  WIND_DOWN: 'Ease off the day. Keep it light with this.',
+};
+
 export async function renderNow(mount, { navigate }) {
   if (!(await hasPlan())) {
     mount.append(el('div', { class: 'center-state' }, [
-      el('p', { class: 'eyebrow', text: 'Guruji' }),
-      el('h1', { text: 'Nothing loaded yet' }),
-      el('p', { class: 'muted', text: 'Import your plan to begin. It stays on this device — nothing is uploaded.' }),
-      el('button', { class: 'btn btn-primary btn-lg', style: 'margin-top:12px', text: 'Import plan', onclick: () => navigate('/data') }),
+      el('h1', { text: 'Ready when you are.' }),
+      el('p', { class: 'muted', text: 'Add your plan once from Data, top-right — then Guruji just hands you one thing at a time. Nothing else to set up.' }),
+      el('button', { class: 'btn btn-ghost', style: 'margin-top:14px', text: 'Import a plan', onclick: () => navigate('/data') }),
     ]));
     return;
   }
@@ -59,11 +65,10 @@ export async function renderNow(mount, { navigate }) {
     const item = nextByMode[selectedMode];
     const minutes = selectedMinutes ?? defaultMinutesFor(item);
 
-    const bits = [];
+    const ctxBits = [];
     const pn = phaseName(item.phase);
-    if (pn) bits.push(pn);
-    if (item.week != null && item.week > 0) bits.push(`Week ${item.week}`);
-    if (item.estMinutes) bits.push(`~${item.estMinutes} min`);
+    if (pn) ctxBits.push(pn);
+    if (item.week != null && item.week > 0) ctxBits.push(`Week ${item.week}`);
 
     const ctx = el('div', { class: 'ctx' }, availableModes.map((m) =>
       el('button', {
@@ -73,7 +78,7 @@ export async function renderNow(mount, { navigate }) {
 
     const hero = el('div', { class: 'hero' }, [
       el('div', { class: 'title', text: item.title }),
-      el('div', { class: 'meta', text: bits.join('  ·  ') }),
+      item.estMinutes ? el('div', { class: 'meta', text: `~${item.estMinutes} min` }) : null,
     ]);
 
     const dur = el('div', { class: 'dur' }, DURATIONS.map((d) =>
@@ -90,6 +95,8 @@ export async function renderNow(mount, { navigate }) {
     });
 
     clear(wrap).append(
+      ctxBits.length ? el('p', { class: 'eyebrow', text: ctxBits.join(' · ') }) : null,
+      el('div', { class: 'coach', text: COACH[selectedMode] || 'Here’s what needs doing right now.' }),
       ctx,
       hero,
       el('div', { class: 'dur-label', text: 'How long are you sitting?' }),

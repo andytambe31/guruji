@@ -19,11 +19,14 @@
 </head>
 <body>
   <div id="app" class="app">
+    <header id="topbar" class="topbar">
+      <a href="#/now" class="brand">Guruji</a>
+      <a href="#/data" data-route="data" class="topbar-action" aria-label="Import or export your data">Data</a>
+    </header>
     <main id="view" class="view" aria-live="polite"></main>
     <nav id="nav" class="nav" hidden>
       <a href="#/now"  data-route="now"  class="nav-item">Now</a>
       <a href="#/plan" data-route="plan" class="nav-item">Plan</a>
-      <a href="#/data" data-route="data" class="nav-item">Data</a>
     </nav>
   </div>
 

@@ -7,6 +7,7 @@ import { renderData } from './views/data.js';
 
 const viewEl = () => document.getElementById('view');
 const navEl = () => document.getElementById('nav');
+const topbarEl = () => document.getElementById('topbar');
 
 const ROUTES = {
   now: renderNow,
@@ -35,12 +36,13 @@ async function router() {
 
   const mount = clear(viewEl());
 
-  // Focus is a full-screen distraction-free view: hide the nav entirely.
+  // Focus is a full-screen distraction-free view: hide the chrome entirely.
   const isFocus = name === 'focus';
   navEl().hidden = isFocus;
+  topbarEl().hidden = isFocus;
 
-  // Highlight active nav item.
-  document.querySelectorAll('.nav-item').forEach((a) => {
+  // Highlight active nav + top-bar items.
+  document.querySelectorAll('.nav-item, .topbar-action').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === name);
   });
 
