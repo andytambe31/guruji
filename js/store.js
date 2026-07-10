@@ -156,6 +156,7 @@ export async function ingestPlan(plan, { replaceSchedule = true, mergeStatus = t
         area: it.area || null,
         mode: it.mode,
         estMinutes: it.estMinutes ?? null,
+        recurring: !!it.recurring,
         dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
         status,
         order: order++,
@@ -202,6 +203,7 @@ export async function buildExport() {
       area: it.area || undefined,
       mode: it.mode,
       estMinutes: it.estMinutes,
+      recurring: it.recurring || undefined,
       dependsOn: it.dependsOn || [],
       status: it.status || 'todo',
     });

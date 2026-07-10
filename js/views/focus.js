@@ -104,7 +104,9 @@ export async function renderFocus(mount, { arg, navigate }) {
   }
 
   async function resolve(result) {
-    if (result !== 'todo') await setItemStatus(item.id, result);
+    // A recurring habit (e.g. reading) is never consumed — it just gets logged
+    // and stays available so the coach can keep pushing the streak.
+    if (result !== 'todo' && !item.recurring) await setItemStatus(item.id, result);
     await addLogEntry({
       itemId: item.id,
       itemTitle: item.title,

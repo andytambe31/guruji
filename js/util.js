@@ -75,6 +75,37 @@ export function todayCode(date = new Date()) {
   return DAYS[date.getDay()];
 }
 
+// ---- date helpers for habit streaks (work on "YYYY-MM-DD" strings) ----
+export function todayISO(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+export function daysBetween(a, b) {
+  // whole days from a to b (b - a), both "YYYY-MM-DD"
+  const da = new Date(a + 'T00:00:00');
+  const db = new Date(b + 'T00:00:00');
+  return Math.round((db - da) / 86400000);
+}
+export function addDaysISO(iso, n) {
+  const d = new Date(iso + 'T00:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+// Streak + recency for a habit, from the set of dates it was done.
+export function habitStats(dates, today = todayISO()) {
+  const set = new Set(dates);
+  if (set.size === 0) return { ever: false, streak: 0, daysSince: Infinity, last: null };
+  const sorted = [...set].sort();
+  const last = sorted[sorted.length - 1];
+  const daysSince = daysBetween(last, today);
+  let streak = 0;
+  if (daysSince <= 1) {
+    let cur = last;
+    while (set.has(cur)) { streak++; cur = addDaysISO(cur, -1); }
+  }
+  return { ever: true, streak, daysSince, last };
+}
+
 export function nowMinutes(date = new Date()) {
   return date.getHours() * 60 + date.getMinutes();
 }
