@@ -9,37 +9,30 @@ export async function renderSchedule(mount, { navigate }) {
 
   const list = el('div', { class: 'sched-list' });
 
-  function field(labelText, control) {
-    return el('label', { class: 'sched-field' }, [
-      el('span', { class: 'sched-flabel', text: labelText }),
-      control,
-    ]);
-  }
-
   function rowEditor(row, idx) {
-    const daySel = el('select', { class: 'ctl', onchange: (e) => { row.day = e.target.value; } },
+    const daySel = el('select', { class: 'fld fld-day', onchange: (e) => { row.day = e.target.value; } },
       DAYS.map((d) => el('option', { value: d, selected: d === row.day, text: DAY_LABEL[d] })));
 
-    const modeSel = el('select', { class: 'ctl', onchange: (e) => { row.mode = e.target.value; } },
+    const modeSel = el('select', { class: `fld fld-mode ${row.mode}`, onchange: (e) => { row.mode = e.target.value; e.target.className = `fld fld-mode ${row.mode}`; } },
       MODES.map((m) => el('option', { value: m, selected: m === row.mode, text: MODE_LABEL[m] })));
 
-    const startInput = el('input', { class: 'ctl', type: 'time', value: row.start, onchange: (e) => { row.start = e.target.value; } });
-    const endInput = el('input', { class: 'ctl', type: 'time', value: row.end, onchange: (e) => { row.end = e.target.value; } });
+    const startInput = el('input', { class: 'fld fld-time', type: 'time', value: row.start, onchange: (e) => { row.start = e.target.value; } });
+    const endInput = el('input', { class: 'fld fld-time', type: 'time', value: row.end, onchange: (e) => { row.end = e.target.value; } });
 
     const removeBtn = el('button', {
-      class: 'sched-remove', title: 'Remove pocket', text: '✕',
+      class: 'sched-x', title: 'Remove pocket', text: '✕',
       onclick: () => { rows.splice(idx, 1); repaint(); },
     });
 
-    return el('div', { class: 'sched-card' }, [
-      el('div', { class: 'sched-line' }, [
-        field('Day', daySel),
-        field('Mode', modeSel),
+    return el('div', { class: 'sched-pocket' }, [
+      el('div', { class: 'sched-top' }, [
+        daySel,
+        el('span', { class: 'sched-spacer' }),
+        modeSel,
         removeBtn,
       ]),
-      el('div', { class: 'sched-line' }, [
-        field('Start', startInput),
-        field('End', endInput),
+      el('div', { class: 'sched-times' }, [
+        startInput, el('span', { class: 'sched-dash', text: '–' }), endInput,
       ]),
     ]);
   }
