@@ -20,6 +20,8 @@ const WHEN = [
   { label: 'This evening', val: 18 * 60 },
   { label: 'Later tonight', val: 20 * 60 },
 ];
+// Gym/walk can be scheduled before work — the coach wakes you early enough.
+const WHEN_ACT = [{ label: 'Early — before work', val: 'prework' }, ...WHEN];
 const DUR = [
   { label: 'Quick — under 30 min', val: 30 },
   { label: 'About an hour', val: 60 },
@@ -134,6 +136,12 @@ export async function renderDay(mount, { navigate }) {
     if (!entries.length) {
       timeline.append(el('p', { class: 'muted day-empty', text: `Nothing booked for ${relLabel(date).toLowerCase()}. Let the coach plan it around your day.` }));
     } else {
+      // A quiet "Up · 7:00am" marker so the day's first move has a clear start —
+      // shown when we know your wake time and the day genuinely begins the morning.
+      const wakeMin = settings.wake ? toMinutes(settings.wake) : null;
+      if (wakeMin != null && entries[0].t <= 12 * 60 && entries[0].t - wakeMin <= 180 && entries[0].t >= wakeMin) {
+        timeline.append(el('div', { class: 'wake-row', text: `Up · ${fmtTimeOfDay(wakeMin)}` }));
+      }
       for (let i = 0; i < entries.length; i++) {
         timeline.append(entries[i].node);
         const cur = entries[i];
@@ -202,11 +210,23 @@ export async function renderDay(mount, { navigate }) {
       return el('div', { class: 'wz-seg-wrap' }, [a, b]);
     };
     const activity = (state) => {
-      const whenS = sel(WHEN, state.when);
+      const whenS = sel(WHEN_ACT, state.when);
       const durS = sel(DUR, state.dur);
       const drainS = sel(DRAIN, state.drain);
-      const detail = el('div', { class: 'wz-detail' + (state.on ? '' : ' hidden') }, rows([['When', whenS], ['How long', durS], ['Draining?', drainS]]));
-      return { seg: seg('Yes', 'No', state.on, (on) => { state.on = on; detail.classList.toggle('hidden', !on); }), detail, collect: () => { state.when = +whenS.value; state.dur = +durS.value; state.drain = drainS.value; } };
+      // On office days, "Early — before work" tells the coach to wake you sooner
+      // and slot this in before the commute, with time to freshen up after.
+      const preNote = el('p', { class: 'wz-note' + (state.when === 'prework' ? '' : ' hidden'), text: '' });
+      const refreshPreNote = () => {
+        if (!pl.office.on || state.when !== 'prework') { preNote.classList.add('hidden'); return; }
+        const up = pl.office.leave - (pl.getReady ?? 30) - state.dur;
+        preNote.textContent = `You’re up by ${fmtTimeOfDay(up)} — ${state.dur} min out, back to freshen up, and out the door at ${fmtTimeOfDay(pl.office.leave)}.`;
+        preNote.classList.remove('hidden');
+      };
+      whenS.addEventListener('change', () => { state.when = whenS.value === 'prework' ? 'prework' : +whenS.value; refreshPreNote(); });
+      durS.addEventListener('change', () => { state.dur = +durS.value; refreshPreNote(); });
+      refreshPreNote();
+      const detail = el('div', { class: 'wz-detail' + (state.on ? '' : ' hidden') }, [...rows([['When', whenS], ['How long', durS], ['Draining?', drainS]]), preNote]);
+      return { seg: seg('Yes', 'No', state.on, (on) => { state.on = on; detail.classList.toggle('hidden', !on); }), detail, collect: () => { state.when = whenS.value === 'prework' ? 'prework' : +whenS.value; state.dur = +durS.value; state.drain = drainS.value; } };
     };
 
     function stepRhythm() {
@@ -279,9 +299,40 @@ export async function renderDay(mount, { navigate }) {
     ]);
 
     async function commit() {
+      const o = pl.office;
+      // Pre-work activities (a morning walk / gym before the office): the coach
+      // backward-plans them from your departure — activity, then freshen up, then
+      // out the door — and wakes you early enough. Anchor point is the commute if
+      // you're going in, else your first activity kicks off around your wake.
+      const acts = [
+        pl.gym.on ? { label: 'Gym', ...pl.gym } : null,
+        pl.walk.on ? { label: 'Walk', ...pl.walk } : null,
+      ].filter(Boolean);
+      const prework = acts.filter((a) => a.when === 'prework');
+      const preTotal = prework.reduce((s, a) => s + a.dur, 0);
+      const getReady = pl.getReady ?? 30;
+      // Where the pre-work stretch has to begin so you're ready to leave / start.
+      const anchor = o.on ? o.leave : (pl.wake != null ? pl.wake : 8 * 60);
+      const preStart = o.on ? Math.max(0, anchor - getReady - preTotal) : anchor;
+      if (prework.length && o.on) pl.wake = preStart; // up in time to actually do it
+
       await setSettings({ bedtime: pl.bedtime || settings.bedtime, ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}) });
       await clearBusyForDate(date); // re-plan replaces the day's commitments
-      const o = pl.office;
+
+      // Lay the pre-work activities back-to-back before the anchor.
+      let cur = preStart;
+      for (const a of prework) {
+        await putBusy({ date, start: cur, minutes: a.dur, label: a.label, drain: a.drain });
+        cur += a.dur;
+      }
+      // On an office day, the gap from the activity to the door is freshen-up
+      // time — a real block so the coach won't book study there and you can see
+      // exactly what happens when: activity, freshen up, out the door. If you're
+      // also eating breakfast it already fills that window, so skip the duplicate.
+      if (prework.length && o.on && !pl.meals.includes('breakfast') && o.leave - cur >= 10) {
+        await putBusy({ date, start: cur, minutes: o.leave - cur, label: 'Freshen up' });
+      }
+
       if (o.on) {
         // Remember this as the usual office timing for next time.
         await setSettings({ officeLeave: o.leave, officeCommute: o.commute, officeBack: o.back });
@@ -296,11 +347,18 @@ export async function renderDay(mount, { navigate }) {
         const m = MEALS.find((x) => x.key === key);
         if (!m) continue;
         if (key === 'lunch' && o.on) continue; // eaten at the office
-        const start = key === 'breakfast' ? wakeMin + 35 : m.start;
+        let start = m.start;
+        if (key === 'breakfast') {
+          // Office day: eaten in the freshen-up window, right before leaving.
+          // Otherwise: shortly after you're up (and after any morning activity).
+          start = o.on ? o.leave - m.minutes : wakeMin + preTotal + 15;
+        }
         await putBusy({ date, start, minutes: m.minutes, label: m.label });
       }
-      if (pl.gym.on) await putBusy({ date, start: pl.gym.when, minutes: pl.gym.dur, label: 'Gym', drain: pl.gym.drain });
-      if (pl.walk.on) await putBusy({ date, start: pl.walk.when, minutes: pl.walk.dur, label: 'Walk', drain: pl.walk.drain });
+      // Non-pre-work activities keep their chosen time.
+      for (const a of acts.filter((x) => x.when !== 'prework')) {
+        await putBusy({ date, start: a.when, minutes: a.dur, label: a.label, drain: a.drain });
+      }
       if (pl.other.name) await putBusy({ date, start: pl.other.when, minutes: pl.other.dur, label: pl.other.name, drain: pl.other.drain });
       await deconflictBusy(date); // no two commitments at once
       const intensity = INTENSITY.find((i) => i.key === pl.intensity);
