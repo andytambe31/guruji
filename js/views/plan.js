@@ -1,6 +1,7 @@
-// Plan tab — a List view (grouped by plan → phase) and a Map view. The Map is
-// two-level: a high-level graph of areas (few nodes), and tapping an area zooms
-// into that area's item DAG (with +/- zoom). Edges come from items' dependsOn.
+// Plan tab — List, and a three-level Map: Areas → Groups → Items. Each level is
+// a small DAG (edges from items' dependsOn), so you drill from "DSA" into
+// "Trees" into the actual tasks. Node text wraps to two lines instead of
+// ellipsing.
 import { el, clear, toast } from '../util.js';
 import { getPlans, getPhases, getItems, setItemStatus, depsSatisfied } from '../store.js';
 
@@ -19,9 +20,10 @@ function svg(tag, attrs = {}, kids = []) {
 }
 
 export async function renderPlan(mount, { navigate }) {
-  let view = 'list';    // 'list' | 'map'
-  let zoomArea = null;  // null = area overview; else drill into this area
-  let selected = null;  // selected item id (zoomed)
+  let view = 'list';
+  let zoomArea = null;
+  let zoomGroup = null;
+  let selected = null;
   let scale = 1;
 
   async function paint() {
@@ -48,9 +50,10 @@ export async function renderPlan(mount, { navigate }) {
     ]);
     mount.append(el('div', { class: 'plan-top' }, [el('h1', { text: 'Plans' }), seg]));
 
-    if (view === 'list') paintList(planList, phasesByTrack, itemsByPhase, statusById);
-    else if (zoomArea) paintAreaZoom(items, statusById);
-    else paintOverview(planList, phasesByTrack, itemsByPhase, statusById);
+    if (view === 'list') { paintList(planList, phasesByTrack, itemsByPhase, statusById); return; }
+    if (zoomArea && zoomGroup) paintItemLevel(items, statusById);
+    else if (zoomArea) paintGroupLevel(items, statusById);
+    else paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById);
   }
 
   // ---------------- List ----------------
@@ -93,78 +96,56 @@ export async function renderPlan(mount, { navigate }) {
     ]);
   }
 
-  // ---------------- Map: area overview ----------------
-  function paintOverview(planList, phasesByTrack, itemsByPhase, statusById) {
+  // ---------------- breadcrumb ----------------
+  function crumbBar(right) {
+    const parts = [crumb('Areas', () => { zoomArea = null; zoomGroup = null; selected = null; paint(); }, !zoomArea)];
+    if (zoomArea) { parts.push(sep()); parts.push(crumb(zoomArea, () => { zoomGroup = null; selected = null; paint(); }, zoomArea && !zoomGroup)); }
+    if (zoomGroup) { parts.push(sep()); parts.push(crumb(zoomGroup, null, true)); }
+    return el('div', { class: 'dag-head' }, [el('div', { class: 'crumbs' }, parts), right || el('span')]);
+  }
+  function crumb(label, go, cur) {
+    return el('button', { class: 'crumb' + (cur ? ' cur' : ''), text: label, disabled: !go, onclick: go || (() => {}) });
+  }
+  function sep() { return el('span', { class: 'crumb-sep', text: '›' }); }
+
+  // ---------------- Map level 1: areas ----------------
+  function paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById) {
     mount.append(el('p', { class: 'muted', style: 'margin:-4px 0 4px;font-size:13px', text: 'Your tracks at a glance. Tap an area to open it.' }));
     for (const pl of planList) {
       const planPhases = phasesByTrack.get(pl.id) || [];
       const planItems = planPhases.flatMap((ph) => itemsByPhase.get(ph.id) || []);
       if (!planItems.length) continue;
-      mount.append(el('h2', { class: 'plan-name', style: 'margin-top:18px', text: pl.name }));
-      mount.append(buildAreaGraph(planItems, statusById));
+      const { keys, dep } = clusterDeps(planItems, (i) => i.area || 'Study');
+      const byKey = groupBy(planItems, (i) => i.area || 'Study');
+      mount.append(el('h2', { class: 'plan-name', style: 'margin-top:16px', text: pl.name }));
+      mount.append(clusterGraph(keys, byKey, dep, (a) => areaColor(a), (a) => { zoomArea = a; zoomGroup = null; selected = null; paint(); }));
     }
   }
 
-  function buildAreaGraph(planItems, statusById) {
-    const areas = [];
-    for (const it of planItems) { const a = it.area || 'Study'; if (!areas.includes(a)) areas.push(a); }
-    const areaOfId = (id) => { const it = planItems.find((x) => x.id === id); return it ? (it.area || 'Study') : null; };
-    const byArea = groupBy(planItems, (i) => i.area || 'Study');
-    const adep = new Map(areas.map((a) => [a, new Set()]));
-    for (const it of planItems) {
-      const A = it.area || 'Study';
-      for (const d of it.dependsOn || []) { const B = areaOfId(d); if (B && B !== A && areas.includes(B)) adep.get(A).add(B); }
-    }
-
-    const dim = { NW: 156, NH: 58, HGAP: 18, VGAP: 54, PAD: 10 };
-    const { xy, W, H } = layeredLayout(areas, (a) => [...(adep.get(a) || [])], dim);
-
-    const edgeG = svg('g', { class: 'dag-edges' });
-    for (const a of areas) {
-      const c = xy.get(a);
-      for (const b of adep.get(a) || []) {
-        const p = xy.get(b); if (!p) continue;
-        const x1 = p.x + dim.NW / 2, y1 = p.y + dim.NH, x2 = c.x + dim.NW / 2, y2 = c.y, my = (y1 + y2) / 2;
-        edgeG.appendChild(svg('path', { d: `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`, class: 'dag-edge' }));
-      }
-    }
-    const nodeG = svg('g', {});
-    for (const a of areas) {
-      const { x, y } = xy.get(a);
-      const list = byArea.get(a) || [];
-      const done = list.filter((i) => i.status === 'done').length;
-      const col = areaColor(a);
-      const g = svg('g', { transform: `translate(${x},${y})`, style: 'cursor:pointer' });
-      g.appendChild(svg('rect', { x: 0, y: 0, width: dim.NW, height: dim.NH, rx: 12, class: 'area-rect', stroke: col }));
-      g.appendChild(svg('circle', { cx: 18, cy: 24, r: 5, fill: col }));
-      const name = svg('text', { x: 32, y: 28, class: 'area-name' }); name.textContent = a;
-      const sub = svg('text', { x: 18, y: 46, class: 'area-sub' }); sub.textContent = `${done}/${list.length} done`;
-      g.appendChild(name); g.appendChild(sub);
-      g.addEventListener('click', () => { zoomArea = a; scale = 1; selected = null; paint(); });
-      nodeG.appendChild(g);
-    }
-    const root = svg('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'dag-svg' }, [edgeG, nodeG]);
-    return el('div', { class: 'dag-scroll' }, [root]);
+  // ---------------- Map level 2: groups within an area ----------------
+  function paintGroupLevel(items, statusById) {
+    const areaItems = items.filter((i) => (i.area || 'Study') === zoomArea);
+    mount.append(crumbBar());
+    const { keys, dep } = clusterDeps(areaItems, (i) => i.group || 'Other');
+    const byKey = groupBy(areaItems, (i) => i.group || 'Other');
+    mount.append(clusterGraph(keys, byKey, dep, () => areaColor(zoomArea), (g) => { zoomGroup = g; selected = null; scale = 1; paint(); }));
   }
 
-  // ---------------- Map: zoomed item DAG ----------------
-  function paintAreaZoom(allItems, statusById) {
-    const areaItems = allItems.filter((i) => (i.area || 'Study') === zoomArea);
-    mount.append(el('div', { class: 'dag-head' }, [
-      el('button', { class: 'seg-btn back', text: '← Areas', onclick: () => { zoomArea = null; selected = null; paint(); } }),
-      el('span', { class: 'dag-head-title', text: zoomArea }),
-      el('div', { class: 'zoom-ctl' }, [
-        el('button', { class: 'zoom-btn', text: '−', onclick: () => { scale = Math.max(0.5, +(scale - 0.2).toFixed(2)); paint(); } }),
-        el('button', { class: 'zoom-btn', text: '+', onclick: () => { scale = Math.min(2, +(scale + 0.2).toFixed(2)); paint(); } }),
-      ]),
-    ]));
+  // ---------------- Map level 3: items within a group ----------------
+  function paintItemLevel(items, statusById) {
+    const groupItems = items.filter((i) => (i.area || 'Study') === zoomArea && (i.group || 'Other') === zoomGroup);
+    const zoomCtl = el('div', { class: 'zoom-ctl' }, [
+      el('button', { class: 'zoom-btn', text: '−', onclick: () => { scale = Math.max(0.6, +(scale - 0.2).toFixed(2)); paint(); } }),
+      el('button', { class: 'zoom-btn', text: '+', onclick: () => { scale = Math.min(1.8, +(scale + 0.2).toFixed(2)); paint(); } }),
+    ]);
+    mount.append(crumbBar(zoomCtl));
     const detail = el('div', { class: 'dag-detail' });
     mount.append(detail);
-    renderDetail(detail, statusById);
-    mount.append(buildItemDag(areaItems, statusById, scale));
+    renderDetail(detail);
+    mount.append(itemDag(groupItems, statusById, scale));
   }
 
-  function renderDetail(detail, statusById) {
+  function renderDetail(detail) {
     clear(detail);
     if (!selected) { detail.append(el('span', { class: 'muted', text: 'Tap a node for details.' })); detail.classList.remove('active'); return; }
     getItems().then((items) => {
@@ -186,8 +167,42 @@ export async function renderPlan(mount, { navigate }) {
     });
   }
 
-  function buildItemDag(planItems, statusById, sc) {
-    const dim = { NW: 132, NH: 32, HGAP: 16, VGAP: 46, PAD: 8 };
+  // ---------------- graph builders ----------------
+  // Super-node graph for areas / groups (name + progress).
+  function clusterGraph(keys, byKey, dep, colorFn, onPick) {
+    const dim = { NW: 156, NH: 58, HGAP: 18, VGAP: 54, PAD: 10 };
+    const { xy, W, H } = layeredLayout(keys, (k) => [...(dep.get(k) || [])], dim);
+    const edgeG = svg('g', { class: 'dag-edges' });
+    for (const k of keys) {
+      const c = xy.get(k);
+      for (const b of dep.get(k) || []) {
+        const p = xy.get(b); if (!p) continue;
+        const x1 = p.x + dim.NW / 2, y1 = p.y + dim.NH, x2 = c.x + dim.NW / 2, y2 = c.y, my = (y1 + y2) / 2;
+        edgeG.appendChild(svg('path', { d: `M ${x1} ${y1} C ${x1} ${my}, ${x2} ${my}, ${x2} ${y2}`, class: 'dag-edge' }));
+      }
+    }
+    const nodeG = svg('g', {});
+    for (const k of keys) {
+      const { x, y } = xy.get(k);
+      const list = byKey.get(k) || [];
+      const done = list.filter((i) => i.status === 'done').length;
+      const col = colorFn(k);
+      const g = svg('g', { transform: `translate(${x},${y})`, style: 'cursor:pointer' });
+      g.appendChild(svg('rect', { x: 0, y: 0, width: dim.NW, height: dim.NH, rx: 12, class: 'area-rect', stroke: col }));
+      g.appendChild(svg('circle', { cx: 18, cy: 24, r: 5, fill: col }));
+      const name = svg('text', { x: 32, y: 28, class: 'area-name' }); name.textContent = k;
+      const sub = svg('text', { x: 18, y: 46, class: 'area-sub' }); sub.textContent = `${done}/${list.length} done`;
+      g.appendChild(name); g.appendChild(sub);
+      g.addEventListener('click', () => onPick(k));
+      nodeG.appendChild(g);
+    }
+    const root = svg('svg', { width: W, height: H, viewBox: `0 0 ${W} ${H}`, class: 'dag-svg' }, [edgeG, nodeG]);
+    return el('div', { class: 'dag-scroll' }, [root]);
+  }
+
+  // Item DAG with two-line wrapped labels.
+  function itemDag(planItems, statusById, sc) {
+    const dim = { NW: 150, NH: 48, HGAP: 16, VGAP: 46, PAD: 8 };
     const { xy, W, H, deps } = layeredLayout(planItems.map((i) => i.id), (id) => {
       const it = planItems.find((x) => x.id === id);
       return it ? (it.dependsOn || []) : [];
@@ -209,9 +224,12 @@ export async function renderPlan(mount, { navigate }) {
       const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
       const state = [it.status, locked ? 'locked' : '', selected === it.id ? 'sel' : ''].filter(Boolean).join(' ');
       const g = svg('g', { class: 'dag-node ' + state, transform: `translate(${x},${y})`, style: 'cursor:pointer' });
-      g.appendChild(svg('rect', { x: 0, y: 0, width: dim.NW, height: dim.NH, rx: 8, class: 'dag-rect ' + state }));
-      g.appendChild(svg('circle', { cx: 13, cy: dim.NH / 2, r: 4, fill: areaColor(it.area) }));
-      const t = svg('text', { x: 24, y: dim.NH / 2 + 4, class: 'dag-text' }); t.textContent = truncate(it.title, 17);
+      g.appendChild(svg('rect', { x: 0, y: 0, width: dim.NW, height: dim.NH, rx: 9, class: 'dag-rect ' + state }));
+      g.appendChild(svg('circle', { cx: 14, cy: dim.NH / 2, r: 4, fill: areaColor(it.area) }));
+      const lines = wrapText(it.title, 19, 2);
+      const startY = dim.NH / 2 - (lines.length - 1) * 7 + 4;
+      const t = svg('text', { x: 26, y: startY, class: 'dag-text' });
+      lines.forEach((ln, i) => { const ts = svg('tspan', { x: 26, dy: i === 0 ? 0 : 14 }); ts.textContent = ln; t.appendChild(ts); });
       g.appendChild(t);
       g.addEventListener('click', () => { selected = (selected === it.id ? null : it.id); paint(); });
       nodeG.appendChild(g);
@@ -228,6 +246,19 @@ export async function renderPlan(mount, { navigate }) {
   }
 
   await paint();
+}
+
+// prerequisite edges between cluster keys (areas or groups), from item deps
+function clusterDeps(subset, keyOf) {
+  const idToKey = new Map(subset.map((i) => [i.id, keyOf(i)]));
+  const keys = [];
+  for (const i of subset) { const k = keyOf(i); if (!keys.includes(k)) keys.push(k); }
+  const dep = new Map(keys.map((k) => [k, new Set()]));
+  for (const it of subset) {
+    const A = keyOf(it);
+    for (const d of it.dependsOn || []) { const B = idToKey.get(d); if (B && B !== A) dep.get(A).add(B); }
+  }
+  return { keys, dep };
 }
 
 // Generic longest-path layered layout. depsOf(id) -> array of prerequisite ids.
@@ -278,4 +309,26 @@ function groupBy(arr, keyFn) {
   for (const x of arr) { const k = keyFn(x); if (!m.has(k)) m.set(k, []); m.get(k).push(x); }
   return m;
 }
-function truncate(s, n) { return s.length > n ? s.slice(0, n - 1) + '…' : s; }
+
+// wrap into up to maxLines lines of ~maxChars, ellipsis if it overflows
+function wrapText(s, maxChars, maxLines) {
+  const words = String(s).split(/\s+/);
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const t = cur ? cur + ' ' + w : w;
+    if (t.length <= maxChars) { cur = t; continue; }
+    if (cur) lines.push(cur);
+    cur = w.length > maxChars ? w.slice(0, maxChars - 1) + '…' : w;
+    if (lines.length === maxLines) { cur = ''; break; }
+  }
+  if (cur && lines.length < maxLines) lines.push(cur);
+  if (lines.length === maxLines) {
+    // if we truncated mid-way, hint with an ellipsis on the last line
+    const joined = lines.join(' ');
+    if (joined.length < String(s).length && !lines[maxLines - 1].endsWith('…')) {
+      lines[maxLines - 1] = lines[maxLines - 1].slice(0, maxChars - 1) + '…';
+    }
+  }
+  return lines.length ? lines : [String(s)];
+}

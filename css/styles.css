@@ -308,6 +308,11 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .area-sub { font-size: 11px; fill: var(--text-faint); }
 .dag-head { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
 .dag-head-title { flex: 1; font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
+.crumbs { display: flex; align-items: center; gap: 6px; flex: 1; flex-wrap: wrap; }
+.crumb { background: none; border: none; font: inherit; font-size: 14px; color: var(--text-faint); cursor: pointer; padding: 2px 0; }
+.crumb.cur { color: var(--text); font-weight: 650; }
+.crumb:disabled { cursor: default; }
+.crumb-sep { color: var(--text-faint); font-size: 13px; }
 .seg-btn.back { border: 1px solid var(--line); border-radius: 9px; color: var(--text); padding: 7px 12px; }
 .zoom-ctl { display: flex; gap: 6px; }
 .zoom-btn { width: 36px; height: 32px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font-size: 17px; line-height: 1; cursor: pointer; color: var(--text); }
