@@ -522,7 +522,12 @@ function planWhy(blocks, items) {
   const cnt = new Map();
   for (const b of study) { if (!cnt.has(b.area)) order.push(b.area); cnt.set(b.area, (cnt.get(b.area) || 0) + 1); }
   const total = study.length;
-  const mix = order.map((a) => `${cnt.get(a)}× ${a}`).join(' · ');
+  // Lead with the total study time so the day's commitment is legible at a glance.
+  const totalMin = study.reduce((s, b) => s + b.minutes, 0);
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  const dur = h ? (m ? `${h}h ${m}m` : `${h}h`) : `${m}m`;
+  const mix = [`${dur} of study`, ...order.map((a) => `${cnt.get(a)}× ${a}`)].join(' · ');
 
   // Areas with unfinished work but nothing unlocked yet — gated behind topics
   // you haven't marked done, so the coach can't schedule them.
