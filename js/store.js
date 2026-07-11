@@ -187,8 +187,8 @@ export async function getBusyForDate(date) {
   const rows = await getAll(STORES.schedule);
   return rows.filter((r) => r && r.kind === 'busy' && r.date === date).sort((a, b) => a.start - b.start);
 }
-export async function putBusy({ date, start, minutes, label }) {
-  const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy' };
+export async function putBusy({ date, start, minutes, label, drain }) {
+  const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy', drain: drain || 'none' };
   await put(STORES.schedule, rec);
   await reflowDate(date);
   return rec;
@@ -415,7 +415,7 @@ export async function buildExport() {
   ]);
   const allSchedule = await getAll(STORES.schedule);
   const busy = allSchedule.filter((r) => r && r.kind === 'busy')
-    .map((b) => ({ id: b.id, date: b.date, start: b.start, minutes: b.minutes, label: b.label }));
+    .map((b) => ({ id: b.id, date: b.date, start: b.start, minutes: b.minutes, label: b.label, drain: b.drain || 'none' }));
 
   const itemsByPhase = new Map();
   for (const it of items) {

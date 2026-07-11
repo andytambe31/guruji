@@ -21,10 +21,14 @@ export function clampDur(m) {
   return Math.max(10, Math.min(90, Math.round(v)));
 }
 
+// How much a draining commitment weighs on you afterward, and how long it lingers.
+const DRAIN = { low: { level: 28, tau: 60 }, high: { level: 55, tau: 120 } };
+
 // Predicted cognitive load at minute-of-day `tMin`, mirroring the live gauge:
 // time-of-day baseline + decaying life-context + decaying load from blocks
-// already scheduled earlier today.
-export function predictLoadAt(tMin, { context = null, placed = [] } = {}) {
+// already scheduled earlier today + the after-effect of draining commitments
+// (office work, a hard gym session) that have finished by then.
+export function predictLoadAt(tMin, { context = null, placed = [], busy = [] } = {}) {
   const hours = tMin / 60;
   let load = Math.max(0, Math.min(22, ((hours - 6) / 18) * 22));
 
@@ -39,6 +43,13 @@ export function predictLoadAt(tMin, { context = null, placed = [] } = {}) {
     if (end > tMin) continue;
     const diff = DIFFICULTY[b.mode] ?? 0.7;
     load += b.minutes * diff * 0.9 * Math.exp(-(tMin - end) / 50);
+  }
+  for (const b of busy) {
+    const d = DRAIN[b.drain];
+    if (!d) continue;
+    const end = b.start + b.minutes;
+    if (end > tMin) continue;
+    load += d.level * Math.exp(-(tMin - end) / d.tau);
   }
   return Math.max(0, Math.min(100, Math.round(load)));
 }
@@ -84,7 +95,7 @@ export function planDay(date, items, opts = {}) {
     while (remaining.length) {
       const avail = wEnd - cursor;
       if (avail < 10) break;
-      const load = predictLoadAt(cursor, { context, placed });
+      const load = predictLoadAt(cursor, { context, placed, busy });
       const idx = chooseIndex(remaining, load, avail);
       if (idx === -1) break;
       const it = remaining.splice(idx, 1)[0];

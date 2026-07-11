@@ -1,7 +1,7 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, daysBetween, nowMinutes, toMinutes, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { el, clear, fill, habitStats, todayISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings } from '../store.js';
 
 const AREA_LINE = {
@@ -170,6 +170,16 @@ export async function renderNow(mount, { navigate }) {
       ctxLine, ctxChips,
     ]);
 
+    // A quiet bedtime nudge — the routine's north star, escalating as it nears.
+    let sleepEl = null;
+    if (bedMin != null) {
+      const soon = toBed > 0 && toBed <= 90;
+      const txt = toBed <= 0 ? 'Past bedtime — rest resets you.'
+        : soon ? `Wind down soon · bed by ${fmtTimeOfDay(bedMin)}`
+        : `Ideal lights-out · ${fmtTimeOfDay(bedMin)}`;
+      sleepEl = el('div', { class: 'sleep-nudge' + (soon || toBed <= 0 ? ' soon' : ''), text: txt });
+    }
+
     // Nonchalant goal countdown, tucked in the corner — never bold.
     let countdown = null;
     if (daysToGoal != null) {
@@ -181,7 +191,7 @@ export async function renderNow(mount, { navigate }) {
     }
 
     fill(clear(wrap), [
-      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog,
+      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog, sleepEl,
     ]);
 
     applyArea();

@@ -241,18 +241,29 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .busy-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
 .busy-x { margin-left: auto; }
 
-/* the "what's taking your time today?" wizard */
-.wizard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 15px; display: flex; flex-direction: column; gap: 11px; animation: swapIn .28s ease both; }
-.wz-row { display: flex; align-items: center; gap: 10px; }
-.wz-on { width: 18px; height: 18px; flex: none; }
-.wz-on-spacer { width: 18px; flex: none; }
-.wz-label { font-size: 14px; min-width: 52px; color: var(--text); }
-.wz-dur { appearance: auto; font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
-.wz-text { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); }
-.wz-bed { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+.busy-drain { font-size: 11px; color: var(--wind); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+
+/* the planning conversation — one question at a time */
+.journey { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 20px 18px; display: flex; flex-direction: column; gap: 14px; animation: swapIn .28s ease both; }
+.q-title { font-size: 21px; font-weight: 650; letter-spacing: -.02em; margin: 0; }
+.q-sub { font-size: 14px; color: var(--text-dim); line-height: 1.5; margin: -6px 0 2px; }
+.q-opts { display: flex; flex-direction: column; gap: 9px; }
+.q-opt { appearance: none; cursor: pointer; text-align: left; background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px 16px; font: inherit; font-size: 15px; font-weight: 550; color: var(--text); display: flex; justify-content: space-between; align-items: center; gap: 10px; transition: border-color .15s, background .15s; }
+.q-opt:hover { border-color: var(--text-faint); background: var(--bg-soft); }
+.q-opt-sub { color: var(--text-faint); font-size: 13px; font-weight: 400; }
+.q-input { font: inherit; font-size: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--text); }
+.q-bedrow { display: flex; align-items: center; gap: 10px; }
+.q-recap { margin: 0; padding-left: 18px; color: var(--text-dim); font-size: 14px; line-height: 1.7; }
+.q-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 2px; }
+.q-back, .q-cancel { appearance: none; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--text-faint); padding: 4px 0; transition: color .15s; }
+.q-back:hover, .q-cancel:hover { color: var(--text-dim); }
 
 /* dashboard goal countdown — nonchalant, in the corner, never bold */
 .goal-countdown { text-align: right; font-size: 11px; letter-spacing: .05em; color: var(--text-faint); margin-bottom: 12px; }
+
+/* dashboard bedtime nudge — quiet, brightens as it nears */
+.sleep-nudge { text-align: center; font-size: 12px; color: var(--text-faint); margin-top: 18px; letter-spacing: .02em; }
+.sleep-nudge.soon { color: var(--wind); }
 
 /* prep: when it's bedtime, we don't offer a session */
 .bedtime-block { margin-top: 6px; }
