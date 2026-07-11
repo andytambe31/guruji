@@ -1,8 +1,8 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
-import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext } from '../store.js';
+import { el, clear, fill, habitStats, todayISO, daysBetween, nowMinutes, toMinutes, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings } from '../store.js';
 
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
@@ -40,6 +40,14 @@ export async function renderNow(mount, { navigate }) {
   const load = estimateCognitiveLoad(log, context);
   const status = loadStatus(load);
 
+  // Routine context: how long until bedtime, and the nonchalant goal countdown.
+  const today = todayISO();
+  const settings = await getSettings();
+  const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
+  const toBed = bedMin != null ? bedMin - nowMinutes() : Infinity;
+  const daysToGoal = settings.goalDate ? daysBetween(today, settings.goalDate) : null;
+  const habitDoneToday = (area) => log.some((e) => e.area === area && e.result === 'done' && e.date === today);
+
   // The coach's call: one area, with the reasoning behind it. It weighs what's
   // surfaceable, your recent history, your reading streak, and — crucially —
   // your cognitive load, so it steers you off deep work when you're loaded.
@@ -68,6 +76,16 @@ export async function renderNow(mount, { navigate }) {
     if (!availAreas.length) {
       return { area: allAreas[0], headline: 'You’re clear for now.', reason: 'Everything ready is done. Take a look at the map for what’s next — or call it and rest.' };
     }
+
+    // Near bedtime, protect the daily habit: if reading isn't done today and
+    // it's available, that's the one thing left — even ten minutes counts.
+    if (toBed > 0 && toBed <= 90) {
+      const habitArea = availAreas.find((a) => isHabit(a) && !habitDoneToday(a));
+      if (habitArea) {
+        return { area: habitArea, headline: `Ten minutes, then bed — ${habitArea}.`, reason: `It’s the one thing left today. A short read keeps the streak and the routine — the hard stuff can wait for tomorrow.` };
+      }
+    }
+
     const within = availAreas.filter((a) => { const it = nextForArea(a); return it && withinCapacity(it.mode, load); });
 
     // Loaded past capacity for everything available → steer to the lightest thing.
@@ -152,8 +170,18 @@ export async function renderNow(mount, { navigate }) {
       ctxLine, ctxChips,
     ]);
 
+    // Nonchalant goal countdown, tucked in the corner — never bold.
+    let countdown = null;
+    if (daysToGoal != null) {
+      const label = settings.goalLabel || 'goal';
+      const txt = daysToGoal > 0 ? `${daysToGoal} days to ${label}`
+        : daysToGoal === 0 ? `${label} — today`
+        : `${label} — passed`;
+      countdown = el('div', { class: 'goal-countdown', text: txt });
+    }
+
     fill(clear(wrap), [
-      eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog,
+      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog,
     ]);
 
     applyArea();

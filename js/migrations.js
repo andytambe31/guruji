@@ -9,7 +9,7 @@
 //    applied on top of your current data instead of regenerating the whole
 //    plan.json. Applied once, tracked by id.
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // Each step upgrades a canonical data object *in place* to `to`.
 const MIGRATIONS = [
@@ -42,6 +42,16 @@ const MIGRATIONS = [
           }
         }
       }
+    },
+  },
+  {
+    to: 4,
+    description: 'add day commitments (gym/walk) + routine settings support',
+    up(d) {
+      if (!Array.isArray(d.busy)) d.busy = [];
+      // Note: `settings` is intentionally left absent if the file has none, so
+      // a fresh plan's meta (goalDate/bedtime) can seed it on ingest without a
+      // migration-fabricated default clobbering it.
     },
   },
 ];

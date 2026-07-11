@@ -1,14 +1,20 @@
-// Day — the adaptive schedule. The coach blocks study time across the day
-// (hard work while you're fresh); you can retime or bump any block and the rest
-// re-allocate around it. Export a snapshot to Apple Calendar as .ics.
+// Day — the adaptive schedule. The coach asks what's taking your time (gym,
+// walk, bedtime), then lays study into the free windows around it, ordering by
+// the cognitive load it predicts at each hour. You can retime/bump any block
+// and the rest re-allocate. Export a snapshot to Apple Calendar as .ics.
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS } from '../util.js';
 import {
-  hasPlan, getItems, getBlocksForDate, autoPlanDay, deleteBlock, setBlockStatus,
-  retimeBlock, moveBlockToDate, blockItem, depsSatisfied,
+  hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
+  retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const COMMON = [
+  { key: 'gym', label: 'Gym', start: 18 * 60, minutes: 60 },
+  { key: 'walk', label: 'Walk', start: 17 * 60, minutes: 30 },
+  { key: 'dinner', label: 'Dinner', start: 20 * 60, minutes: 45 },
+];
 
 export async function renderDay(mount, { navigate }) {
   if (!(await hasPlan())) {
@@ -22,6 +28,7 @@ export async function renderDay(mount, { navigate }) {
 
   let date = todayISO();
   let adding = false;
+  let wizard = false;
   const wrap = el('div', { class: 'day-wrap' });
   mount.append(wrap);
   await paint();
@@ -31,7 +38,8 @@ export async function renderDay(mount, { navigate }) {
     if (d === t) return 'Today';
     if (d === addDaysISO(t, 1)) return 'Tomorrow';
     if (d === addDaysISO(t, -1)) return 'Yesterday';
-    return DAYS[new Date(d + 'T00:00:00').getDay()].charAt(0) + DAYS[new Date(d + 'T00:00:00').getDay()].slice(1).toLowerCase();
+    const wd = DAYS[new Date(d + 'T00:00:00').getDay()];
+    return wd.charAt(0) + wd.slice(1).toLowerCase();
   }
   function dateLabel(d) {
     const x = new Date(d + 'T00:00:00');
@@ -39,36 +47,42 @@ export async function renderDay(mount, { navigate }) {
   }
 
   async function paint() {
-    const [blocks, items] = await Promise.all([getBlocksForDate(date), getItems()]);
-    blocks.sort((a, b) => a.start - b.start);
+    const [blocks, busy, items, settings] = await Promise.all([
+      getBlocksForDate(date), getBusyForDate(date), getItems(), getSettings(),
+    ]);
 
     const head = el('div', { class: 'day-head' }, [
-      el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; await paint(); } }),
+      el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = wizard = false; await paint(); } }),
       el('div', { class: 'day-title' }, [
         el('div', { class: 'day-rel', text: relLabel(date) }),
         el('div', { class: 'day-date', text: dateLabel(date) }),
       ]),
-      el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = false; await paint(); } }),
+      el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = wizard = false; await paint(); } }),
     ]);
 
-    const list = el('div', { class: 'timeline' });
-    if (!blocks.length) {
-      list.append(el('p', { class: 'muted day-empty', text: `Nothing booked for ${relLabel(date).toLowerCase()}. Let the coach plan it, or add a block.` }));
+    const timeline = el('div', { class: 'timeline' });
+    const rows = [
+      ...blocks.map((b) => ({ t: b.start, node: blockCard(b) })),
+      ...busy.map((b) => ({ t: b.start, node: busyCard(b) })),
+    ].sort((a, b) => a.t - b.t);
+    if (!rows.length) {
+      timeline.append(el('p', { class: 'muted day-empty', text: `Nothing booked for ${relLabel(date).toLowerCase()}. Let the coach plan it around your day.` }));
     } else {
-      for (const b of blocks) list.append(blockCard(b));
+      for (const r of rows) timeline.append(r.node);
     }
 
     const surfaceableAreas = surfaceAreas(items);
     const footer = el('div', { class: 'day-actions' }, [
-      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { await autoPlanDay(date); adding = false; await paint(); } }),
+      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { wizard = !wizard; adding = false; await paint(); } }),
       el('div', { class: 'day-sub' }, [
-        el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; await paint(); } }),
-        blocks.length ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
+        el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; wizard = false; await paint(); } }),
+        (blocks.length || busy.length) ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
       ]),
+      wizard ? wizardPanel(settings) : null,
       adding ? addForm(surfaceableAreas) : null,
     ]);
 
-    fill(clear(wrap), [head, list, footer]);
+    fill(clear(wrap), [head, timeline, footer]);
   }
 
   function blockCard(b) {
@@ -96,9 +110,49 @@ export async function renderDay(mount, { navigate }) {
     ]);
   }
 
+  function busyCard(b) {
+    return el('div', { class: 'busy' }, [
+      el('span', { class: 'busy-time', text: `${fmtTimeOfDay(b.start)} – ${fmtTimeOfDay(b.start + b.minutes)}` }),
+      el('span', { class: 'busy-label', text: b.label }),
+      el('button', { class: 'blk-act blk-x busy-x', text: 'Remove', onclick: async () => { await deleteBusy(b.id); await paint(); } }),
+    ]);
+  }
+
+  function wizardPanel(settings) {
+    const bedInput = el('input', { type: 'time', class: 'blk-time', value: settings.bedtime || '23:30' });
+    const rows = COMMON.map((c) => {
+      const on = el('input', { type: 'checkbox', class: 'wz-on' });
+      const t = el('input', { type: 'time', class: 'blk-time', value: minutesToHHMM(c.start) });
+      const dur = el('select', { class: 'wz-dur' }, [30, 45, 60, 90].map((m) => el('option', { value: String(m), text: `${m}m`, selected: m === c.minutes })));
+      return { c, on, t, dur, node: el('label', { class: 'wz-row' }, [on, el('span', { class: 'wz-label', text: c.label }), t, dur]) };
+    });
+    const otherLabel = el('input', { type: 'text', class: 'wz-text', placeholder: 'Anything else…' });
+    const otherTime = el('input', { type: 'time', class: 'blk-time', value: '16:00' });
+    const otherDur = el('select', { class: 'wz-dur' }, [30, 45, 60, 90].map((m) => el('option', { value: String(m), text: `${m}m`, selected: m === 60 })));
+
+    const arrange = el('button', {
+      class: 'btn btn-primary btn-block', text: 'Arrange my day',
+      onclick: async () => {
+        await setSettings({ bedtime: bedInput.value || settings.bedtime });
+        for (const r of rows) if (r.on.checked) await putBusy({ date, start: toMinutes(r.t.value || minutesToHHMM(r.c.start)), minutes: Number(r.dur.value), label: r.c.label });
+        if (otherLabel.value.trim()) await putBusy({ date, start: toMinutes(otherTime.value || '16:00'), minutes: Number(otherDur.value), label: otherLabel.value.trim() });
+        await autoPlanDay(date);
+        wizard = false;
+        await paint();
+      },
+    });
+
+    return el('div', { class: 'wizard' }, [
+      el('div', { class: 'add-label', text: 'What’s taking your time today?' }),
+      ...rows.map((r) => r.node),
+      el('label', { class: 'wz-row' }, [el('span', { class: 'wz-on-spacer' }), el('span', { class: 'wz-label', text: 'Other' }), otherLabel, otherTime, otherDur]),
+      el('div', { class: 'wz-bed' }, [el('span', { class: 'wz-label', text: 'Bed by' }), bedInput]),
+      arrange,
+    ]);
+  }
+
   function addForm(areas) {
     if (!areas.length) return el('p', { class: 'muted day-empty', text: 'Nothing is unlocked to block right now.' });
-    // default time: round current time up to the next quarter hour
     const nowMin = date === todayISO() ? Math.ceil((new Date().getHours() * 60 + new Date().getMinutes() + 5) / 15) * 15 : 9 * 60;
     const timeInput = el('input', { type: 'time', class: 'blk-time', value: minutesToHHMM(Math.min(nowMin, 23 * 60 + 45)) });
     return el('div', { class: 'add-form' }, [

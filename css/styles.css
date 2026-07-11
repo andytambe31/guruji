@@ -235,6 +235,29 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .add-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
 .add-at { display: flex; align-items: center; gap: 8px; }
 
+/* commitments (gym, walk…) — fixed, dashed, muted; study routes around them */
+.busy { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--radius-sm); background: var(--bg-soft); }
+.busy-time { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.busy-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.busy-x { margin-left: auto; }
+
+/* the "what's taking your time today?" wizard */
+.wizard { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 15px; display: flex; flex-direction: column; gap: 11px; animation: swapIn .28s ease both; }
+.wz-row { display: flex; align-items: center; gap: 10px; }
+.wz-on { width: 18px; height: 18px; flex: none; }
+.wz-on-spacer { width: 18px; flex: none; }
+.wz-label { font-size: 14px; min-width: 52px; color: var(--text); }
+.wz-dur { appearance: auto; font: inherit; font-size: 13px; padding: 5px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); }
+.wz-text { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: var(--text); }
+.wz-bed { display: flex; align-items: center; gap: 10px; margin-top: 2px; }
+
+/* dashboard goal countdown — nonchalant, in the corner, never bold */
+.goal-countdown { text-align: right; font-size: 11px; letter-spacing: .05em; color: var(--text-faint); margin-bottom: 12px; }
+
+/* prep: when it's bedtime, we don't offer a session */
+.bedtime-block { margin-top: 6px; }
+.bedtime-note { font-size: 15px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }
+
 /* ---------- Empty / centered states ---------- */
 .center-state {
   min-height: 62vh; display: flex; flex-direction: column;

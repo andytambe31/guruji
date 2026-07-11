@@ -1,8 +1,21 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
-import { uid, todayISO, nowMinutes } from './util.js';
-import { planDay, reflow, clampDur } from './schedule.js';
+import { uid, todayISO, nowMinutes, toMinutes } from './util.js';
+import { planDay, reflow, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
+
+// ---------- Routine settings (bedtime, goal countdown) ----------
+const DEFAULT_SETTINGS = { bedtime: '23:30', goalDate: null, goalLabel: '' };
+export async function getSettings() {
+  const rec = await get(STORES.kv, 'settings');
+  return { ...DEFAULT_SETTINGS, ...(rec ? rec.v : {}) };
+}
+export async function setSettings(patch) {
+  const cur = await getSettings();
+  const next = { ...cur, ...(patch || {}) };
+  await put(STORES.kv, { k: 'settings', v: next });
+  return next;
+}
 
 // ---------- Plan meta ----------
 export async function getMeta() {
@@ -169,17 +182,36 @@ export async function setBlockStatus(id, status) {
   return b;
 }
 
-// Re-pack a day so nothing overlaps: pinned/done keep their time, the rest flow.
+// ---------- Commitments (fixed busy blocks: gym, walk, meetings…) ----------
+export async function getBusyForDate(date) {
+  const rows = await getAll(STORES.schedule);
+  return rows.filter((r) => r && r.kind === 'busy' && r.date === date).sort((a, b) => a.start - b.start);
+}
+export async function putBusy({ date, start, minutes, label }) {
+  const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy' };
+  await put(STORES.schedule, rec);
+  await reflowDate(date);
+  return rec;
+}
+export async function deleteBusy(id) {
+  const b = await get(STORES.schedule, id);
+  await del(STORES.schedule, id);
+  if (b) await reflowDate(b.date);
+  return b;
+}
+
+// Re-pack a day so nothing overlaps: pinned/done blocks and commitments keep
+// their time, the rest flow around them.
 export async function reflowDate(date) {
-  const blocks = await getBlocksForDate(date);
+  const [blocks, busy] = await Promise.all([getBlocksForDate(date), getBusyForDate(date)]);
   if (!blocks.length) return [];
-  const packed = reflow(blocks);
+  const packed = reflow(blocks, busy);
   await bulkPut(STORES.schedule, packed.map((b) => ({ ...b, kind: 'block' })));
   return packed;
 }
 
-// Auto-plan a date from the next surfaceable item in each area. Keeps any
-// pinned/done blocks already on that day and replaces the auto ones.
+// Auto-plan a date: lay the next surfaceable item per area into the free
+// windows around commitments, load-aware, capped at bedtime. Keeps pinned/done.
 export async function autoPlanDay(date, { now = new Date() } = {}) {
   const items = await getItems();
   const statusById = new Map(items.map((i) => [i.id, i.status]));
@@ -195,19 +227,24 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
     perArea.push(it);
   }
 
-  const existing = await getBlocksForDate(date);
+  const [existing, busy, settings, context] = await Promise.all([
+    getBlocksForDate(date), getBusyForDate(date), getSettings(), getContext(),
+  ]);
   const keep = existing.filter((b) => b.pinned || b.status === 'done');
   for (const b of existing) {
     if (!(b.pinned || b.status === 'done')) await del(STORES.schedule, b.id);
   }
 
+  const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  const endMin = Math.min(DAY_END, bedMin);
   const taken = new Set(keep.map((b) => b.itemId));
   const cands = perArea.filter((it) => !taken.has(it.id));
-  const startMin = date === todayISO(now) ? Math.ceil((nowMinutes(now) + 5) / 15) * 15 : undefined;
-  // If it's too late for anything to fit today, still propose a layout (from the
-  // day's start) so the user has something to bump to tomorrow or retime.
-  let fresh = planDay(date, cands, { startMin });
-  if (!fresh.length && cands.length) fresh = planDay(date, cands, {});
+  const startMin = date === todayISO(now) ? Math.ceil((nowMinutes(now) + 5) / 15) * 15 : DAY_START;
+
+  const planOpts = { startMin, endMin, busy, context };
+  // If it's too late for anything to fit today, still propose from the day start.
+  let fresh = planDay(date, cands, planOpts);
+  if (!fresh.length && cands.length) fresh = planDay(date, cands, { endMin, busy, context });
   const rows = fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }));
   await bulkPut(STORES.schedule, rows);
   await reflowDate(date);
@@ -332,12 +369,26 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   await setMeta(meta);
   await put(STORES.kv, { k: 'plans', v: planRecords });
 
+  // Seed routine settings from the plan's meta, then let a full backup override.
+  const metaSettings = {};
+  if (meta.goalDate !== undefined) metaSettings.goalDate = meta.goalDate;
+  if (meta.goalLabel !== undefined) metaSettings.goalLabel = meta.goalLabel;
+  if (meta.bedtime !== undefined) metaSettings.bedtime = meta.bedtime;
+  if (Object.keys(metaSettings).length) await setSettings(metaSettings);
+  if (plan.settings) await setSettings(plan.settings);
+
   // Import may restore a full backup that carries the log, schedule + context.
   if (Array.isArray(plan.log)) {
     await replaceStores({ [STORES.log]: plan.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
   }
-  if (Array.isArray(plan.blocks)) {
-    await replaceStores({ [STORES.schedule]: plan.blocks.map((b) => ({ kind: 'block', id: b.id || uid('blk'), ...b })) });
+  // Blocks and commitments share the schedule store — restore them together so
+  // one doesn't wipe the other.
+  if (Array.isArray(plan.blocks) || Array.isArray(plan.busy)) {
+    const sched = [
+      ...(plan.blocks || []).map((b) => ({ kind: 'block', id: b.id || uid('blk'), ...b })),
+      ...(plan.busy || []).map((b) => ({ kind: 'busy', id: b.id || uid('busy'), ...b })),
+    ];
+    await replaceStores({ [STORES.schedule]: sched });
   }
   if ('context' in plan) {
     await setContext(plan.context || null);
@@ -359,9 +410,12 @@ export async function markPatchApplied(id) {
 // ---------- Full backup export ----------
 // Reconstruct a plan.json-shaped object plus schedule + log for round-tripping.
 export async function buildExport() {
-  const [meta, plans, phases, items, log, blocks, context] = await Promise.all([
-    getMeta(), getPlans(), getPhases(), getItems(), getLog(), getBlocks(), getContext(),
+  const [meta, plans, phases, items, log, blocks, context, settings] = await Promise.all([
+    getMeta(), getPlans(), getPhases(), getItems(), getLog(), getBlocks(), getContext(), getSettings(),
   ]);
+  const allSchedule = await getAll(STORES.schedule);
+  const busy = allSchedule.filter((r) => r && r.kind === 'busy')
+    .map((b) => ({ id: b.id, date: b.date, start: b.start, minutes: b.minutes, label: b.label }));
 
   const itemsByPhase = new Map();
   for (const it of items) {
@@ -410,7 +464,9 @@ export async function buildExport() {
     meta: meta || {},
     plans: plansOut,
     blocks: blocksOut,
+    busy,
     context: context || null,
+    settings,
     log,
     exportedAt: new Date().toISOString(),
     app: 'guruji',
