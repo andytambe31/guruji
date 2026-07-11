@@ -1,8 +1,8 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, fmtTimeOfDay, nowMinutes, toast, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
-import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getBlocksForDate, blockItem } from '../store.js';
+import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext } from '../store.js';
 
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
@@ -39,14 +39,6 @@ export async function renderNow(mount, { navigate }) {
   const context = await getContext();
   const load = estimateCognitiveLoad(log, context);
   const status = loadStatus(load);
-
-  // What's already on today's schedule, and the next thing coming up.
-  const today = todayISO();
-  const todaysBlocks = await getBlocksForDate(today);
-  const nowMin = nowMinutes();
-  const upcoming = todaysBlocks
-    .filter((b) => b.status === 'planned' && b.start + b.minutes >= nowMin)
-    .sort((a, b) => a.start - b.start)[0] || null;
 
   // The coach's call: one area, with the reasoning behind it. It weighs what's
   // surfaceable, your recent history, your reading streak, and — crucially —
@@ -118,11 +110,38 @@ export async function renderNow(mount, { navigate }) {
       chipEls.set(a, btn);
       return btn;
     }));
-    const toggle = el('button', { class: 'switch-toggle', text: 'Something else →', onclick: () => {
+    const toggle = el('button', { class: 'secondary-link', text: 'Something else', onclick: () => {
       const hidden = areasEl.hasAttribute('hidden');
       if (hidden) areasEl.removeAttribute('hidden'); else areasEl.setAttribute('hidden', '');
-      toggle.textContent = hidden ? 'Never mind ↑' : 'Something else →';
+      toggle.textContent = hidden ? 'Never mind' : 'Something else';
     } });
+    // Two quiet secondary actions — the schedule lives on its own tab, not here.
+    const secondary = el('div', { class: 'now-secondary' }, [
+      toggle,
+      el('span', { class: 'now-sep', text: '·' }),
+      el('button', { class: 'secondary-link', text: 'Schedule', onclick: () => navigate('/day') }),
+    ]);
+
+    // Cognitive load: a compact gauge. The life-context picker collapses to a
+    // single line so it isn't shouting for attention every visit.
+    const ctxKey = (context && context.key) ? context.key : 'fresh';
+    const ctxNow = ctxKey === 'fresh' ? 'Fresh' : CONTEXTS[ctxKey].label;
+    const ctxChips = el('div', { class: 'ctxchips', hidden: true }, ['fresh', ...Object.keys(CONTEXTS)].map((key) =>
+      el('button', {
+        class: 'ctxchip' + (key === ctxKey ? ' on' : ''),
+        text: key === 'fresh' ? 'Fresh' : CONTEXTS[key].label,
+        onclick: async () => {
+          await setContext(key === 'fresh' ? null : { key, setAt: new Date().toISOString() });
+          navigate('/now');
+        },
+      })));
+    const ctxLine = el('button', { class: 'ctx-summary', onclick: () => {
+      const hidden = ctxChips.hasAttribute('hidden');
+      if (hidden) ctxChips.removeAttribute('hidden'); else ctxChips.setAttribute('hidden', '');
+    } }, [
+      el('span', { text: `Coming in from · ${ctxNow}` }),
+      el('span', { class: 'ctx-caret', text: '›' }),
+    ]);
 
     const cog = el('div', { class: `cog tone-${status.tone}` }, [
       el('div', { class: 'cog-row' }, [
@@ -130,31 +149,11 @@ export async function renderNow(mount, { navigate }) {
         el('span', { class: 'cog-pct', text: `${load}%` }),
       ]),
       el('div', { class: 'cog-track' }, [el('div', { class: 'cog-fill', style: `width:${load}%` })]),
-      el('div', { class: 'cog-note', text: status.note }),
+      ctxLine, ctxChips,
     ]);
-
-    const ctxKey = (context && context.key) ? context.key : 'fresh';
-    const ctxRow = el('div', { class: 'ctxrow' }, [
-      el('span', { class: 'ctxrow-label', text: 'Coming in from' }),
-      el('div', { class: 'ctxchips' }, ['fresh', ...Object.keys(CONTEXTS)].map((key) =>
-        el('button', {
-          class: 'ctxchip' + (key === ctxKey ? ' on' : ''),
-          text: key === 'fresh' ? 'Fresh' : CONTEXTS[key].label,
-          onclick: async () => {
-            await setContext(key === 'fresh' ? null : { key, setAt: new Date().toISOString() });
-            navigate('/now');
-          },
-        }))),
-    ]);
-
-    const nextEl = upcoming ? el('button', { class: 'nextup', onclick: () => navigate('/day') }, [
-      el('span', { class: 'nextup-k', text: 'Next up' }),
-      el('span', { class: 'nextup-v', text: `${upcoming.area} · ${fmtTimeOfDay(upcoming.start)}` }),
-      el('span', { class: 'nextup-go', text: '→' }),
-    ]) : null;
 
     fill(clear(wrap), [
-      eyebrowEl, verdictEl, reasonEl, ctaWrap, toggle, areasEl, nextEl, cog, ctxRow,
+      eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog,
     ]);
 
     applyArea();
@@ -190,15 +189,7 @@ export async function renderNow(mount, { navigate }) {
       if (!item) {
         children = [el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') })];
       } else if (withinCapacity(item.mode, load)) {
-        children = [
-          el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) }),
-          el('button', { class: 'btn-link', text: 'Block time for later →', onclick: async () => {
-            const slot = Math.min(Math.ceil((nowMinutes() + 30) / 15) * 15, 23 * 60 + 45);
-            await blockItem(item.id, today, slot);
-            toast('Blocked for later');
-            navigate('/day');
-          } }),
-        ];
+        children = [el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })];
       } else {
         children = [
           el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),

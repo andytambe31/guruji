@@ -125,15 +125,6 @@ p  { color: var(--text-dim); line-height: 1.55; }
   margin: 0 0 24px; max-width: 30ch;
 }
 
-/* demoted switcher: a quiet escape hatch, not the main path */
-.switch-toggle {
-  align-self: flex-start; appearance: none; cursor: pointer;
-  background: none; border: none; color: var(--text-faint);
-  font: inherit; font-size: 13px; padding: 4px 0; margin-bottom: 4px;
-  transition: color .15s;
-}
-.switch-toggle:hover { color: var(--text-dim); }
-
 .ctx { display: flex; gap: 8px; margin-bottom: 26px; }
 .areas { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 28px; }
 .areas[hidden] { display: none; }
@@ -173,24 +164,30 @@ p  { color: var(--text-dim); line-height: 1.55; }
 
 .now-foot { text-align: center; margin-top: 26px; }
 
+/* Two quiet secondary actions under the primary CTA. */
+.now-secondary { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+.secondary-link { appearance: none; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--text-faint); padding: 0; transition: color .15s; }
+.secondary-link:hover { color: var(--text-dim); }
+.now-sep { color: var(--line); font-size: 13px; }
+
 /* Cognitive-load gauge — quiet, reinforces quality over quantity. */
-.cog { margin-top: 36px; }
+.cog { margin-top: 44px; }
 .cog-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .cog-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
 .cog-pct { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
 .cog-track { height: 5px; background: var(--line); border-radius: 5px; overflow: hidden; }
 .cog-fill { height: 100%; border-radius: 5px; background: var(--cog, var(--text-dim)); transition: width .5s ease, background .3s; }
-.cog-note { font-size: 12.5px; color: var(--text-faint); margin-top: 9px; }
 .cog.tone-low  { --cog: #0f9d6b; }
 .cog.tone-mid  { --cog: #6b8afd; }
 .cog.tone-high { --cog: #d98324; }
 .cog.tone-max  { --cog: #c2483d; }
-.cog.tone-high .cog-note, .cog.tone-max .cog-note { color: var(--cog); }
 
-/* life-context chips */
-.ctxrow { margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.ctxrow-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
-.ctxchips { display: flex; gap: 6px; flex-wrap: wrap; }
+/* life-context: collapsed to one line, expands to chips on tap */
+.ctx-summary { appearance: none; background: none; border: none; cursor: pointer; font: inherit; font-size: 12px; color: var(--text-faint); padding: 0; margin-top: 11px; display: inline-flex; align-items: center; gap: 5px; transition: color .15s; }
+.ctx-summary:hover { color: var(--text-dim); }
+.ctx-caret { font-size: 13px; }
+.ctxchips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.ctxchips[hidden] { display: none; }
 .ctxchip { appearance: none; background: transparent; border: 1px solid var(--line); color: var(--text-faint); font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
 .ctxchip.on { border-color: var(--text); color: var(--text); background: var(--bg-soft); }
 
@@ -237,13 +234,6 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .add-form { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; gap: 12px; animation: swapIn .28s ease both; }
 .add-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
 .add-at { display: flex; align-items: center; gap: 8px; }
-
-/* dashboard: peek at what's next on the schedule */
-.nextup { appearance: none; cursor: pointer; width: 100%; text-align: left; background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 14px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; transition: border-color .15s; }
-.nextup:hover { border-color: var(--text-faint); }
-.nextup-k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
-.nextup-v { font-size: 14px; font-weight: 600; color: var(--text); }
-.nextup-go { margin-left: auto; color: var(--text-faint); }
 
 /* ---------- Empty / centered states ---------- */
 .center-state {
