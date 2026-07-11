@@ -114,6 +114,10 @@ export async function renderDay(mount, { navigate }) {
   // ---------- the planning conversation ----------
   function journeyCard(settings) {
     const s = pl.stage;
+    // Speak in the right tense for the day being planned.
+    const t = todayISO();
+    const when = date === t ? 'today' : date === addDaysISO(t, 1) ? 'tomorrow' : `on ${relLabel(date)}`;
+    const futureDay = date !== t;
     const opt = (label, onClick, sub) => el('button', { class: 'q-opt', onclick: onClick }, sub ? [el('span', { text: label }), el('span', { class: 'q-opt-sub', text: sub })] : [label]);
     const foot = (backTo) => el('div', { class: 'q-foot' }, [
       backTo ? el('button', { class: 'q-back', text: '← Back', onclick: async () => { pl.stage = backTo; await paint(); } }) : el('span'),
@@ -128,21 +132,21 @@ export async function renderDay(mount, { navigate }) {
     ]);
 
     if (s === 'wake-ask') {
-      return card('What time are you up?', 'I’ll leave you ~30 minutes to freshen up before anything starts.', [
+      return card(futureDay ? 'What time are you getting up?' : 'What time are you up?', 'I’ll leave you ~30 minutes to freshen up before anything starts.', [
         ...WAKE.map((w) => opt(w.label, () => { pl.wake = w.wake; go('gym-ask'); })),
-        opt('Been up a while', () => { pl.wake = null; go('gym-ask'); }),
+        opt(futureDay ? 'Not sure yet' : 'Been up a while', () => { pl.wake = null; go('gym-ask'); }),
       ]);
     }
     if (s === 'gym-ask') {
-      return card('Heading to the gym today?', 'The coach will keep study clear of it.', [
+      return card(`Hitting the gym ${when}?`, 'The coach will keep study clear of it.', [
         opt('Yes', () => beginActivity('gym', 'Gym')),
-        opt('Not today', () => go('walk-ask')),
+        opt('Not ' + (futureDay ? 'then' : 'today'), () => go('walk-ask')),
       ]);
     }
     if (s === 'walk-ask') {
-      return card('Going for a walk today?', null, [
+      return card(`Going for a walk ${when}?`, null, [
         opt('Yes', () => beginActivity('walk', 'Walk')),
-        opt('Not today', () => go('else-ask')),
+        opt('Not ' + (futureDay ? 'then' : 'today'), () => go('else-ask')),
       ]);
     }
     if (s === 'when') {
@@ -156,7 +160,7 @@ export async function renderDay(mount, { navigate }) {
     }
     if (s === 'else-ask') {
       const summary = pl.activities.length ? `So far: ${pl.activities.map((a) => a.name).join(', ')}.` : null;
-      return card('Anything else taking your time?', summary || 'Office work, errands, an appointment…', [
+      return card(`Anything else taking your time ${when}?`, summary || 'Office work, errands, an appointment…', [
         opt('Add something', () => go('else-label')),
         opt('No, that’s everything', () => go('bedtime')),
       ]);

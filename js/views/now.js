@@ -245,7 +245,7 @@ export async function renderNow(mount, { navigate }) {
       } else if (withinCapacity(item.mode, load)) {
         children = [
           el('button', { class: 'btn btn-primary btn-lg btn-block', text: isReadingHabit ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) }),
-          isReadingHabit ? el('button', { class: 'btn-link', text: 'Your reading & reflections →', onclick: () => navigate('/reading') }) : null,
+          isReadingHabit ? el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px', text: 'Your reading', onclick: () => navigate('/reading') }) : null,
         ];
       } else {
         children = [
