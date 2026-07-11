@@ -1,8 +1,8 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
-import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext } from '../store.js';
+import { el, clear, fill, habitStats, todayISO, fmtTimeOfDay, nowMinutes, toast, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getBlocksForDate, blockItem } from '../store.js';
 
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
@@ -39,6 +39,14 @@ export async function renderNow(mount, { navigate }) {
   const context = await getContext();
   const load = estimateCognitiveLoad(log, context);
   const status = loadStatus(load);
+
+  // What's already on today's schedule, and the next thing coming up.
+  const today = todayISO();
+  const todaysBlocks = await getBlocksForDate(today);
+  const nowMin = nowMinutes();
+  const upcoming = todaysBlocks
+    .filter((b) => b.status === 'planned' && b.start + b.minutes >= nowMin)
+    .sort((a, b) => a.start - b.start)[0] || null;
 
   // The coach's call: one area, with the reasoning behind it. It weighs what's
   // surfaceable, your recent history, your reading streak, and — crucially —
@@ -139,8 +147,14 @@ export async function renderNow(mount, { navigate }) {
         }))),
     ]);
 
+    const nextEl = upcoming ? el('button', { class: 'nextup', onclick: () => navigate('/day') }, [
+      el('span', { class: 'nextup-k', text: 'Next up' }),
+      el('span', { class: 'nextup-v', text: `${upcoming.area} · ${fmtTimeOfDay(upcoming.start)}` }),
+      el('span', { class: 'nextup-go', text: '→' }),
+    ]) : null;
+
     fill(clear(wrap), [
-      eyebrowEl, verdictEl, reasonEl, ctaWrap, toggle, areasEl, cog, ctxRow,
+      eyebrowEl, verdictEl, reasonEl, ctaWrap, toggle, areasEl, nextEl, cog, ctxRow,
     ]);
 
     applyArea();
@@ -176,7 +190,15 @@ export async function renderNow(mount, { navigate }) {
       if (!item) {
         children = [el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') })];
       } else if (withinCapacity(item.mode, load)) {
-        children = [el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })];
+        children = [
+          el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) }),
+          el('button', { class: 'btn-link', text: 'Block time for later →', onclick: async () => {
+            const slot = Math.min(Math.ceil((nowMinutes() + 30) / 15) * 15, 23 * 60 + 45);
+            await blockItem(item.id, today, slot);
+            toast('Blocked for later');
+            navigate('/day');
+          } }),
+        ];
       } else {
         children = [
           el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),

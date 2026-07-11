@@ -199,6 +199,52 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .btn-link { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--text-dim); font: inherit; font-size: 13px; padding: 12px 0 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .btn-link:hover { color: var(--text); }
 
+/* ---------- Day / adaptive schedule ---------- */
+.day-wrap { padding-top: 4px; }
+.day-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.day-nav { appearance: none; background: transparent; border: 1px solid var(--line); color: var(--text-dim); width: 38px; height: 38px; border-radius: 50%; font-size: 20px; line-height: 1; cursor: pointer; transition: border-color .15s, color .15s; }
+.day-nav:hover { border-color: var(--text-faint); color: var(--text); }
+.day-title { text-align: center; }
+.day-rel { font-size: 18px; font-weight: 650; letter-spacing: -.02em; }
+.day-date { font-size: 12px; color: var(--text-faint); letter-spacing: .04em; }
+
+.timeline { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; }
+.day-empty { padding: 22px 2px; }
+
+.blk { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; transition: opacity .2s, border-color .15s; animation: swapIn .28s ease both; }
+.blk.done { opacity: .5; }
+.blk-when { display: flex; align-items: center; gap: 8px; }
+.blk-time { appearance: none; background: transparent; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; padding: 4px 6px; }
+.blk-time:disabled { border-color: transparent; padding-left: 0; }
+.blk-end { font-size: 13px; color: var(--text-faint); }
+.blk-main { display: flex; align-items: center; gap: 8px; }
+.blk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
+.blk-dot.DESK { background: var(--desk); }
+.blk-dot.TRANSIT { background: var(--transit); }
+.blk-dot.WIND_DOWN { background: var(--wind); }
+.blk-area { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.blk-dur { font-size: 12px; color: var(--text-faint); margin-left: auto; }
+.blk-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.blk-start { appearance: none; cursor: pointer; background: var(--text); color: var(--bg); border: none; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
+.blk-act { appearance: none; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--text-dim); font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 999px; transition: border-color .15s, color .15s; }
+.blk-act:hover { border-color: var(--text-faint); color: var(--text); }
+.blk-x { color: var(--text-faint); }
+
+.day-actions { display: flex; flex-direction: column; gap: 12px; }
+.day-sub { display: flex; gap: 18px; justify-content: center; }
+.day-inline { display: inline; width: auto; padding: 0; text-decoration: none; color: var(--text-faint); font-size: 13px; }
+.day-inline:hover { color: var(--text); }
+.add-form { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px; display: flex; flex-direction: column; gap: 12px; animation: swapIn .28s ease both; }
+.add-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+.add-at { display: flex; align-items: center; gap: 8px; }
+
+/* dashboard: peek at what's next on the schedule */
+.nextup { appearance: none; cursor: pointer; width: 100%; text-align: left; background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 11px 14px; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; transition: border-color .15s; }
+.nextup:hover { border-color: var(--text-faint); }
+.nextup-k { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+.nextup-v { font-size: 14px; font-weight: 600; color: var(--text); }
+.nextup-go { margin-left: auto; color: var(--text-faint); }
+
 /* ---------- Empty / centered states ---------- */
 .center-state {
   min-height: 62vh; display: flex; flex-direction: column;

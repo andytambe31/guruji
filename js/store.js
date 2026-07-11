@@ -1,6 +1,7 @@
 // Higher-level data operations over the IndexedDB layer.
-import { STORES, getAll, get, put, del, replaceStores, clearStore } from './db.js';
-import { uid } from './util.js';
+import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
+import { uid, todayISO, nowMinutes } from './util.js';
+import { planDay, reflow, clampDur } from './schedule.js';
 
 // ---------- Plan meta ----------
 export async function getMeta() {
@@ -140,6 +141,122 @@ export async function saveScheduleRows(rows) {
 }
 export async function clearSchedule() {
   return clearStore(STORES.schedule);
+}
+
+// ---------- Day blocks (adaptive schedule) ----------
+// Blocks live in the `schedule` store, tagged kind:'block'. Each block reserves
+// time for a study item on a given date; `pinned` means the user placed/moved
+// it and auto-reflow won't slide it.
+export async function getBlocks() {
+  const rows = await getAll(STORES.schedule);
+  return rows
+    .filter((r) => r && r.kind === 'block')
+    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.start - b.start));
+}
+export async function getBlocksForDate(date) {
+  return (await getBlocks()).filter((b) => b.date === date);
+}
+export async function deleteBlock(id) {
+  return del(STORES.schedule, id);
+}
+export async function setBlockStatus(id, status) {
+  const b = await get(STORES.schedule, id);
+  if (!b) return null;
+  b.status = status;
+  if (status === 'done') b.pinned = true; // it happened — freeze it in place
+  await put(STORES.schedule, b);
+  return b;
+}
+
+// Re-pack a day so nothing overlaps: pinned/done keep their time, the rest flow.
+export async function reflowDate(date) {
+  const blocks = await getBlocksForDate(date);
+  if (!blocks.length) return [];
+  const packed = reflow(blocks);
+  await bulkPut(STORES.schedule, packed.map((b) => ({ ...b, kind: 'block' })));
+  return packed;
+}
+
+// Auto-plan a date from the next surfaceable item in each area. Keeps any
+// pinned/done blocks already on that day and replaces the auto ones.
+export async function autoPlanDay(date, { now = new Date() } = {}) {
+  const items = await getItems();
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+
+  const perArea = [];
+  const seenArea = new Set();
+  for (const it of items) {
+    if (it.status !== 'todo') continue;
+    if (!(it.dependsOn || []).every((d) => statusById.get(d) === 'done')) continue;
+    const a = it.area || 'Study';
+    if (seenArea.has(a)) continue;
+    seenArea.add(a);
+    perArea.push(it);
+  }
+
+  const existing = await getBlocksForDate(date);
+  const keep = existing.filter((b) => b.pinned || b.status === 'done');
+  for (const b of existing) {
+    if (!(b.pinned || b.status === 'done')) await del(STORES.schedule, b.id);
+  }
+
+  const taken = new Set(keep.map((b) => b.itemId));
+  const cands = perArea.filter((it) => !taken.has(it.id));
+  const startMin = date === todayISO(now) ? Math.ceil((nowMinutes(now) + 5) / 15) * 15 : undefined;
+  // If it's too late for anything to fit today, still propose a layout (from the
+  // day's start) so the user has something to bump to tomorrow or retime.
+  let fresh = planDay(date, cands, { startMin });
+  if (!fresh.length && cands.length) fresh = planDay(date, cands, {});
+  const rows = fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }));
+  await bulkPut(STORES.schedule, rows);
+  await reflowDate(date);
+  return getBlocksForDate(date);
+}
+
+// Manually reserve a specific item at a specific time (pinned by intent).
+export async function blockItem(itemId, date, startMin) {
+  const it = await get(STORES.items, itemId);
+  if (!it) return null;
+  const rec = {
+    kind: 'block',
+    id: uid('blk'),
+    itemId,
+    area: it.area || 'Study',
+    title: it.title || '',
+    mode: it.mode,
+    date,
+    start: startMin,
+    minutes: clampDur(it.estMinutes),
+    status: 'planned',
+    pinned: true,
+  };
+  await put(STORES.schedule, rec);
+  await reflowDate(date);
+  return rec;
+}
+
+// Set a block to an exact start time (user chose it) — pins and re-packs.
+export async function retimeBlock(id, startMin) {
+  const b = await get(STORES.schedule, id);
+  if (!b) return null;
+  b.start = Math.max(0, Math.min(23 * 60 + 59, startMin));
+  b.pinned = true;
+  await put(STORES.schedule, b);
+  await reflowDate(b.date);
+  return b;
+}
+
+// Move a block to another date; it flows into that day (source day re-packs).
+export async function moveBlockToDate(id, date) {
+  const b = await get(STORES.schedule, id);
+  if (!b) return null;
+  const from = b.date;
+  b.date = date;
+  b.pinned = false; // let the coach slot it into the new day
+  await put(STORES.schedule, b);
+  if (from !== date) await reflowDate(from);
+  await reflowDate(date);
+  return b;
 }
 
 // ---------- Log ----------

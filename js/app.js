@@ -4,6 +4,7 @@ import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
 import { renderPlan } from './views/plan.js';
+import { renderDay } from './views/day.js';
 import { renderData } from './views/data.js';
 
 const viewEl = () => document.getElementById('view');
@@ -14,6 +15,7 @@ const ROUTES = {
   now: renderNow,
   prep: renderPrep,
   plan: renderPlan,
+  day: renderDay,
   data: renderData,
   focus: renderFocus,
 };
