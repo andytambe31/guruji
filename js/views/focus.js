@@ -5,14 +5,63 @@ import { el, clear, fmtClock, toast } from '../util.js';
 import { getItem, setItemStatus, addLogEntry } from '../store.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
-// | 'calm' (warm, minimal).
+// | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
+// rotate during the session — the room coaching the mindset, not the content.
 const THEMES = {
-  'DSA':           { cls: 'env-dsa',  label: 'Deep work',      ritual: 'Head down. Attack the problem.',        nudge: 'Depth, not speed.',           viz: 'bar' },
-  'System Design': { cls: 'env-sys',  label: 'Design session', ritual: 'Think out loud. Sketch the tradeoffs.', nudge: 'Zoom out. What breaks first?', viz: 'ring' },
-  'Reading':       { cls: 'env-read', label: 'Reading',        ritual: 'Just you and the page.',                nudge: 'No rush. Let it land.',        viz: 'calm' },
-  'Behavioral':    { cls: 'env-beh',  label: 'Behavioral',     ritual: 'Tell it like it happened.',             nudge: 'Situation, action, result.',   viz: 'bar' },
-  'Applications':  { cls: 'env-app',  label: 'Applications',   ritual: 'One small step forward.',               nudge: 'Send it. Momentum.',           viz: 'bar' },
-  'default':       { cls: 'env-default', label: 'Focus',       ritual: 'Stay with it. One thing.',              nudge: 'You only owe it this block.',  viz: 'bar' },
+  'DSA': {
+    cls: 'env-dsa', label: 'Deep work', viz: 'bar', rotate: 11,
+    mantras: [
+      'Read the prompt twice. Restate it in your own words.',
+      'Pin down constraints and edge cases before you type.',
+      'Say the approach out loud, then write it.',
+      'Brute force first — then optimize.',
+      'Name the pattern before the solution.',
+      'Test the ugly cases: empty, one item, duplicates, overflow.',
+      'Stuck? Shrink the problem or draw a concrete example.',
+    ],
+  },
+  'System Design': {
+    cls: 'env-sys', label: 'Design session', viz: 'ring', rotate: 13,
+    mantras: [
+      'Start with requirements and scale — who, how many, how fast.',
+      'Do the napkin math: QPS, storage, bandwidth.',
+      'Draw the boxes before the details.',
+      'Every choice is a tradeoff — say the other side.',
+      'Find the bottleneck, then remove it.',
+      'Ask how it fails before how it scales.',
+    ],
+  },
+  'Reading': {
+    cls: 'env-read', label: 'Reading', viz: 'calm', rotate: 20,
+    mantras: [
+      'Just you and the page.',
+      'No rush. Let the words land.',
+      'Notice one line worth keeping.',
+      'Follow the thread, not the clock.',
+    ],
+  },
+  'Behavioral': {
+    cls: 'env-beh', label: 'Behavioral', viz: 'bar', rotate: 13,
+    mantras: [
+      'Situation, Task, Action, Result — in order.',
+      'Lead with your decision, not the backstory.',
+      'Numbers make the impact real.',
+      'One story, told well, beats three rushed.',
+    ],
+  },
+  'Applications': {
+    cls: 'env-app', label: 'Applications', viz: 'bar', rotate: 13,
+    mantras: [
+      'One real outreach beats ten open tabs.',
+      'Referrals first — ask directly.',
+      'Tailor the first line, not the whole thing.',
+      'Momentum compounds. Send it.',
+    ],
+  },
+  'default': {
+    cls: 'env-default', label: 'Focus', viz: 'bar', rotate: 12,
+    mantras: ['Stay with it. One thing.', 'You only owe it this block.', 'Depth, not speed.'],
+  },
 };
 
 export async function renderFocus(mount, { arg, navigate }) {
@@ -36,13 +85,16 @@ export async function renderFocus(mount, { arg, navigate }) {
   let remaining = total;
   let paused = false;
   let finished = false;
+  let destroyed = false;
   let ticker = null;
+  let rotator = null;
+  let mIdx = 0;
   let wakeLock = null;
 
   const phaseLabel = el('div', { class: 'phase-label', text: theme.label });
   const title = el('div', { class: 'focus-title', text: item.title });
   const clock = el('div', { class: 'clock', text: fmtClock(remaining) });
-  const ritual = el('div', { class: 'ritual', text: theme.ritual });
+  const ritual = el('div', { class: 'ritual', text: theme.mantras[0] });
   const pauseBtn = el('button', { class: 'btn btn-ghost btn-lg', text: 'Pause', onclick: togglePause });
   const endBtn = el('button', { class: 'btn btn-primary btn-lg', text: 'End', onclick: () => showResolve(false) });
   const controls = el('div', { class: 'focus-controls' }, [pauseBtn, endBtn]);
@@ -65,9 +117,23 @@ export async function renderFocus(mount, { arg, navigate }) {
   requestWakeLock();
   paintProgress();
   start();
+  startRotator();
 
   function start() { stopTicker(); ticker = setInterval(tick, 1000); }
   function stopTicker() { if (ticker) { clearInterval(ticker); ticker = null; } }
+
+  // Slowly rotate the mantra slideshow — the room coaching the mindset.
+  function startRotator() {
+    const list = theme.mantras;
+    if (!list || list.length < 2) return;
+    rotator = setInterval(() => {
+      if (paused || finished || destroyed) return;
+      mIdx = (mIdx + 1) % list.length;
+      ritual.style.opacity = '0';
+      setTimeout(() => { if (!destroyed) { ritual.textContent = list[mIdx]; ritual.style.opacity = '1'; } }, 350);
+    }, (theme.rotate || 12) * 1000);
+  }
+  function stopRotator() { if (rotator) { clearInterval(rotator); rotator = null; } }
 
   function paintProgress() {
     if (barFill) barFill.style.width = `${(remaining / total) * 100}%`;
@@ -85,12 +151,12 @@ export async function renderFocus(mount, { arg, navigate }) {
     }
     clock.textContent = fmtClock(remaining);
     paintProgress();
-    if (remaining === Math.floor(total / 2)) ritual.textContent = theme.nudge;
   }
 
   function timeUp() {
     finished = true;
     stopTicker();
+    stopRotator();
     buzz();
     clock.classList.add('done');
     phaseLabel.textContent = "Time's up";
@@ -109,6 +175,7 @@ export async function renderFocus(mount, { arg, navigate }) {
 
   function showResolve(timedOut) {
     stopTicker();
+    stopRotator();
     const summary = timedOut ? `${minutes} min complete` : `${elapsedMin()} of ${minutes} min`;
     const box = el('div', { class: `focus ${theme.cls}` }, [
       el('div', { class: 'phase-label', text: timedOut ? "Time's up" : 'Session ended' }),
@@ -156,7 +223,9 @@ export async function renderFocus(mount, { arg, navigate }) {
   document.addEventListener('visibilitychange', onVis);
 
   return function cleanup() {
+    destroyed = true;
     stopTicker();
+    stopRotator();
     releaseWakeLock();
     document.removeEventListener('visibilitychange', onVis);
   };
