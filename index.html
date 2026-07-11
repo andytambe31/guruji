@@ -18,6 +18,13 @@
   <link rel="stylesheet" href="./css/styles.css" />
 </head>
 <body>
+  <!-- Boot splash — shown instantly (before the modules run), faded out once
+       the first view is ready so the app never opens on a blank frame. -->
+  <div id="splash" class="splash" role="status" aria-label="Loading Guruji">
+    <div class="splash-mark">Guruji</div>
+    <div class="splash-bar"><span></span></div>
+  </div>
+
   <div id="app" class="app">
     <header id="topbar" class="topbar">
       <a href="#/now" class="brand">Guruji</a>

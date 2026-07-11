@@ -39,6 +39,30 @@ body { overscroll-behavior-y: none; }
 
 .app { display: flex; flex-direction: column; min-height: 100%; }
 
+/* Boot splash — a calm branded loading state while the app initialises. */
+.splash {
+  position: fixed; inset: 0; z-index: 200;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
+  background: var(--bg);
+  transition: opacity .45s ease;
+  pointer-events: none; /* purely decorative — never intercept taps */
+}
+.splash.hide { opacity: 0; }
+.splash-mark {
+  font-size: 27px; font-weight: 700; letter-spacing: -.01em; color: var(--text);
+  animation: splashBreath 1.5s ease-in-out infinite;
+}
+.splash-bar { width: 128px; height: 3px; border-radius: 3px; background: var(--bg-soft); overflow: hidden; }
+.splash-bar span {
+  display: block; height: 100%; width: 42%; border-radius: 3px; background: var(--accent);
+  animation: splashSlide 1.15s cubic-bezier(.65,0,.35,1) infinite;
+}
+@keyframes splashBreath { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
+@keyframes splashSlide { 0% { transform: translateX(-115%); } 100% { transform: translateX(320%); } }
+@media (prefers-reduced-motion: reduce) {
+  .splash-mark, .splash-bar span { animation: none; }
+}
+
 /* ---------- Top bar (brand + quiet Data action) ---------- */
 .topbar {
   display: flex; align-items: center; justify-content: space-between;

@@ -78,7 +78,22 @@ export function navigate(path) {
   else location.hash = path;
 }
 
+// Fade out the boot splash once the first view is painted, keeping it up for a
+// brief minimum so it reads as intentional rather than a flash.
+function hideSplash(startedAt) {
+  const splash = document.getElementById('splash');
+  if (!splash) return;
+  const wait = Math.max(0, 360 - (Date.now() - startedAt));
+  setTimeout(() => {
+    splash.classList.add('hide');
+    setTimeout(() => splash.remove(), 500);
+  }, wait);
+}
+
 async function boot() {
+  const bootStart = Date.now();
+  // Failsafe: never leave the splash stuck if boot stalls for any reason.
+  const splashFailsafe = setTimeout(() => hideSplash(bootStart), 6000);
   // Ask the browser to keep our IndexedDB data durable (iOS/Safari may evict
   // "best-effort" storage for home-screen PWAs). Non-blocking, best effort.
   if (navigator.storage && navigator.storage.persist) {
@@ -87,6 +102,8 @@ async function boot() {
 
   window.addEventListener('hashchange', router);
   await router();
+  clearTimeout(splashFailsafe);
+  hideSplash(bootStart);
 
   // Register the service worker (offline shell). Non-fatal if it fails.
   // Register directly — this module is deferred, so the window 'load' event may
