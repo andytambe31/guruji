@@ -1,7 +1,7 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { el, clear, fill, habitStats, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, fmtDur, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings, getReading } from '../store.js';
 
 const AREA_LINE = {
@@ -48,6 +48,22 @@ export async function renderNow(mount, { navigate }) {
   const toBed = bedMin != null ? bedMin - nowMinutes() : Infinity;
   const daysToGoal = settings.goalDate ? daysBetween(today, settings.goalDate) : null;
   const habitDoneToday = (area) => log.some((e) => e.area === area && e.result === 'done' && e.date === today);
+
+  // A quiet effort line — the feedback loop at a glance, tappable for the full
+  // Progress view. Computed from the session log's real focus minutes.
+  const minByDate = new Map();
+  for (const e of log) minByDate.set(e.date, (minByDate.get(e.date) || 0) + Math.max(0, Math.round(e.focusMinutes || 0)));
+  let weekMin = 0;
+  for (let k = 0; k < 7; k++) weekMin += (minByDate.get(addDaysISO(today, -k)) || 0);
+  let studyStreak = 0;
+  let sc = (minByDate.get(today) || 0) > 0 ? today : addDaysISO(today, -1);
+  while ((minByDate.get(sc) || 0) > 0) { studyStreak += 1; sc = addDaysISO(sc, -1); }
+  const effortEl = log.length ? el('button', { class: 'effort-strip', onclick: () => navigate('/progress') }, [
+    el('span', { class: 'effort-b', text: fmtDur(weekMin) }), el('span', { class: 'effort-t', text: ' this week' }),
+    el('span', { class: 'effort-sep', text: '·' }),
+    el('span', { class: 'effort-b', text: String(studyStreak) }), el('span', { class: 'effort-t', text: ' day streak' }),
+    el('span', { class: 'effort-arrow', text: '›' }),
+  ]) : null;
 
   const reading = await getReading();
   const bookTitle = reading.current ? reading.current.title : null;
@@ -142,6 +158,8 @@ export async function renderNow(mount, { navigate }) {
       toggle,
       el('span', { class: 'now-sep', text: '·' }),
       el('button', { class: 'secondary-link', text: 'Schedule', onclick: () => navigate('/day') }),
+      el('span', { class: 'now-sep', text: '·' }),
+      el('button', { class: 'secondary-link', text: 'Progress', onclick: () => navigate('/progress') }),
     ]);
 
     // Cognitive load: a compact gauge. The life-context picker collapses to a
@@ -208,7 +226,7 @@ export async function renderNow(mount, { navigate }) {
     }
 
     fill(clear(wrap), [
-      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog, sleepEl,
+      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog, effortEl, sleepEl,
     ]);
 
     applyArea();

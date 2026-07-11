@@ -85,6 +85,15 @@ export function todayCode(date = new Date()) {
   return DAYS[date.getDay()];
 }
 
+// A compact duration: 0m · 45m · 1h · 5h 40m
+export function fmtDur(minutes) {
+  const m = Math.max(0, Math.round(minutes || 0));
+  const h = Math.floor(m / 60);
+  const r = m % 60;
+  if (!h) return `${r}m`;
+  return r ? `${h}h ${r}m` : `${h}h`;
+}
+
 // ---- date helpers for habit streaks (work on "YYYY-MM-DD" strings) ----
 export function todayISO(date = new Date()) {
   return date.toISOString().slice(0, 10);

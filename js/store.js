@@ -1,6 +1,6 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
-import { uid, todayISO, nowMinutes, toMinutes } from './util.js';
+import { uid, todayISO, addDaysISO, nowMinutes, toMinutes } from './util.js';
 import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
@@ -615,6 +615,58 @@ export async function addLogEntry(entry) {
   const rec = { id: uid('log'), ...entry };
   await put(STORES.log, rec);
   return rec;
+}
+
+// ---------- Effort metrics (the feedback loop) ----------
+// Derived entirely from what the app already records: the session log (actual
+// focus time), the schedule (what was planned), and item statuses (progress).
+export async function computeStats(now = new Date()) {
+  const [log, sched, items] = await Promise.all([getLog(), getAll(STORES.schedule), getItems()]);
+  const today = todayISO(now);
+  const blocks = sched.filter((r) => r && r.kind === 'block');
+
+  const byDate = new Map();   // date -> minutes actually studied
+  const byArea = new Map();   // area -> minutes
+  let totalMinutes = 0;
+  let sessions = 0;
+  for (const e of log) {
+    const m = Math.max(0, Math.round(e.focusMinutes || 0));
+    totalMinutes += m; sessions += 1;
+    byDate.set(e.date, (byDate.get(e.date) || 0) + m);
+    const a = e.area || 'Study';
+    byArea.set(a, (byArea.get(a) || 0) + m);
+  }
+  const minutesOn = (d) => byDate.get(d) || 0;
+
+  let weekMinutes = 0;
+  for (let k = 0; k < 7; k++) weekMinutes += minutesOn(addDaysISO(today, -k));
+
+  // Current streak: consecutive days with study, ending today (or yesterday if
+  // you haven't studied yet today, so it isn't "broken" mid-day).
+  let streak = 0;
+  let cursor = minutesOn(today) > 0 ? today : addDaysISO(today, -1);
+  while (minutesOn(cursor) > 0) { streak += 1; cursor = addDaysISO(cursor, -1); }
+
+  // Plan adherence: of past days that had a study plan, how many you followed
+  // through on (logged at least one real session).
+  const plannedDates = new Set(blocks.filter((b) => b.date <= today).map((b) => b.date));
+  let followed = 0;
+  for (const d of plannedDates) if (minutesOn(d) > 0) followed += 1;
+  const plannedDays = plannedDates.size;
+  const adherencePct = plannedDays ? Math.round((followed / plannedDays) * 100) : null;
+
+  const last14 = [];
+  for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); last14.push({ date: d, minutes: minutesOn(d) }); }
+
+  return {
+    totalMinutes, weekMinutes, todayMinutes: minutesOn(today), sessions,
+    streak, studyDays: byDate.size,
+    plannedDays, followedThrough: followed, adherencePct,
+    last14,
+    byArea: [...byArea.entries()].map(([area, minutes]) => ({ area, minutes })).sort((a, b) => b.minutes - a.minutes),
+    topicsDone: items.filter((i) => i.status === 'done').length,
+    topicsTotal: items.length,
+  };
 }
 
 // ---------- Plan ingest (import) ----------

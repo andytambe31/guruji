@@ -9,6 +9,7 @@ import { renderPlan } from './views/plan.js';
 import { renderDay } from './views/day.js';
 import { renderReading } from './views/reading.js';
 import { renderData } from './views/data.js';
+import { renderProgress } from './views/progress.js';
 
 const viewEl = () => document.getElementById('view');
 const navEl = () => document.getElementById('nav');
@@ -22,6 +23,7 @@ const ROUTES = {
   reading: renderReading,
   data: renderData,
   focus: renderFocus,
+  progress: renderProgress,
 };
 
 // Full-screen, distraction-free views hide the app chrome (nav + top bar).

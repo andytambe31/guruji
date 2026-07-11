@@ -779,3 +779,38 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
   .study-content th { background: var(--bg-soft); color: var(--text); font-weight: 650; }
   .study-content td { color: var(--text-dim); }
 }
+
+/* ---------- Effort feedback loop ---------- */
+/* quiet dashboard strip */
+.effort-strip { appearance: none; background: none; border: none; cursor: pointer; font: inherit; color: var(--text-faint); font-size: 13px; display: inline-flex; align-items: center; gap: 5px; margin-top: 18px; padding: 4px 0; align-self: flex-start; }
+.effort-strip .effort-b { color: var(--text-dim); font-weight: 650; }
+.effort-strip .effort-sep { margin: 0 3px; }
+.effort-strip .effort-arrow { margin-left: 5px; }
+.effort-strip:hover { color: var(--text-dim); }
+
+/* Progress view */
+.progress-wrap { padding-top: 6px; animation: viewIn .3s ease both; }
+.prog-top { margin-bottom: 22px; }
+.prog-total { display: flex; align-items: baseline; gap: 10px; }
+.prog-total-num { font-size: 40px; font-weight: 700; letter-spacing: -.03em; color: var(--text); }
+.prog-total-lbl { font-size: 14px; color: var(--text-faint); }
+.stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 30px; }
+.stat-tile { background: var(--bg-soft); border-radius: 14px; padding: 14px 10px; text-align: center; }
+.stat-num { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.stat-lbl { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
+.prog-section { margin-bottom: 30px; }
+.prog-h { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
+.prog-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
+.bar { width: 100%; max-width: 20px; border-radius: 4px 4px 2px 2px; background: var(--accent); }
+.bar.empty { background: var(--line); }
+.bar-lbl { font-size: 9px; color: var(--text-faint); }
+.adhere-track { height: 9px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; margin-bottom: 9px; }
+.adhere-fill { height: 100%; background: var(--ok); border-radius: 999px; }
+.adhere-txt { font-size: 13px; color: var(--text-dim); }
+.area-bars { display: flex; flex-direction: column; gap: 13px; }
+.area-bar-top { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px; }
+.area-name { color: var(--text-dim); font-weight: 550; }
+.area-min { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.area-track { height: 7px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.area-fill { height: 100%; background: var(--text-dim); border-radius: 999px; }
