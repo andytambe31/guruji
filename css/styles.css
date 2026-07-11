@@ -265,6 +265,32 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .sleep-nudge { text-align: center; font-size: 12px; color: var(--text-faint); margin-top: 18px; letter-spacing: .02em; }
 .sleep-nudge.soon { color: var(--wind); }
 
+/* ---------- Reading practice ---------- */
+.reading-wrap { display: flex; flex-direction: column; }
+.r-title { font-size: 25px; font-weight: 660; letter-spacing: -.025em; margin: 0 0 2px; }
+.r-author { color: var(--text-faint); font-size: 14px; margin: 0 0 20px; }
+.r-form { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+.r-input, .r-area { font: inherit; font-size: 15px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--text); width: 100%; }
+.r-area { line-height: 1.5; resize: vertical; }
+.r-input:focus, .r-area:focus { outline: none; border-color: var(--text-faint); }
+.r-block { border-left: 2px solid var(--line); padding: 2px 0 2px 14px; margin: 18px 0 22px; }
+.r-block-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
+.r-intent { font-size: 16px; line-height: 1.5; color: var(--text); margin: 0; }
+.r-edit { display: inline; width: auto; padding: 6px 0 0; text-decoration: none; color: var(--text-faint); font-size: 13px; }
+.r-edit:hover { color: var(--text-dim); }
+
+.r-refs-head { display: flex; align-items: baseline; justify-content: space-between; margin: 30px 0 12px; }
+.r-refs-head h2 { margin: 0; }
+.r-empty { line-height: 1.55; margin: 12px 0; }
+.ref-form { margin-bottom: 8px; }
+.ref-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 14px; margin-top: 10px; animation: swapIn .28s ease both; }
+.ref-quote { font-size: 15px; font-style: italic; color: var(--text); line-height: 1.5; margin: 0 0 8px; }
+.ref-thought-text { font-size: 15px; color: var(--text-dim); line-height: 1.55; margin: 0 0 8px; }
+.ref-meta { display: flex; align-items: center; justify-content: space-between; }
+.ref-meta .muted { font-size: 12px; }
+.r-finish { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--text-faint); font: inherit; font-size: 13px; padding: 22px 0 4px; cursor: pointer; }
+.r-finish:hover { color: var(--text-dim); }
+
 /* prep: when it's bedtime, we don't offer a session */
 .bedtime-block { margin-top: 6px; }
 .bedtime-note { font-size: 15px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }

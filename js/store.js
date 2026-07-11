@@ -17,6 +17,58 @@ export async function setSettings(patch) {
   return next;
 }
 
+// ---------- Reading practice (current book, intent, reflections) ----------
+// Reading isn't a streak to protect — it's a practice: read with intent, keep
+// the lines that land, and say the thought in your own words so it stays.
+const DEFAULT_READING = { current: null, shelf: [], reflections: [] };
+export async function getReading() {
+  const rec = await get(STORES.kv, 'reading');
+  return { ...DEFAULT_READING, ...(rec ? rec.v : {}) };
+}
+export async function setReading(v) {
+  await put(STORES.kv, { k: 'reading', v });
+  return v;
+}
+export async function setCurrentBook({ title, author, intent, totalPages } = {}) {
+  const r = await getReading();
+  r.current = {
+    title: title || '', author: author || '', intent: intent || '',
+    page: 0, totalPages: totalPages || null, startedAt: new Date().toISOString(),
+  };
+  r.reflections = [];
+  return setReading(r);
+}
+export async function updateCurrentBook(patch) {
+  const r = await getReading();
+  if (!r.current) return r;
+  r.current = { ...r.current, ...(patch || {}) };
+  return setReading(r);
+}
+export async function addReflection({ line, thought } = {}) {
+  const r = await getReading();
+  r.reflections = r.reflections || [];
+  r.reflections.push({ id: uid('ref'), date: todayISO(), line: line || '', thought: thought || '' });
+  return setReading(r);
+}
+export async function deleteReflection(id) {
+  const r = await getReading();
+  r.reflections = (r.reflections || []).filter((x) => x.id !== id);
+  return setReading(r);
+}
+export async function finishCurrentBook({ verdict, recommend, rating } = {}) {
+  const r = await getReading();
+  if (!r.current) return r;
+  r.shelf = r.shelf || [];
+  r.shelf.unshift({
+    ...r.current, reflections: r.reflections || [],
+    verdict: verdict || '', recommend: recommend || '', rating: rating || null,
+    finishedAt: new Date().toISOString(),
+  });
+  r.current = null;
+  r.reflections = [];
+  return setReading(r);
+}
+
 // ---------- Plan meta ----------
 export async function getMeta() {
   const rec = await get(STORES.kv, 'meta');
@@ -377,6 +429,15 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   if (Object.keys(metaSettings).length) await setSettings(metaSettings);
   if (plan.settings) await setSettings(plan.settings);
 
+  // Reading practice: a full backup restores it; a fresh plan may seed the
+  // current book from meta.reading (only if you don't already have one).
+  if (plan.reading) {
+    await setReading(plan.reading);
+  } else if (meta.reading && meta.reading.title) {
+    const r = await getReading();
+    if (!r.current) await setCurrentBook(meta.reading);
+  }
+
   // Import may restore a full backup that carries the log, schedule + context.
   if (Array.isArray(plan.log)) {
     await replaceStores({ [STORES.log]: plan.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
@@ -410,8 +471,8 @@ export async function markPatchApplied(id) {
 // ---------- Full backup export ----------
 // Reconstruct a plan.json-shaped object plus schedule + log for round-tripping.
 export async function buildExport() {
-  const [meta, plans, phases, items, log, blocks, context, settings] = await Promise.all([
-    getMeta(), getPlans(), getPhases(), getItems(), getLog(), getBlocks(), getContext(), getSettings(),
+  const [meta, plans, phases, items, log, blocks, context, settings, reading] = await Promise.all([
+    getMeta(), getPlans(), getPhases(), getItems(), getLog(), getBlocks(), getContext(), getSettings(), getReading(),
   ]);
   const allSchedule = await getAll(STORES.schedule);
   const busy = allSchedule.filter((r) => r && r.kind === 'busy')
@@ -467,6 +528,7 @@ export async function buildExport() {
     busy,
     context: context || null,
     settings,
+    reading,
     log,
     exportedAt: new Date().toISOString(),
     app: 'guruji',

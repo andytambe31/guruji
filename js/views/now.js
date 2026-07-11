@@ -2,7 +2,7 @@
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
 import { el, clear, fill, habitStats, todayISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
-import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings } from '../store.js';
+import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings, getReading } from '../store.js';
 
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
@@ -48,6 +48,9 @@ export async function renderNow(mount, { navigate }) {
   const daysToGoal = settings.goalDate ? daysBetween(today, settings.goalDate) : null;
   const habitDoneToday = (area) => log.some((e) => e.area === area && e.result === 'done' && e.date === today);
 
+  const reading = await getReading();
+  const bookTitle = reading.current ? reading.current.title : null;
+
   // The coach's call: one area, with the reasoning behind it. It weighs what's
   // surfaceable, your recent history, your reading streak, and — crucially —
   // your cognitive load, so it steers you off deep work when you're loaded.
@@ -62,7 +65,7 @@ export async function renderNow(mount, { navigate }) {
   function modeWord(mode) { return mode === 'DESK' ? 'deep work' : mode === 'TRANSIT' ? 'concept work' : 'this'; }
 
   function coachFor(area) {
-    if (isHabit(area)) return habitLine(area, log);
+    if (isHabit(area)) return habitLine(area, log, bookTitle);
     const item = nextForArea(area);
     if (!item) {
       const hasTodo = items.some((i) => (i.area || 'Study') === area && i.status === 'todo');
@@ -104,7 +107,7 @@ export async function renderNow(mount, { navigate }) {
     let streak = 0;
     for (const a of recent) { if (a === streakArea) streak++; else break; }
 
-    if (isHabit(area)) return { area, headline: `Read tonight — ${area}.`, reason: habitLine(area, log) };
+    if (isHabit(area)) return { area, headline: `Read tonight — ${area}.`, reason: habitLine(area, log, bookTitle) };
     if (streakArea && streak >= 2 && streakArea !== area) {
       return { area, headline: `Switch to ${area}.`, reason: `${streak} days straight on ${streakArea}. Stretch a different muscle today.` };
     }
@@ -206,7 +209,7 @@ export async function renderNow(mount, { navigate }) {
     function applyArea(animate) {
       const item = nextForArea(selectedArea);
       const isRec = selectedArea === rec.area;
-      const reading = isHabit(selectedArea);
+      const isReadingHabit = isHabit(selectedArea);
 
       const wk = item && item.week != null && item.week > 0 ? `Week ${item.week}` : '';
       eyebrowEl.textContent = wk;
@@ -227,7 +230,10 @@ export async function renderNow(mount, { navigate }) {
       if (!item) {
         children = [el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') })];
       } else if (withinCapacity(item.mode, load)) {
-        children = [el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })];
+        children = [
+          el('button', { class: 'btn btn-primary btn-lg btn-block', text: isReadingHabit ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) }),
+          isReadingHabit ? el('button', { class: 'btn-link', text: 'Your reading & reflections →', onclick: () => navigate('/reading') }) : null,
+        ];
       } else {
         children = [
           el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),
@@ -244,13 +250,15 @@ export async function renderNow(mount, { navigate }) {
 }
 
 // ----- reading / habit coaching line from the log -----
-function habitLine(area, log) {
+// Leans on retention: it's not "keep the streak", it's "come away with a line".
+function habitLine(area, log, book) {
+  const b = book ? `“${book}”` : 'your book';
   const dates = log.filter((e) => e.area === area && e.result === 'done').map((e) => e.date);
   const s = habitStats(dates, todayISO());
-  if (!s.ever) return 'New reading habit — even 10 minutes tonight counts.';
-  if (s.daysSince === 0) return `Read today · ${s.streak}-day streak. Keep it alive.`;
-  if (s.daysSince === 1) return `${s.streak}-day reading streak — read tonight to keep it.`;
-  return `You haven’t read in ${s.daysSince} days. Pick the book back up.`;
+  if (!s.ever) return `Start ${b} — even ten minutes, and come away with one line.`;
+  if (s.daysSince === 0) return `Read today · ${s.streak}-day streak. Hold onto a line from ${b}.`;
+  if (s.daysSince === 1) return `${s.streak}-day streak — pick ${b} back up tonight.`;
+  return `You haven’t read in ${s.daysSince} days. Back to ${b}.`;
 }
 
 // ----- area suggestion from recent history -----

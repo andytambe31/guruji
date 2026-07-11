@@ -32,12 +32,14 @@ const THEMES = {
     ],
   },
   'Reading': {
-    cls: 'env-read', label: 'Reading', viz: 'calm', rotate: 20,
+    cls: 'env-read', label: 'Reading', viz: 'calm', rotate: 18,
     mantras: [
-      'Just you and the page.',
-      'No rush. Let the words land.',
-      'Notice one line worth keeping.',
-      'Follow the thread, not the clock.',
+      'Mark the line that stops you — you’ll want it after.',
+      'Ask: why did the author make this choice?',
+      'Say the thought in your own words. That’s what stays.',
+      'What would you tell a friend about this page?',
+      'Read for what you carry out, not the pages behind you.',
+      'A book you can’t discuss, you haven’t really finished.',
     ],
   },
   'Behavioral': {
@@ -210,7 +212,10 @@ export async function renderFocus(mount, { arg, navigate }) {
     });
     releaseWakeLock();
     toast(result === 'done' ? 'Done — logged.' : result === 'skipped' ? 'Skipped — logged.' : 'Session logged.');
-    navigate('/now');
+    // After actually reading, go straight to keeping a line & a thought — the
+    // retention step is the point of the practice, not an afterthought.
+    if (item.area === 'Reading' && result !== 'skipped') navigate('/reading/reflect');
+    else navigate('/now');
   }
 
   async function requestWakeLock() {

@@ -2,7 +2,7 @@
 // is finally revealed, along with a short ritual and how to approach it. Then
 // you pick a length and begin the timer.
 import { el, clear, fill, toMinutes, nowMinutes } from '../util.js';
-import { getItem, getPhases, getSettings } from '../store.js';
+import { getItem, getPhases, getSettings, getReading } from '../store.js';
 
 const DURATIONS = [25, 50, 90];
 
@@ -40,6 +40,10 @@ export async function renderPrep(mount, { arg, navigate }) {
 
   const phases = await getPhases();
   const phaseName = (phases.find((p) => p.id === item.phase) || {}).name || '';
+
+  // Reading reveals the actual book + your intent, not the generic habit title.
+  const reading = item.area === 'Reading' ? await getReading() : null;
+  const book = reading && reading.current;
 
   const settings = await getSettings();
   const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
@@ -96,11 +100,15 @@ export async function renderPrep(mount, { arg, navigate }) {
       el('button', { class: 'prep-back', text: '← Not now', onclick: () => navigate('/now') }),
 
       ctxBits.length ? el('p', { class: 'eyebrow', text: ctxBits.join(' · ') }) : null,
-      el('p', { class: 'prep-lead', text: 'Focus on this' }),
-      el('h1', { class: 'prep-title', text: item.title }),
+      el('p', { class: 'prep-lead', text: book ? 'Pick it back up' : 'Focus on this' }),
+      el('h1', { class: 'prep-title', text: book ? book.title : item.title }),
+      book && book.author ? el('p', { class: 'prep-how-meta', text: book.author }) : null,
 
-      howBits.length ? el('p', { class: 'prep-how-meta', text: howBits.join('  ·  ') }) : null,
-      item.mode && HOW[item.mode] ? el('p', { class: 'prep-how', text: HOW[item.mode] }) : null,
+      book && book.intent ? el('p', { class: 'prep-how', text: `Why: ${book.intent}` }) : null,
+      book ? el('button', { class: 'btn-link', style: 'text-align:left;width:auto;padding:6px 0', text: 'Your reading & reflections →', onclick: () => navigate('/reading') }) : null,
+
+      !book && howBits.length ? el('p', { class: 'prep-how-meta', text: howBits.join('  ·  ') }) : null,
+      !book && item.mode && HOW[item.mode] ? el('p', { class: 'prep-how', text: HOW[item.mode] }) : null,
 
       el('div', { class: 'prep-ritual' }, [
         el('p', { class: 'prep-ritual-head', text: 'Before you start' }),

@@ -9,7 +9,7 @@
 //    applied on top of your current data instead of regenerating the whole
 //    plan.json. Applied once, tracked by id.
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // Each step upgrades a canonical data object *in place* to `to`.
 const MIGRATIONS = [
@@ -52,6 +52,15 @@ const MIGRATIONS = [
       // Note: `settings` is intentionally left absent if the file has none, so
       // a fresh plan's meta (goalDate/bedtime) can seed it on ingest without a
       // migration-fabricated default clobbering it.
+    },
+  },
+  {
+    to: 5,
+    description: 'reading practice (current book, intent, reflections)',
+    up() {
+      // `reading` is left absent when the file has none, so a fresh plan's
+      // meta.reading can seed the current book on ingest. Additive + absence-
+      // tolerant — nothing to backfill here.
     },
   },
 ];
