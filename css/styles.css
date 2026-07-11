@@ -233,7 +233,8 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .blk-time:disabled { color: var(--text-faint); opacity: 1; }
 .blk-time::-webkit-calendar-picker-indicator { display: none; }
 .blk-time::-webkit-date-and-time-value { text-align: left; margin: 0; padding: 0; }
-.blk-end { font-size: 14px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.blk-time-end { color: var(--text-faint); }
+.blk-dash { font-size: 14px; color: var(--text-faint); }
 .blk-acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 .blk-start { appearance: none; cursor: pointer; background: var(--accent, var(--text)); color: #fff; border: none; font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 17px; border-radius: 999px; margin-right: 6px; transition: filter .15s; }
 .blk-start:hover { filter: brightness(1.07); }
@@ -257,7 +258,11 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .busy-grip { appearance: none; background: none; border: none; cursor: grab; color: var(--text-faint); opacity: .45; font-size: 13px; line-height: 1; padding: 2px; touch-action: none; user-select: none; transition: opacity .15s; }
 .busy-grip:hover { opacity: .9; }
 .busy-grip:active { cursor: grabbing; }
-.busy-time { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.busy-times { display: flex; align-items: center; gap: 4px; }
+.busy-time-in { appearance: none; background: none; border: none; padding: 0; color: var(--text-faint); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; width: auto; }
+.busy-time-in::-webkit-calendar-picker-indicator { display: none; }
+.busy-time-in::-webkit-date-and-time-value { text-align: left; margin: 0; padding: 0; }
+.busy-dash { font-size: 13px; color: var(--text-faint); }
 .busy-label { font-size: 14px; font-weight: 550; color: var(--text-dim); }
 .busy-x { margin-left: auto; }
 

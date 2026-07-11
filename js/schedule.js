@@ -98,7 +98,7 @@ const ITEM_CAP = 2;                  // don't schedule the same topic more than 
 // climbs, breaks between, tapering off when you're too spent to absorb more.
 // `cands` is [{ area, item }] — the next surfaceable item per area.
 export function planDay(date, cands, opts = {}) {
-  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null } = opts;
+  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null, itemCap = ITEM_CAP, areaCapDefault = AREA_CAP_DEFAULT } = opts;
   // Fresh sessions route around both commitments and any already-pinned blocks.
   const windows = freeWindows(startMin, endMin, [...busy, ...pinned]);
   const placed = [];
@@ -108,7 +108,7 @@ export function planDay(date, cands, opts = {}) {
   let sinceLong = 0;
   let lastArea = null;
 
-  const capForArea = (mode) => AREA_CAP[mode] ?? AREA_CAP_DEFAULT;
+  const capForArea = (mode) => AREA_CAP[mode] ?? areaCapDefault;
   const score = (c, load) => modeFit(c.item.mode, load)
     + (c.area !== lastArea ? 0.6 : 0)
     + (focusArea && c.area === focusArea ? 1.3 : 0)
@@ -123,7 +123,7 @@ export function planDay(date, cands, opts = {}) {
 
       // Eligible: under its caps AND its mode is within capacity at this load.
       const eligible = cands.filter((c) =>
-        (itemCount.get(c.item.id) || 0) < ITEM_CAP &&
+        (itemCount.get(c.item.id) || 0) < itemCap &&
         (areaCount.get(c.area) || 0) < capForArea(c.item.mode) &&
         withinCapacity(c.item.mode, load));
       if (!eligible.length) break; // too loaded (or capped) for anything — rest

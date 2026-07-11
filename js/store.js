@@ -308,7 +308,7 @@ export async function reflowDate(date) {
 
 // Auto-plan a date: lay the next surfaceable item per area into the free
 // windows around commitments, load-aware, capped at bedtime. Keeps pinned/done.
-export async function autoPlanDay(date, { now = new Date(), focusArea = null, maxStudyMinutes } = {}) {
+export async function autoPlanDay(date, { now = new Date(), focusArea = null, maxStudyMinutes, weekend = false } = {}) {
   const items = await getItems();
   const statusById = new Map(items.map((i) => [i.id, i.status]));
 
@@ -372,7 +372,13 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     ...commuteWindows.map((b) => ({ start: b.start, minutes: b.minutes, mode: 'TRANSIT' })),
     ...commuteBlocks.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode })),
   ];
-  const planOpts = { startMin, endMin, busy: busy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes };
+  // Weekends are wide open and meant for real progress: let the same topic
+  // recur more and pack more areas in, so DSA / system design get several
+  // solid sessions instead of one.
+  const planOpts = {
+    startMin, endMin, busy: busy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes,
+    ...(weekend ? { itemCap: 3, areaCapDefault: 5 } : {}),
+  };
   // If it's too late for anything to fit today, still propose from the day start.
   let fresh = planDay(date, cands, planOpts);
   if (!fresh.length && cands.length) fresh = planDay(date, cands, { ...planOpts, startMin: undefined });
@@ -488,13 +494,27 @@ export async function resequenceMixed(date, orderedIds) {
 }
 
 // Set a block to an exact start time (user chose it) — pins and re-packs.
-export async function retimeBlock(id, startMin) {
+// Retime a block. Pass `minutes` to also resize it (editing the end time);
+// omit it to just move the start and keep the duration. Either way it pins.
+export async function retimeBlock(id, startMin, minutes) {
   const b = await get(STORES.schedule, id);
   if (!b) return null;
   b.start = Math.max(0, Math.min(23 * 60 + 59, startMin));
+  if (minutes != null) b.minutes = Math.max(10, Math.min(240, Math.round(minutes)));
   b.pinned = true;
   await put(STORES.schedule, b);
   await reflowDate(b.date);
+  return b;
+}
+
+// Retime a commitment directly (drag-free manual edit of its start / end).
+export async function retimeBusy(id, startMin, minutes) {
+  const b = await get(STORES.schedule, id);
+  if (!b) return null;
+  b.start = Math.max(0, Math.min(23 * 60 + 59, startMin));
+  if (minutes != null) b.minutes = Math.max(5, Math.min(720, Math.round(minutes)));
+  await put(STORES.schedule, b);
+  await reflowDate(b.date); // study flows around the new times
   return b;
 }
 

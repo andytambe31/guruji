@@ -6,7 +6,7 @@
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS } from '../util.js';
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
-  retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings,
+  retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, retimeBusy, getSettings, setSettings,
   resequenceBlocks, resequenceMixed, isMovableBusy, clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
@@ -170,10 +170,12 @@ export async function renderDay(mount, { navigate }) {
     // Recurring routine: pre-fill office for your usual office weekdays, with
     // your usual timing. You can still flip it either way in the wizard.
     const dow = new Date(date + 'T00:00:00').getDay();
-    const isOffice = (settings.officeDays || [2, 3, 4]).includes(dow);
+    const weekend = dow === 0 || dow === 6; // no work question on Sat / Sun
+    const isOffice = !weekend && (settings.officeDays || [2, 3, 4]).includes(dow);
     const office = { on: isOffice, leave: settings.officeLeave ?? 510, commute: settings.officeCommute ?? 60, back: settings.officeBack ?? 1080 };
     return {
       step: 0,
+      weekend,
       wake: isOffice ? office.leave - (settings.getReady ?? 30) : (settings.wake ? toMinutes(settings.wake) : null),
       bedtime: settings.bedtime || '23:30',
       getReady: settings.getReady ?? 30,
@@ -280,20 +282,24 @@ export async function renderDay(mount, { navigate }) {
       ]);
     }
 
-    const body = [stepWork, stepRhythm, stepLife, stepFocus][step]();
+    // Weekends have no office/commute, so drop the Work step entirely.
+    const steps = pl.weekend ? STEPS.filter((s) => s.key !== 'work') : STEPS;
+    const builders = { work: stepWork, rhythm: stepRhythm, life: stepLife, focus: stepFocus };
+    const last = steps.length - 1;
+    const body = builders[steps[step].key]();
 
-    const dots = el('div', { class: 'wz-dots' }, STEPS.map((_, i) => el('span', { class: 'wz-dot' + (i === step ? ' on' : i < step ? ' done' : '') })));
+    const dots = el('div', { class: 'wz-dots' }, steps.map((_, i) => el('span', { class: 'wz-dot' + (i === step ? ' on' : i < step ? ' done' : '') })));
     const nav = el('div', { class: 'wz-nav' }, [
       step > 0
         ? el('button', { class: 'q-back', text: '← Back', onclick: async () => { collect(); pl.step -= 1; await paint(); } })
         : el('button', { class: 'q-cancel', text: 'Cancel', onclick: async () => { pl = null; await paint(); } }),
-      el('button', { class: 'btn btn-primary wz-next', text: step === STEPS.length - 1 ? 'Plan my day' : 'Next →', onclick: async () => { collect(); if (step === STEPS.length - 1) await commit(); else { pl.step += 1; await paint(); } } }),
+      el('button', { class: 'btn btn-primary wz-next', text: step === last ? 'Plan my day' : 'Next →', onclick: async () => { collect(); if (step === last) await commit(); else { pl.step += 1; await paint(); } } }),
     ]);
 
     return el('div', { class: 'wizard' }, [
       el('div', { class: 'wz-top' }, [
-        el('div', { class: 'wz-step', text: `Step ${step + 1} of ${STEPS.length}` }),
-        el('h2', { class: 'wz-h', text: STEPS[step].title }),
+        el('div', { class: 'wz-step', text: `Step ${step + 1} of ${steps.length}` }),
+        el('h2', { class: 'wz-h', text: steps[step].title }),
       ]),
       body, dots, nav,
     ]);
@@ -362,14 +368,17 @@ export async function renderDay(mount, { navigate }) {
       if (pl.other.name) await putBusy({ date, start: pl.other.when, minutes: pl.other.dur, label: pl.other.name, drain: pl.other.drain });
       await deconflictBusy(date); // no two commitments at once
       const intensity = INTENSITY.find((i) => i.key === pl.intensity);
-      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: intensity ? intensity.max : undefined });
+      // On a free weekend, aim to get much more study in — a longer total and
+      // several sessions per area.
+      let maxStudy = intensity ? intensity.max : undefined;
+      if (pl.weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
+      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: maxStudy, weekend: pl.weekend });
       pl = null;
       await paint();
     }
   }
 
   function blockCard(b) {
-    const endLabel = fmtTimeOfDay(b.start + b.minutes);
     const done = b.status === 'done';
 
     // The action row swaps to a "push by" preset picker when you tap Delay.
@@ -401,9 +410,15 @@ export async function renderDay(mount, { navigate }) {
         el('div', { class: 'blk-when' }, [
           el('input', {
             type: 'time', class: 'blk-time', value: minutesToHHMM(b.start), disabled: done,
+            title: 'Start time',
             onchange: async (e) => { const v = e.target.value; if (v) { await retimeBlock(b.id, toMinutes(v)); await paint(); } },
           }),
-          el('span', { class: 'blk-end', text: `– ${endLabel}` }),
+          el('span', { class: 'blk-dash', text: '–' }),
+          el('input', {
+            type: 'time', class: 'blk-time blk-time-end', value: minutesToHHMM(b.start + b.minutes), disabled: done,
+            title: 'End time',
+            onchange: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start) { await retimeBlock(b.id, b.start, endM - b.start); await paint(); } },
+          }),
         ]),
         acts,
       ]),
@@ -457,7 +472,17 @@ export async function renderDay(mount, { navigate }) {
     const movable = isMovableBusy(b);
     return el('div', { class: 'busy' + (movable ? ' movable' : ''), dataset: movable ? { id: b.id, drag: '1' } : {} }, [
       movable ? el('button', { class: 'busy-grip', 'aria-label': 'Drag to move', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']) : null,
-      el('span', { class: 'busy-time', text: `${fmtTimeOfDay(b.start)} – ${fmtTimeOfDay(b.start + b.minutes)}` }),
+      el('div', { class: 'busy-times' }, [
+        el('input', {
+          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start), title: 'Start time',
+          onchange: async (e) => { const v = e.target.value; if (v) { await retimeBusy(b.id, toMinutes(v), b.minutes); await paint(); } },
+        }),
+        el('span', { class: 'busy-dash', text: '–' }),
+        el('input', {
+          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start + b.minutes), title: 'End time',
+          onchange: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start) { await retimeBusy(b.id, b.start, endM - b.start); await paint(); } },
+        }),
+      ]),
       el('span', { class: 'busy-label', text: b.label }),
       b.drain && b.drain !== 'none' ? el('span', { class: 'busy-drain', text: 'draining' }) : null,
       el('button', { class: 'blk-act blk-x busy-x', text: 'Remove', onclick: async () => { await deleteBusy(b.id); await paint(); } }),
