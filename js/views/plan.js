@@ -25,6 +25,12 @@ export async function renderPlan(mount, { navigate }) {
   let zoomGroup = null;
   let selected = null;
   let scale = 1;
+  // Which Area→Group sections are expanded. Groups start collapsed so the Plan
+  // reads as a clean map (group headers + progress) instead of one long wall of
+  // topics; opening a group is remembered for the session.
+  const expanded = new Set();
+  const groupKeyOf = (it) => `${it.phase}|${it.area || 'Study'}|${it.group || 'Other'}`;
+  const toggleGroup = (key) => { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); paint(); };
   let editing = false; // desktop study pane: reading vs editing the content
   let activeSession = null; // a focus session in progress (shown live on desktop)
   let studyTimer = null;    // interval ticking the "studying now" banner
@@ -109,6 +115,8 @@ export async function renderPlan(mount, { navigate }) {
       else { const firstTodo = items.find((i) => i.status === 'todo' && depsSatisfied(i, statusById)); selected = (firstTodo || items[0]).id; }
       editing = false;
     }
+    // Keep the current topic's group open so its content is always reachable.
+    if (byId.has(selected)) expanded.add(groupKeyOf(byId.get(selected)));
 
     const navList = el('div', { class: 'study-nav' });
     for (const pl of planList) {
@@ -120,18 +128,38 @@ export async function renderPlan(mount, { navigate }) {
         const list = itemsByPhase.get(ph.id) || [];
         if (!list.length) continue;
         navList.append(el('div', { class: 'study-phase', text: ph.name }));
-        for (const it of list) {
-          const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
-          const hasNotes = !!(it.notes && it.notes.trim());
-          navList.append(el('button', {
-            class: 'study-navrow' + (it.id === selected ? ' on' : '') + (locked ? ' locked' : '') + ` s-${it.status}`,
-            onclick: () => { selected = it.id; editing = false; refreshMain(); markActive(); },
-            dataset: { id: it.id },
-          }, [
-            el('span', { class: `pdot ${it.mode || ''}` }),
-            el('span', { class: 'study-navt', text: it.title }),
-            hasNotes ? el('span', { class: 'study-dot', title: 'Has a study guide', text: '•' }) : null,
+        for (const [area, areaItems] of groupBy(list, (i) => i.area || 'Study')) {
+          navList.append(el('div', { class: 'study-area' }, [
+            el('span', { class: 'study-area-dot', style: `background:${areaColor(area)}` }),
+            el('span', { text: area }),
           ]));
+          for (const [group, gItems] of groupBy(areaItems, (i) => i.group || 'Other')) {
+            const key = `${ph.id}|${area}|${group}`;
+            const open = expanded.has(key);
+            const doneN = gItems.filter((i) => i.status === 'done').length;
+            navList.append(el('button', {
+              class: 'study-group' + (open ? ' open' : ''),
+              onclick: () => toggleGroup(key),
+            }, [
+              el('span', { class: 'study-group-chev', text: '▸' }),
+              el('span', { class: 'study-group-name', text: group }),
+              el('span', { class: 'study-group-count', text: `${doneN}/${gItems.length}` }),
+            ]));
+            if (!open) continue;
+            for (const it of gItems) {
+              const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+              const hasNotes = !!(it.notes && it.notes.trim());
+              navList.append(el('button', {
+                class: 'study-navrow' + (it.id === selected ? ' on' : '') + (locked ? ' locked' : '') + ` s-${it.status}`,
+                onclick: () => { selected = it.id; editing = false; refreshMain(); markActive(); },
+                dataset: { id: it.id },
+              }, [
+                el('span', { class: `pdot ${it.mode || ''}` }),
+                el('span', { class: 'study-navt', text: it.title }),
+                hasNotes ? el('span', { class: 'study-dot', title: 'Has a study guide', text: '•' }) : null,
+              ]));
+            }
+          }
         }
       }
     }
@@ -230,7 +258,29 @@ export async function renderPlan(mount, { navigate }) {
         const list = itemsByPhase.get(ph.id) || [];
         if (!list.length) continue;
         section.append(el('p', { class: 'phase-label', text: ph.name }));
-        for (const it of list) section.append(listRow(it, statusById));
+        for (const [area, areaItems] of groupBy(list, (i) => i.area || 'Study')) {
+          section.append(el('div', { class: 'plan-area' }, [
+            el('span', { class: 'plan-area-dot', style: `background:${areaColor(area)}` }),
+            el('span', { text: area }),
+          ]));
+          for (const [group, gItems] of groupBy(areaItems, (i) => i.group || 'Other')) {
+            const key = `${ph.id}|${area}|${group}`;
+            const open = expanded.has(key);
+            const doneN = gItems.filter((i) => i.status === 'done').length;
+            section.append(el('button', {
+              class: 'plan-group' + (open ? ' open' : ''),
+              onclick: () => toggleGroup(key),
+            }, [
+              el('span', { class: 'plan-group-chev', text: '▸' }),
+              el('span', { class: 'plan-group-name', text: group }),
+              el('span', { class: 'plan-group-count', text: `${doneN}/${gItems.length}` }),
+            ]));
+            if (!open) continue;
+            const rows = el('div', { class: 'plan-group-items' });
+            for (const it of gItems) rows.append(listRow(it, statusById));
+            section.append(rows);
+          }
+        }
       }
       mount.append(section);
     }
