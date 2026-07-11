@@ -153,6 +153,12 @@ export async function renderDay(mount, { navigate }) {
       }
     }
 
+    const why = blocks.length ? planWhy(blocks, items, settings) : null;
+    const whyNode = why ? el('div', { class: 'plan-why' }, [
+      el('div', { class: 'plan-why-mix', text: why.mix }),
+      el('div', { class: 'plan-why-note', text: why.note }),
+    ]) : null;
+
     const surfaceableAreas = surfaceAreas(items);
     const footer = el('div', { class: 'day-actions' }, [
       el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = freshPlan(settings); adding = false; await paint(); } }),
@@ -163,7 +169,7 @@ export async function renderDay(mount, { navigate }) {
       adding ? addForm(surfaceableAreas) : null,
     ]);
 
-    fill(clear(wrap), [head, timeline, footer]);
+    fill(clear(wrap), [head, whyNode, timeline, footer]);
   }
 
   function freshPlan(settings) {
@@ -503,6 +509,44 @@ export async function renderDay(mount, { navigate }) {
       el('div', { class: 'add-at' }, [el('span', { class: 'muted', text: 'at' }), timeInput]),
     ]);
   }
+}
+
+// Explain the day the coach built — the area mix, the ordering principle, and,
+// when one area carries the day or another is missing, why. Answers "what are
+// we focusing on / how does the coach work?" without making you dig.
+function planWhy(blocks, items) {
+  const study = blocks.filter((b) => b.area).slice().sort((a, b) => a.start - b.start);
+  if (!study.length) return null;
+
+  const order = [];
+  const cnt = new Map();
+  for (const b of study) { if (!cnt.has(b.area)) order.push(b.area); cnt.set(b.area, (cnt.get(b.area) || 0) + 1); }
+  const total = study.length;
+  const mix = order.map((a) => `${cnt.get(a)}× ${a}`).join(' · ');
+
+  // Areas with unfinished work but nothing unlocked yet — gated behind topics
+  // you haven't marked done, so the coach can't schedule them.
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+  const scheduled = new Set(order);
+  const todoAreas = new Set();
+  const surfAreas = new Set();
+  for (const it of items) {
+    if (it.status !== 'todo') continue;
+    const a = it.area || 'Study';
+    todoAreas.add(a);
+    if (depsSatisfied(it, statusById)) surfAreas.add(a);
+  }
+  const locked = [...todoAreas].filter((a) => a !== 'Reading' && !scheduled.has(a) && !surfAreas.has(a));
+
+  const parts = ['Hardest work while you’re freshest, easing off as the day fills.'];
+  const top = order[0];
+  if (order.length === 1) {
+    parts.push(`It’s all ${top} because that’s the only area with topics unlocked right now — mark topics done in Plan to open the next ones.`);
+  } else if (cnt.get(top) / total >= 0.5) {
+    parts.push(`${top} carries the day — it has the most topics unlocked and ready. Want a different balance? Use “Where’s your head?” when you plan.`);
+  }
+  if (locked.length) parts.push(`${locked.join(' & ')} is waiting on earlier topics — finish those in Plan to unlock it.`);
+  return { mix, note: parts.join(' ') };
 }
 
 // One surfaceable next item per area (deps satisfied), in plan order.
