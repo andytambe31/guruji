@@ -1,24 +1,28 @@
 // Import / export plumbing. Parse + validate a plan, ingest it, and build a
 // downloadable backup. No network — everything is local file / clipboard.
-import { ingestPlan, buildExport } from './store.js';
+import { ingestPlan, buildExport, normalizePlans } from './store.js';
 import { MODES } from './util.js';
 
-// Validate the minimal shape. Returns { ok, errors:[], plan }.
+// Validate either the multi-plan { plans:[...] } shape or the legacy single
+// { phases:[...] } shape. Returns { ok, errors:[], plan }.
 export function validatePlan(raw) {
   const errors = [];
   if (raw == null || typeof raw !== 'object') {
     return { ok: false, errors: ['Not a JSON object.'], plan: null };
   }
-  if (!Array.isArray(raw.phases)) {
-    errors.push('Missing "phases" array.');
+  if (!Array.isArray(raw.plans) && !Array.isArray(raw.phases)) {
+    errors.push('Expected a "plans" array (or a legacy "phases" array).');
   }
 
+  const plans = normalizePlans(raw);
   const ids = new Set();
   let itemCount = 0;
-  if (Array.isArray(raw.phases)) {
-    raw.phases.forEach((ph, pi) => {
-      if (!ph || typeof ph !== 'object') { errors.push(`phase[${pi}] is not an object`); return; }
-      if (!ph.id) errors.push(`phase[${pi}] missing id`);
+
+  plans.forEach((pl) => {
+    if (!Array.isArray(pl.phases)) { errors.push(`plan "${pl.id}" missing phases array`); return; }
+    pl.phases.forEach((ph, pi) => {
+      if (!ph || typeof ph !== 'object') { errors.push(`${pl.id} phase[${pi}] is not an object`); return; }
+      if (!ph.id) errors.push(`${pl.id} phase[${pi}] missing id`);
       if (!Array.isArray(ph.items)) { errors.push(`phase "${ph.id || pi}" missing items array`); return; }
       ph.items.forEach((it, ii) => {
         itemCount++;
@@ -33,27 +37,14 @@ export function validatePlan(raw) {
         if (it.status && !['todo', 'done', 'skipped'].includes(it.status)) errors.push(`${where} invalid status "${it.status}"`);
       });
     });
-  }
+  });
 
-  // Dependency ids must reference known items.
-  if (Array.isArray(raw.phases)) {
-    raw.phases.forEach((ph) => (ph.items || []).forEach((it) => {
-      (it.dependsOn || []).forEach((d) => {
-        if (!ids.has(d)) errors.push(`item "${it.id}" dependsOn unknown id "${d}"`);
-      });
-    }));
-  }
-
-  // Schedule (optional) sanity
-  if (raw.schedule != null && !Array.isArray(raw.schedule)) {
-    errors.push('"schedule" must be an array if present.');
-  }
-  if (Array.isArray(raw.schedule)) {
-    raw.schedule.forEach((p, i) => {
-      if (!p.day || !p.start || !p.end || !p.mode) errors.push(`schedule[${i}] needs day/start/end/mode`);
-      if (p.mode && !MODES.includes(p.mode)) errors.push(`schedule[${i}] invalid mode "${p.mode}"`);
+  // Dependency ids must reference known items (across all plans).
+  plans.forEach((pl) => (pl.phases || []).forEach((ph) => (ph.items || []).forEach((it) => {
+    (it.dependsOn || []).forEach((d) => {
+      if (!ids.has(d)) errors.push(`item "${it.id}" dependsOn unknown id "${d}"`);
     });
-  }
+  })));
 
   if (itemCount === 0) errors.push('Plan has no items.');
 

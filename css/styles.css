@@ -156,23 +156,6 @@ p  { color: var(--text-dim); line-height: 1.55; }
 
 .now-foot { text-align: center; margin-top: 26px; }
 
-/* reading habit strip — a persistent, gentle nudge separate from study areas */
-.habit {
-  display: flex; align-items: center; gap: 13px;
-  width: 100%; text-align: left;
-  border: 1px solid var(--line); border-radius: var(--radius-sm);
-  background: transparent; color: var(--text);
-  padding: 14px 16px; margin-top: 24px; cursor: pointer; font: inherit;
-  transition: background .15s, border-color .15s;
-}
-.habit:hover { background: var(--bg-soft); }
-.habit:active { transform: scale(.99); }
-.habit-ic { font-size: 20px; line-height: 1; }
-.habit-text { flex: 1; min-width: 0; }
-.habit-title { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
-.habit-sub { font-size: 12.5px; color: var(--text-faint); margin-top: 2px; }
-.habit-go { color: var(--text-faint); font-size: 13px; font-weight: 500; flex-shrink: 0; }
-
 /* ---------- Empty / centered states ---------- */
 .center-state {
   min-height: 62vh; display: flex; flex-direction: column;
@@ -223,6 +206,11 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .progress-track { height: 3px; background: var(--line); border-radius: 3px; margin: 16px 0 4px; overflow: hidden; }
 .progress-fill { height: 100%; background: var(--text); border-radius: 3px; }
 
+.plan-section { margin-bottom: 36px; }
+.plan-name-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
+.plan-name { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
+.plan-count { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.phase-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin: 22px 0 2px; }
 .phase-block { margin-bottom: 30px; }
 .phase-block > h2 { margin-bottom: 6px; }
 .plan-item { display: flex; align-items: flex-start; gap: 11px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }

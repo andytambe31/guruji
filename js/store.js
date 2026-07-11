@@ -11,6 +11,32 @@ export async function setMeta(meta) {
   return put(STORES.kv, { k: 'meta', v: meta || {} });
 }
 
+// ---------- Plans (top-level tracks) ----------
+export async function getPlans() {
+  const rec = await get(STORES.kv, 'plans');
+  const list = rec ? rec.v : [];
+  return list.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+// Normalize either the new { plans:[{id,name,goal,phases}] } shape or the old
+// single-plan { phases:[...] } shape into an array of plans.
+export function normalizePlans(raw) {
+  if (raw && Array.isArray(raw.plans) && raw.plans.length) {
+    return raw.plans.map((pl, i) => ({
+      id: pl.id || `plan-${i}`,
+      name: pl.name || pl.id || `Plan ${i + 1}`,
+      goal: pl.goal || '',
+      phases: Array.isArray(pl.phases) ? pl.phases : [],
+    }));
+  }
+  return [{
+    id: 'plan',
+    name: (raw && raw.meta && raw.meta.name) || 'Plan',
+    goal: (raw && raw.meta && raw.meta.target) || '',
+    phases: raw && Array.isArray(raw.phases) ? raw.phases : [],
+  }];
+}
+
 // ---------- Phases + items ----------
 export async function getPhases() {
   const phases = await getAll(STORES.phases);
@@ -122,74 +148,75 @@ export async function addLogEntry(entry) {
 // Accepts a parsed plan object matching PLAN_SCHEMA and writes it into the DB,
 // replacing existing plan data. Schedule is only replaced if the plan carries
 // one AND (replaceSchedule) — otherwise the user's edited schedule is kept.
-export async function ingestPlan(plan, { replaceSchedule = true, mergeStatus = true } = {}) {
+export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   const meta = plan.meta || {};
-  const phasesIn = Array.isArray(plan.phases) ? plan.phases : [];
+  const plans = normalizePlans(plan);
 
   // Preserve existing statuses so re-importing a fresh plan.json doesn't wipe
   // progress unless the imported item explicitly carries a status.
   const existing = await getItems();
   const prevStatus = new Map(existing.map((i) => [i.id, i.status]));
 
+  const planRecords = [];
   const phaseRecords = [];
   const itemRecords = [];
+  let phaseOrder = 0;
   let order = 0;
-  phasesIn.forEach((ph, pIdx) => {
-    phaseRecords.push({
-      id: ph.id,
-      name: ph.name || ph.id,
-      weeks: ph.weeks || [],
-      dateRange: ph.dateRange || '',
-      order: pIdx,
-    });
-    (ph.items || []).forEach((it) => {
-      let status = it.status || 'todo';
-      if (mergeStatus && prevStatus.has(it.id) && (!it.status || it.status === 'todo')) {
-        // keep prior progress when the imported item defaults to todo
-        status = prevStatus.get(it.id);
-      }
-      itemRecords.push({
-        id: it.id,
-        title: it.title || '(untitled)',
-        phase: it.phase || ph.id,
-        week: it.week ?? null,
-        area: it.area || null,
-        mode: it.mode,
-        estMinutes: it.estMinutes ?? null,
-        recurring: !!it.recurring,
-        dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
-        status,
-        order: order++,
+
+  plans.forEach((pl, plIdx) => {
+    planRecords.push({ id: pl.id, name: pl.name, goal: pl.goal || '', order: plIdx });
+    (pl.phases || []).forEach((ph) => {
+      phaseRecords.push({
+        id: ph.id,
+        name: ph.name || ph.id,
+        weeks: ph.weeks || [],
+        dateRange: ph.dateRange || '',
+        track: pl.id,
+        order: phaseOrder++,
+      });
+      (ph.items || []).forEach((it) => {
+        let status = it.status || 'todo';
+        if (mergeStatus && prevStatus.has(it.id) && (!it.status || it.status === 'todo')) {
+          status = prevStatus.get(it.id);
+        }
+        itemRecords.push({
+          id: it.id,
+          title: it.title || '(untitled)',
+          phase: ph.id, // the containing phase is authoritative
+          track: pl.id,
+          week: it.week ?? null,
+          area: it.area || null,
+          mode: it.mode,
+          estMinutes: it.estMinutes ?? null,
+          recurring: !!it.recurring,
+          dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
+          status,
+          order: order++,
+        });
       });
     });
   });
 
-  const writes = {
+  await replaceStores({
     [STORES.phases]: phaseRecords,
     [STORES.items]: itemRecords,
-  };
-
-  await replaceStores(writes);
+  });
   await setMeta(meta);
+  await put(STORES.kv, { k: 'plans', v: planRecords });
 
-  // Schedule handling
-  if (Array.isArray(plan.schedule) && plan.schedule.length && replaceSchedule) {
-    await saveScheduleRows(plan.schedule);
-  }
-
-  // Log handling — import may restore a full backup (with log)
+  // Import may restore a full backup that carries the log.
   if (Array.isArray(plan.log)) {
-    await replaceStores({ [STORES.log]: plan.log.map((l, i) => ({ id: l.id || uid('log'), ...l })) });
+    await replaceStores({ [STORES.log]: plan.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
   }
 
-  return { phases: phaseRecords.length, items: itemRecords.length };
+  return { plans: planRecords.length, phases: phaseRecords.length, items: itemRecords.length };
 }
 
 // ---------- Full backup export ----------
 // Reconstruct a plan.json-shaped object plus schedule + log for round-tripping.
 export async function buildExport() {
-  const [meta, phases, items, schedule, log] = await Promise.all([
-    getMeta(), getPhases(), getItems(), getSchedule(), getLog(),
+  const [meta, plans, phases, items, log] = await Promise.all([
+    getMeta(), getPlans(), getPhases(), getItems(), getLog(),
   ]);
 
   const itemsByPhase = new Map();
@@ -209,22 +236,32 @@ export async function buildExport() {
     });
   }
 
-  const phasesOut = phases.map((ph) => ({
-    id: ph.id,
-    name: ph.name,
-    weeks: ph.weeks,
-    dateRange: ph.dateRange,
-    items: itemsByPhase.get(ph.id) || [],
+  const phasesByTrack = new Map();
+  for (const ph of phases) {
+    if (!phasesByTrack.has(ph.track)) phasesByTrack.set(ph.track, []);
+    phasesByTrack.get(ph.track).push({
+      id: ph.id,
+      name: ph.name,
+      weeks: ph.weeks,
+      dateRange: ph.dateRange,
+      items: itemsByPhase.get(ph.id) || [],
+    });
+  }
+
+  const plansOut = plans.map((pl) => ({
+    id: pl.id,
+    name: pl.name,
+    goal: pl.goal || undefined,
+    phases: phasesByTrack.get(pl.id) || [],
   }));
 
   return {
     meta: meta || {},
-    schedule: schedule.map(({ day, start, end, mode }) => ({ day, start, end, mode })),
-    phases: phasesOut,
+    plans: plansOut,
     log,
     exportedAt: new Date().toISOString(),
     app: 'guruji',
-    version: 1,
+    version: 2,
   };
 }
 
