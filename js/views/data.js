@@ -1,7 +1,9 @@
-// Data view: import (file + paste) and export, plus a wipe.
+// Data view: iCloud sync (canonical file), import (file + paste, plan or
+// migration patch), dated backup, and a wipe.
 import { el, toast } from '../util.js';
-import { importFromText, readFile, exportToFile } from '../importexport.js';
+import { importFromText, readFile, exportCanonical, exportToFile } from '../importexport.js';
 import { wipeAll, hasPlan } from '../store.js';
+import { SCHEMA_VERSION } from '../migrations.js';
 
 export async function renderData(mount, { navigate }) {
   const planLoaded = await hasPlan();
@@ -57,21 +59,40 @@ export async function renderData(mount, { navigate }) {
     const res = await importFromText(text);
     if (!res.ok) {
       errorBox.textContent = res.errors.slice(0, 12).join('\n');
-      toast('Import failed — see details', true);
+      toast('Load failed — see details', true);
       return;
     }
-    toast(`Imported ${res.summary.items} items`);
+    if (res.kind === 'patch') {
+      toast(res.already ? 'Migration already applied' : `Migration applied${res.description ? ': ' + res.description : ''}`);
+    } else {
+      const bumped = res.migrated && res.migrated.length ? ` · upgraded v${res.from}→v${res.to}` : '';
+      toast(`Loaded ${res.summary.items} items${bumped}`);
+    }
     navigate('/now');
   }
 
-  const exportBtn = el('button', {
+  const syncBtn = el('button', {
     class: 'btn btn-primary',
-    text: 'Export backup (.json)',
+    text: 'Save to iCloud (guruji.json)',
+    disabled: !planLoaded,
+    onclick: async () => {
+      try {
+        await exportCanonical();
+        toast('Saved guruji.json — keep it in iCloud Drive');
+      } catch (err) {
+        toast('Save failed', true);
+      }
+    },
+  });
+
+  const backupBtn = el('button', {
+    class: 'btn btn-ghost',
+    text: 'Download a dated backup',
     disabled: !planLoaded,
     onclick: async () => {
       try {
         const name = await exportToFile();
-        toast(`Exported ${name}`);
+        toast(`Saved ${name}`);
       } catch (err) {
         toast('Export failed', true);
       }
@@ -90,18 +111,25 @@ export async function renderData(mount, { navigate }) {
   });
 
   mount.append(
-    el('p', { class: 'eyebrow', text: 'Backup & sync' }),
+    el('p', { class: 'eyebrow', text: `Backup & sync · schema v${SCHEMA_VERSION}` }),
     el('h1', { text: 'Data' }),
     el('p', {
       class: 'muted',
-      text: 'Your plan lives only on this device. Back up by exporting to a file and keeping it in iCloud Drive — then import it on your other device.',
+      text: 'Everything lives on this device. To sync: Save to iCloud here, keep guruji.json in iCloud Drive, then Load it on your other device. Overwriting the same file each time keeps every device in step.',
     }),
 
     el('hr', { class: 'sep' }),
 
-    el('h2', { text: 'Import plan' }),
+    el('h2', { text: 'Sync with iCloud' }),
+    el('p', { class: 'muted', text: planLoaded ? 'Writes the current plan, schedule, statuses, log and cognitive-load context into one guruji.json.' : 'Load a plan first, then you can save it.' }),
+    syncBtn,
+
+    el('hr', { class: 'sep' }),
+
+    el('h2', { text: 'Load' }),
+    el('p', { class: 'muted', text: 'A plan, a full backup, or a migration file — Guruji detects which. Older files are upgraded to the current schema automatically.' }),
     el('div', { class: 'field' }, [
-      el('label', { text: 'From a file' }),
+      el('label', { text: 'From a file (iCloud Drive, Files…)' }),
       fileInput,
     ]),
     el('div', { class: 'field' }, [
@@ -113,9 +141,9 @@ export async function renderData(mount, { navigate }) {
 
     el('hr', { class: 'sep' }),
 
-    el('h2', { text: 'Export' }),
-    el('p', { class: 'muted', text: planLoaded ? 'Download the current plan, schedule, statuses and log as one JSON file.' : 'Nothing to export yet — import a plan first.' }),
-    exportBtn,
+    el('h2', { text: 'Backup' }),
+    el('p', { class: 'muted', text: planLoaded ? 'A dated, never-overwritten copy — for keeping history.' : 'Nothing to back up yet.' }),
+    backupBtn,
 
     el('hr', { class: 'sep' }),
 

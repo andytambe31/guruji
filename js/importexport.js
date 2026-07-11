@@ -1,7 +1,8 @@
 // Import / export plumbing. Parse + validate a plan, ingest it, and build a
 // downloadable backup. No network — everything is local file / clipboard.
-import { ingestPlan, buildExport, normalizePlans } from './store.js';
+import { ingestPlan, buildExport, normalizePlans, hasPlan, getAppliedPatches, markPatchApplied } from './store.js';
 import { MODES } from './util.js';
+import { migrate, isPatch, validatePatch, applyPatchOps } from './migrations.js';
 
 // Validate either the multi-plan { plans:[...] } shape or the legacy single
 // { phases:[...] } shape. Returns { ok, errors:[], plan }.
@@ -69,23 +70,48 @@ export function readFile(file) {
   });
 }
 
-// Full import pipeline from raw text. Returns { ok, errors, summary }.
+// Full import pipeline from raw text. Auto-detects a content-patch vs a full
+// plan/backup, and runs schema migrations on the latter. Returns { ok, errors,
+// summary, kind }.
 export async function importFromText(text, opts = {}) {
   const { value, error } = parseJSON(text);
   if (error) return { ok: false, errors: [`Invalid JSON: ${error}`], summary: null };
-  const v = validatePlan(value);
+
+  if (isPatch(value)) return applyPatch(value);
+
+  // Bring any older file up to the current schema before validating/ingesting.
+  const { data, from, to, applied } = migrate(value);
+  const v = validatePlan(data);
   if (!v.ok) return { ok: false, errors: v.errors, summary: null };
-  const summary = await ingestPlan(value, opts);
-  return { ok: true, errors: [], summary };
+  const summary = await ingestPlan(data, opts);
+  return { ok: true, errors: [], summary, kind: 'plan', migrated: applied, from, to };
 }
 
-// Trigger a download of the current state as a JSON file.
-export async function exportToFile() {
-  const data = await buildExport();
-  const json = JSON.stringify(data, null, 2);
-  const stamp = data.exportedAt.slice(0, 10);
-  const name = `guruji-${stamp}-export.json`;
-  const blob = new Blob([json], { type: 'application/json' });
+// Apply a content-patch (migration file) on top of the current data, once.
+export async function applyPatch(patch) {
+  const pv = validatePatch(patch);
+  if (!pv.ok) return { ok: false, errors: pv.errors, summary: null };
+  if (!(await hasPlan())) {
+    return { ok: false, errors: ['Load a plan before applying a migration.'], summary: null };
+  }
+  if (patch.id) {
+    const done = await getAppliedPatches();
+    if (done.includes(patch.id)) {
+      return { ok: true, errors: [], summary: { items: 0 }, kind: 'patch', already: true, description: patch.description || '' };
+    }
+  }
+  const current = await buildExport();          // canonical, current-schema snapshot
+  const { data: patched, applied } = applyPatchOps(current, patch.ops);
+  if (applied === 0) {
+    return { ok: false, errors: ['This migration changed nothing — check the plan / phase / item ids in its ops.'], summary: null };
+  }
+  const summary = await ingestPlan(patched, { mergeStatus: true });
+  if (patch.id) await markPatchApplied(patch.id);
+  return { ok: true, errors: [], summary, kind: 'patch', applied, description: patch.description || '' };
+}
+
+function download(name, text, type = 'application/json') {
+  const blob = new Blob([text], { type });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
@@ -95,4 +121,18 @@ export async function exportToFile() {
   a.remove();
   setTimeout(() => URL.revokeObjectURL(url), 4000);
   return name;
+}
+
+// The canonical sync file: a stable name so it overwrites the same file in
+// iCloud Drive each time. Load it on your other device to pick up changes.
+export async function exportCanonical() {
+  const data = await buildExport();
+  return download('guruji.json', JSON.stringify(data, null, 2));
+}
+
+// A dated, never-overwritten snapshot — for keeping history / manual backups.
+export async function exportToFile() {
+  const data = await buildExport();
+  const stamp = data.exportedAt.slice(0, 10);
+  return download(`guruji-${stamp}-export.json`, JSON.stringify(data, null, 2));
 }

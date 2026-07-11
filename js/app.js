@@ -77,6 +77,12 @@ export function navigate(path) {
 }
 
 async function boot() {
+  // Ask the browser to keep our IndexedDB data durable (iOS/Safari may evict
+  // "best-effort" storage for home-screen PWAs). Non-blocking, best effort.
+  if (navigator.storage && navigator.storage.persist) {
+    navigator.storage.persist().catch(() => {});
+  }
+
   window.addEventListener('hashchange', router);
   await router();
 

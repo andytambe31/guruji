@@ -2,6 +2,7 @@
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
 import { uid, todayISO, nowMinutes } from './util.js';
 import { planDay, reflow, clampDur } from './schedule.js';
+import { SCHEMA_VERSION } from './migrations.js';
 
 // ---------- Plan meta ----------
 export async function getMeta() {
@@ -331,19 +332,35 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   await setMeta(meta);
   await put(STORES.kv, { k: 'plans', v: planRecords });
 
-  // Import may restore a full backup that carries the log.
+  // Import may restore a full backup that carries the log, schedule + context.
   if (Array.isArray(plan.log)) {
     await replaceStores({ [STORES.log]: plan.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
+  }
+  if (Array.isArray(plan.blocks)) {
+    await replaceStores({ [STORES.schedule]: plan.blocks.map((b) => ({ kind: 'block', id: b.id || uid('blk'), ...b })) });
+  }
+  if ('context' in plan) {
+    await setContext(plan.context || null);
   }
 
   return { plans: planRecords.length, phases: phaseRecords.length, items: itemRecords.length };
 }
 
+// ---------- Content-patch tracking (applied once, by id) ----------
+export async function getAppliedPatches() {
+  const rec = await get(STORES.kv, 'appliedPatches');
+  return rec ? rec.v : [];
+}
+export async function markPatchApplied(id) {
+  const cur = await getAppliedPatches();
+  if (!cur.includes(id)) { cur.push(id); await put(STORES.kv, { k: 'appliedPatches', v: cur }); }
+}
+
 // ---------- Full backup export ----------
 // Reconstruct a plan.json-shaped object plus schedule + log for round-tripping.
 export async function buildExport() {
-  const [meta, plans, phases, items, log] = await Promise.all([
-    getMeta(), getPlans(), getPhases(), getItems(), getLog(),
+  const [meta, plans, phases, items, log, blocks, context] = await Promise.all([
+    getMeta(), getPlans(), getPhases(), getItems(), getLog(), getBlocks(), getContext(),
   ]);
 
   const itemsByPhase = new Map();
@@ -383,13 +400,21 @@ export async function buildExport() {
     phases: phasesByTrack.get(pl.id) || [],
   }));
 
+  // Blocks carry only what's needed to reconstruct the schedule (drop kind).
+  const blocksOut = blocks.map((b) => ({
+    id: b.id, itemId: b.itemId, area: b.area, title: b.title, mode: b.mode,
+    date: b.date, start: b.start, minutes: b.minutes, status: b.status, pinned: !!b.pinned,
+  }));
+
   return {
     meta: meta || {},
     plans: plansOut,
+    blocks: blocksOut,
+    context: context || null,
     log,
     exportedAt: new Date().toISOString(),
     app: 'guruji',
-    version: 2,
+    schemaVersion: SCHEMA_VERSION,
   };
 }
 
