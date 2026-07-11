@@ -3,7 +3,7 @@
 // "Trees" into the actual tasks. Node text wraps to two lines instead of
 // ellipsing.
 import { el, clear, toast } from '../util.js';
-import { getPlans, getPhases, getItems, setItemStatus, resetAllStatuses, depsSatisfied } from '../store.js';
+import { getPlans, getPhases, getItems, setItemStatus, setItemNotes, resetAllStatuses, depsSatisfied } from '../store.js';
 
 const AREA_COLOR = {
   'DSA': '#3b5bd9', 'System Design': '#0f9d6b', 'Reading': '#c98a2e',
@@ -25,6 +25,7 @@ export async function renderPlan(mount, { navigate }) {
   let zoomGroup = null;
   let selected = null;
   let scale = 1;
+  const openNotes = new Set(); // topics whose desktop-only content editor is expanded
 
   async function paint() {
     const [plans, phases, items] = await Promise.all([getPlans(), getPhases(), getItems()]);
@@ -101,6 +102,18 @@ export async function renderPlan(mount, { navigate }) {
 
   function listRow(it, statusById) {
     const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+    const notesOpen = openNotes.has(it.id);
+    const hasNotes = !!(it.notes && it.notes.trim());
+    // The content editor + its toggle are desktop-only — hidden on the phone,
+    // which stays a lightweight tracker. Study material lives on the desktop.
+    const editor = notesOpen ? el('div', { class: 'topic-notes desktop-only' }, [
+      el('textarea', {
+        class: 'topic-notes-ta', rows: '8', spellcheck: false,
+        placeholder: 'Study content for this topic — the breakdown, key ideas, resources, worked problems…',
+        value: it.notes || '',
+        onchange: (e) => { setItemNotes(it.id, e.target.value); it.notes = e.target.value; },
+      }),
+    ]) : null;
     return el('div', { class: `plan-item ${it.status}${locked ? ' locked' : ''}` }, [
       el('span', { class: `pdot ${it.mode || ''}` }),
       el('div', { class: 'body' }, [
@@ -111,7 +124,14 @@ export async function renderPlan(mount, { navigate }) {
         el('button', { class: 'mini-btn' + (it.status === 'done' ? ' active-done' : ''), text: 'Done', onclick: () => toggle(it, 'done') }),
         el('button', { class: 'mini-btn' + (it.status === 'skipped' ? ' active-skip' : ''), text: 'Skip', onclick: () => toggle(it, 'skipped') }),
         it.status !== 'todo' ? el('button', { class: 'mini-btn mini-undo', text: 'To‑do', title: 'Mark as not started', onclick: () => setTodo(it) }) : null,
+        el('button', {
+          class: 'mini-btn notes-btn desktop-only' + (notesOpen ? ' on' : '') + (hasNotes ? ' has-notes' : ''),
+          text: notesOpen ? 'Close' : (hasNotes ? 'Notes •' : 'Notes'),
+          title: 'Study content (desktop only)',
+          onclick: () => { if (notesOpen) openNotes.delete(it.id); else openNotes.add(it.id); paint(); },
+        }),
       ]),
+      editor,
     ]);
   }
 

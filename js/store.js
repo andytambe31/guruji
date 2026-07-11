@@ -144,6 +144,16 @@ export async function setItemStatus(id, status) {
   return item;
 }
 
+// Study content for a topic (authored on desktop). Stored on the item so it
+// round-trips through export/import and survives phone syncs (see ingestPlan).
+export async function setItemNotes(id, notes) {
+  const item = await get(STORES.items, id);
+  if (!item) return null;
+  item.notes = notes || '';
+  await put(STORES.items, item);
+  return item;
+}
+
 // Put every topic back to one status (default: not-started). Returns how many
 // changed — the one-tap way to undo accidental Done/Skip marks.
 export async function resetAllStatuses(status = 'todo') {
@@ -584,9 +594,13 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   const plans = normalizePlans(plan);
 
   // Preserve existing statuses so re-importing a fresh plan.json doesn't wipe
-  // progress unless the imported item explicitly carries a status.
+  // progress unless the imported item explicitly carries a status. Study notes
+  // (authored on desktop) are content, not progress — always kept unless the
+  // incoming file has non-empty notes for that item, so syncing your phone's
+  // file never clobbers what you wrote on the desktop.
   const existing = await getItems();
   const prevStatus = new Map(existing.map((i) => [i.id, i.status]));
+  const prevNotes = new Map(existing.map((i) => [i.id, i.notes]));
 
   const planRecords = [];
   const phaseRecords = [];
@@ -610,6 +624,10 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
         if (mergeStatus && prevStatus.has(it.id) && (!it.status || it.status === 'todo')) {
           status = prevStatus.get(it.id);
         }
+        // Non-empty incoming notes win; otherwise keep what's already here so a
+        // phone import never wipes desktop-authored content.
+        const incomingNotes = typeof it.notes === 'string' && it.notes.trim() ? it.notes : '';
+        const notes = incomingNotes || prevNotes.get(it.id) || '';
         itemRecords.push({
           id: it.id,
           title: it.title || '(untitled)',
@@ -623,6 +641,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
           recurring: !!it.recurring,
           dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
           status,
+          notes,
           order: order++,
         });
       });
@@ -709,6 +728,7 @@ export async function buildExport() {
       recurring: it.recurring || undefined,
       dependsOn: it.dependsOn || [],
       status: it.status || 'todo',
+      notes: it.notes || undefined, // desktop-authored study content
     });
   }
 

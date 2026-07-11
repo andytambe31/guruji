@@ -589,7 +589,21 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .phase-label { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin: 22px 0 2px; }
 .phase-block { margin-bottom: 30px; }
 .phase-block > h2 { margin-bottom: 6px; }
-.plan-item { display: flex; align-items: flex-start; gap: 11px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+.plan-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 11px; padding: 14px 0; border-bottom: 1px solid var(--line-soft); }
+
+/* Content layer — desktop only. On the phone these never render, keeping it a
+   lightweight tracker; the study material lives on the wide screen. */
+.desktop-only { display: none; }
+@media (min-width: 900px) { .desktop-only { display: revert; } }
+.notes-btn.has-notes { color: var(--accent); font-weight: 650; }
+.notes-btn.on { color: var(--text); }
+.topic-notes { flex-basis: 100%; width: 100%; margin-top: 8px; }
+.topic-notes-ta {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 140px;
+  font: inherit; font-size: 14px; line-height: 1.6; color: var(--text);
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+}
+.topic-notes-ta:focus { outline: none; border-color: var(--text-dim); background: var(--bg); }
 .plan-item.locked { opacity: .45; }
 .pdot { width: 7px; height: 7px; border-radius: 50%; margin-top: 7px; flex: 0 0 auto; background: var(--text-faint); }
 .pdot.DESK { background: var(--desk); }
