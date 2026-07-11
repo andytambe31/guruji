@@ -2,7 +2,7 @@
 // into a sharp sprint; System Design is a calmer, thinking space; Reading is
 // warm and quiet. Same timer underneath, different room. Only Pause + End.
 import { el, clear, fmtClock, toast } from '../util.js';
-import { getItem, setItemStatus, addLogEntry } from '../store.js';
+import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession } from '../store.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
 // | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
@@ -82,16 +82,36 @@ export async function renderFocus(mount, { arg, navigate }) {
 
   const theme = THEMES[item.area] || THEMES.default;
 
-  const started = new Date();
+  // Resume a session in progress (same item) so an accidental app close doesn't
+  // lose it; otherwise start fresh. The timer runs off wall-clock (startedAt +
+  // accumulated pause), so it stays accurate across closes and background throttling.
+  const existing = await getActiveSession();
+  const resuming = !!(existing && existing.itemId === itemId);
+  const started = resuming ? new Date(existing.startedAt) : new Date();
   const total = minutes * 60;
-  let remaining = total;
-  let paused = false;
+  let pausedAccum = resuming ? (existing.pausedAccum || 0) : 0; // seconds spent paused
+  let paused = resuming ? !!existing.paused : false;
+  let pausedAt = resuming && existing.paused && existing.pausedAt ? new Date(existing.pausedAt) : null;
   let finished = false;
   let destroyed = false;
   let ticker = null;
   let rotator = null;
   let mIdx = 0;
   let wakeLock = null;
+
+  const persist = () => setActiveSession({
+    itemId, minutes, startedAt: started.toISOString(),
+    paused, pausedAt: pausedAt ? pausedAt.toISOString() : null, pausedAccum,
+  });
+  // Seconds of active (non-paused) work elapsed, from the wall clock.
+  const activeElapsed = () => {
+    let pausedMs = pausedAccum * 1000;
+    if (paused && pausedAt) pausedMs += Date.now() - pausedAt.getTime();
+    return Math.max(0, Math.floor((Date.now() - started.getTime() - pausedMs) / 1000));
+  };
+  const computeRemaining = () => Math.max(0, total - activeElapsed());
+  let remaining = computeRemaining();
+  await persist();
 
   const phaseLabel = el('div', { class: 'phase-label', text: theme.label });
   const title = el('div', { class: 'focus-title', text: item.title });
@@ -118,8 +138,13 @@ export async function renderFocus(mount, { arg, navigate }) {
 
   requestWakeLock();
   paintProgress();
-  start();
-  startRotator();
+  if (remaining <= 0) {
+    // Resumed after the planned time already elapsed — go straight to wrap-up.
+    timeUp();
+  } else {
+    start();
+    startRotator();
+  }
 
   function start() { stopTicker(); ticker = setInterval(tick, 1000); }
   function stopTicker() { if (ticker) { clearInterval(ticker); ticker = null; } }
@@ -143,7 +168,7 @@ export async function renderFocus(mount, { arg, navigate }) {
 
   function tick() {
     if (paused || finished) return;
-    remaining -= 1;
+    remaining = computeRemaining();
     if (remaining <= 0) {
       remaining = 0;
       clock.textContent = fmtClock(0);
@@ -169,8 +194,15 @@ export async function renderFocus(mount, { arg, navigate }) {
   function togglePause() {
     if (finished) return;
     paused = !paused;
+    if (paused) {
+      pausedAt = new Date();
+    } else if (pausedAt) {
+      pausedAccum += Math.floor((Date.now() - pausedAt.getTime()) / 1000);
+      pausedAt = null;
+    }
     pauseBtn.textContent = paused ? 'Resume' : 'Pause';
     phaseLabel.textContent = paused ? 'Paused' : theme.label;
+    persist();
   }
 
   function elapsedMin() { return Math.max(0, Math.round((total - remaining) / 60)); }
@@ -193,6 +225,7 @@ export async function renderFocus(mount, { arg, navigate }) {
   }
 
   async function resolve(result) {
+    await clearActiveSession(); // the session is finished — nothing to resume
     // A recurring habit (e.g. reading) is never consumed — it just gets logged
     // and stays available so the coach can keep pushing the streak.
     if (result !== 'todo' && !item.recurring) await setItemStatus(item.id, result);

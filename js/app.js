@@ -1,5 +1,6 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
 import { clear } from './util.js';
+import { getActiveSession, clearActiveSession } from './store.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
@@ -90,6 +91,19 @@ function hideSplash(startedAt) {
   }, wait);
 }
 
+// If a focus session was left running, point the app at it before the first
+// render. Ignore a session abandoned long ago so we don't resurrect stale ones.
+async function maybeResumeSession() {
+  try {
+    const s = await getActiveSession();
+    if (!s || !s.itemId) return;
+    const ageMs = Date.now() - new Date(s.startedAt).getTime();
+    if (!(ageMs >= 0) || ageMs > 12 * 3600 * 1000) { await clearActiveSession(); return; }
+    const focusHash = `#/focus/${s.itemId}/${s.minutes || 25}`;
+    if (location.hash !== focusHash) location.hash = focusHash;
+  } catch { /* non-fatal */ }
+}
+
 async function boot() {
   const bootStart = Date.now();
   // Failsafe: never leave the splash stuck if boot stalls for any reason.
@@ -99,6 +113,11 @@ async function boot() {
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});
   }
+
+  // Resume an in-progress focus session so an accidental close drops you right
+  // back into it (the timer is wall-clock accurate). Set the hash before the
+  // listener + first render so there's no flash of another view.
+  await maybeResumeSession();
 
   window.addEventListener('hashchange', router);
   await router();

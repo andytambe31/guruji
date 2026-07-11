@@ -98,6 +98,20 @@ export async function setContext(v) {
   return put(STORES.kv, { k: 'context', v: v || null });
 }
 
+// ---------- Active focus session (survives an app close) ----------
+// Persisted when a focus session starts so the app can resume it — with an
+// accurate wall-clock timer — if you reopen after accidentally closing.
+export async function getActiveSession() {
+  const rec = await get(STORES.kv, 'activeSession');
+  return rec ? rec.v : null;
+}
+export async function setActiveSession(v) {
+  return put(STORES.kv, { k: 'activeSession', v: v || null });
+}
+export async function clearActiveSession() {
+  return put(STORES.kv, { k: 'activeSession', v: null });
+}
+
 // ---------- Plans (top-level tracks) ----------
 export async function getPlans() {
   const rec = await get(STORES.kv, 'plans');
