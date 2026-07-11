@@ -39,14 +39,19 @@ export async function renderNow(mount, { navigate }) {
   const context = await getContext();
   const load = estimateCognitiveLoad(log, context);
   const status = loadStatus(load);
-  const suggestion = availAreas.length ? suggest(availAreas, log) : { area: allAreas[0], nudge: '' };
-  let selectedArea = suggestion.area;
+
+  // The coach's call: one area, with the reasoning behind it. It weighs what's
+  // surfaceable, your recent history, your reading streak, and — crucially —
+  // your cognitive load, so it steers you off deep work when you're loaded.
+  const rec = recommend();
+  let selectedArea = rec.area;
 
   const wrap = el('div', { class: 'now-wrap' });
   mount.append(wrap);
   render();
 
   function isHabit(area) { const i = nextForArea(area); return !!(i && i.recurring); }
+  function modeWord(mode) { return mode === 'DESK' ? 'deep work' : mode === 'TRANSIT' ? 'concept work' : 'this'; }
 
   function coachFor(area) {
     if (isHabit(area)) return habitLine(area, log);
@@ -55,23 +60,61 @@ export async function renderNow(mount, { navigate }) {
       const hasTodo = items.some((i) => (i.area || 'Study') === area && i.status === 'todo');
       return hasTodo ? `${area} is locked for now — clear its prerequisites first.` : `You’ve cleared everything in ${area}.`;
     }
-    if (area === suggestion.area) return suggestion.nudge || (AREA_LINE[area] || AREA_LINE.Study);
     return AREA_LINE[area] || AREA_LINE.Study;
   }
 
+  // Decide what to do, and say why with conviction.
+  function recommend() {
+    if (!availAreas.length) {
+      return { area: allAreas[0], headline: 'You’re clear for now.', reason: 'Everything ready is done. Take a look at the map for what’s next — or call it and rest.' };
+    }
+    const within = availAreas.filter((a) => { const it = nextForArea(a); return it && withinCapacity(it.mode, load); });
+
+    // Loaded past capacity for everything available → steer to the lightest thing.
+    if (!within.length) {
+      const MW = { WIND_DOWN: 0, TRANSIT: 1, DESK: 2 };
+      const area = [...availAreas].sort((a, b) => (MW[nextForArea(a).mode] ?? 2) - (MW[nextForArea(b).mode] ?? 2))[0];
+      return { area, headline: `Go light — ${area}.`, reason: `You’re at ${load}%. The hard stuff won’t stick right now; keep it gentle and protect the quality.` };
+    }
+
+    const pick = suggest(within, log);
+    const area = pick.area;
+
+    // How long have you been on one area?
+    const recent = [...log].reverse().map((e) => e.area).filter(Boolean);
+    const streakArea = recent[0] || null;
+    let streak = 0;
+    for (const a of recent) { if (a === streakArea) streak++; else break; }
+
+    if (isHabit(area)) return { area, headline: `Read tonight — ${area}.`, reason: habitLine(area, log) };
+    if (streakArea && streak >= 2 && streakArea !== area) {
+      return { area, headline: `Switch to ${area}.`, reason: `${streak} days straight on ${streakArea}. Stretch a different muscle today.` };
+    }
+    if (load < 35) return { area, headline: `Take on ${area}.`, reason: `You’re fresh — spend it on the hard reps while the focus is there.` };
+    return { area, headline: `${area} — go.`, reason: pick.nudge || (AREA_LINE[area] || AREA_LINE.Study) };
+  }
+
   function render() {
-    // Build the shell once; only the per-area bits (eyebrow, coach, CTA) swap,
-    // so switching areas animates smoothly instead of rebuilding everything.
+    // Build the shell once; only the per-area bits (eyebrow, verdict, reason,
+    // CTA) swap, so switching areas animates smoothly instead of rebuilding.
     const eyebrowEl = el('p', { class: 'eyebrow swap' });
-    const coachEl = el('div', { class: 'coach swap' });
+    const verdictEl = el('h1', { class: 'verdict swap' });
+    const reasonEl = el('div', { class: 'coach swap' });
     const ctaWrap = el('div', { class: 'cta-wrap swap' });
 
+    // The switcher is demoted: hidden behind a quiet toggle. The default path
+    // is "the coach told me → I start", not "I pick from a menu".
     const chipEls = new Map();
-    const areasEl = el('div', { class: 'areas' }, allAreas.map((a) => {
+    const areasEl = el('div', { class: 'areas', hidden: true }, allAreas.map((a) => {
       const btn = el('button', { class: 'ctx-chip' + (a === selectedArea ? ' on' : ''), text: a, onclick: () => selectArea(a) });
       chipEls.set(a, btn);
       return btn;
     }));
+    const toggle = el('button', { class: 'switch-toggle', text: 'Something else →', onclick: () => {
+      const hidden = areasEl.hasAttribute('hidden');
+      if (hidden) areasEl.removeAttribute('hidden'); else areasEl.setAttribute('hidden', '');
+      toggle.textContent = hidden ? 'Never mind ↑' : 'Something else →';
+    } });
 
     const cog = el('div', { class: `cog tone-${status.tone}` }, [
       el('div', { class: 'cog-row' }, [
@@ -97,9 +140,7 @@ export async function renderNow(mount, { navigate }) {
     ]);
 
     fill(clear(wrap), [
-      eyebrowEl, coachEl,
-      el('div', { class: 'dur-label', text: 'What are you focusing on?' }),
-      areasEl, ctaWrap, cog, ctxRow,
+      eyebrowEl, verdictEl, reasonEl, ctaWrap, toggle, areasEl, cog, ctxRow,
     ]);
 
     applyArea();
@@ -111,24 +152,25 @@ export async function renderNow(mount, { navigate }) {
       applyArea(true);
     }
 
-    function modeWord(mode) { return mode === 'DESK' ? 'deep work' : mode === 'TRANSIT' ? 'concept work' : 'this'; }
-    function lighterArea() {
-      let best = null;
-      for (const a of allAreas) {
-        const it = nextForArea(a);
-        if (it && withinCapacity(it.mode, load)) { if (!best) best = a; if (it.mode === 'WIND_DOWN') return a; }
-      }
-      return best;
-    }
-
     function applyArea(animate) {
       const item = nextForArea(selectedArea);
+      const isRec = selectedArea === rec.area;
       const reading = isHabit(selectedArea);
 
       const wk = item && item.week != null && item.week > 0 ? `Week ${item.week}` : '';
       eyebrowEl.textContent = wk;
       eyebrowEl.style.display = wk ? '' : 'none';
-      coachEl.textContent = coachFor(selectedArea);
+
+      if (isRec) {
+        verdictEl.textContent = rec.headline;
+        reasonEl.textContent = rec.reason;
+      } else if (item) {
+        verdictEl.textContent = `${selectedArea} it is.`;
+        reasonEl.textContent = 'Your call — I’ve got you. ' + coachFor(selectedArea);
+      } else {
+        verdictEl.textContent = selectedArea;
+        reasonEl.textContent = coachFor(selectedArea);
+      }
 
       let children;
       if (!item) {
@@ -136,19 +178,15 @@ export async function renderNow(mount, { navigate }) {
       } else if (withinCapacity(item.mode, load)) {
         children = [el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })];
       } else {
-        const lighter = lighterArea();
         children = [
           el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),
           el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'Start anyway', onclick: () => navigate(`/prep/${item.id}`) }),
-          (lighter && lighter !== selectedArea)
-            ? el('button', { class: 'btn-link', text: `${lighter} fits your energy better →`, onclick: () => selectArea(lighter) })
-            : null,
         ];
       }
       fill(clear(ctaWrap), children);
 
       if (animate) {
-        for (const e of [eyebrowEl, coachEl, ctaWrap]) { e.classList.remove('swap'); void e.offsetWidth; e.classList.add('swap'); }
+        for (const e of [eyebrowEl, verdictEl, reasonEl, ctaWrap]) { e.classList.remove('swap'); void e.offsetWidth; e.classList.add('swap'); }
       }
     }
   }

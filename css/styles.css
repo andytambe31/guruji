@@ -111,15 +111,32 @@ p  { color: var(--text-dim); line-height: 1.55; }
 /* ---------- Now / dashboard ---------- */
 .now-wrap { min-height: 66vh; display: flex; flex-direction: column; justify-content: center; }
 
-/* the coach's voice — authoritative line above the one thing */
-.coach {
-  font-size: 20px; line-height: 1.4; font-weight: 550;
-  letter-spacing: -.015em; color: var(--text);
-  margin: 0 0 22px; max-width: 22ch;
+/* the coach's verdict — the decisive call, stated first */
+.verdict {
+  font-size: 31px; font-weight: 680; line-height: 1.12;
+  letter-spacing: -.03em; color: var(--text);
+  margin: 0 0 10px; max-width: 16ch;
 }
 
+/* the reasoning behind the call */
+.coach {
+  font-size: 16px; line-height: 1.5; font-weight: 500;
+  letter-spacing: -.01em; color: var(--text-dim);
+  margin: 0 0 24px; max-width: 30ch;
+}
+
+/* demoted switcher: a quiet escape hatch, not the main path */
+.switch-toggle {
+  align-self: flex-start; appearance: none; cursor: pointer;
+  background: none; border: none; color: var(--text-faint);
+  font: inherit; font-size: 13px; padding: 4px 0; margin-bottom: 4px;
+  transition: color .15s;
+}
+.switch-toggle:hover { color: var(--text-dim); }
+
 .ctx { display: flex; gap: 8px; margin-bottom: 26px; }
-.areas { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 28px; }
+.areas { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 28px; }
+.areas[hidden] { display: none; }
 .ctx-chip {
   appearance: none; cursor: pointer;
   background: transparent; border: 1px solid var(--line);
