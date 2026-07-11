@@ -92,7 +92,20 @@ async function boot() {
   // Register directly — this module is deferred, so the window 'load' event may
   // have already fired by now and a listener would never run.
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('./sw.js').catch((e) => console.warn('sw failed', e));
+    // When a freshly-deployed worker takes control, reload once so the app
+    // runs the new code immediately instead of the previously-cached modules —
+    // otherwise a fix ships but an open PWA keeps serving the old version.
+    // Skip the reload on a first-ever install (no prior controller to replace).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      window.location.reload();
+    });
+    navigator.serviceWorker.register('./sw.js').then((reg) => {
+      reg.update().catch(() => {}); // check for a newer worker on every launch
+    }).catch((e) => console.warn('sw failed', e));
   }
 }
 
