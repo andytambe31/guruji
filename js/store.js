@@ -269,6 +269,33 @@ export async function clearBusyForDate(date) {
   for (const b of rows) await del(STORES.schedule, b.id);
 }
 
+// Two things can't happen at once. Fixed commitments (office, commute, meals)
+// anchor; movable ones (gym, walk, errands) slide to the next free slot so no
+// commitment overlaps another.
+function slidePast(start, minutes, intervals) {
+  let s = start;
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const p of intervals) {
+      const pe = p.start + p.minutes;
+      if (s < pe && s + minutes > p.start) { s = pe; moved = true; }
+    }
+  }
+  return s;
+}
+export async function deconflictBusy(date) {
+  const all = await getBusyForDate(date);
+  const anchors = all.filter((b) => !isMovableBusy(b)).map((b) => ({ start: b.start, minutes: b.minutes }));
+  const movable = all.filter(isMovableBusy).sort((a, b) => a.start - b.start);
+  const placed = [...anchors];
+  for (const m of movable) {
+    const s = slidePast(m.start, m.minutes, placed);
+    if (s !== m.start) { m.start = s; await put(STORES.schedule, m); }
+    placed.push({ start: m.start, minutes: m.minutes });
+  }
+}
+
 // Re-pack a day so nothing overlaps: pinned/done blocks and commitments keep
 // their time, the rest flow around them.
 export async function reflowDate(date) {

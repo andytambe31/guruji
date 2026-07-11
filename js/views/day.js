@@ -7,7 +7,7 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings,
-  resequenceBlocks, resequenceMixed, isMovableBusy, clearBusyForDate, pushBlock, depsSatisfied,
+  resequenceBlocks, resequenceMixed, isMovableBusy, clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -302,6 +302,7 @@ export async function renderDay(mount, { navigate }) {
       if (pl.gym.on) await putBusy({ date, start: pl.gym.when, minutes: pl.gym.dur, label: 'Gym', drain: pl.gym.drain });
       if (pl.walk.on) await putBusy({ date, start: pl.walk.when, minutes: pl.walk.dur, label: 'Walk', drain: pl.walk.drain });
       if (pl.other.name) await putBusy({ date, start: pl.other.when, minutes: pl.other.dur, label: pl.other.name, drain: pl.other.drain });
+      await deconflictBusy(date); // no two commitments at once
       const intensity = INTENSITY.find((i) => i.key === pl.intensity);
       await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: intensity ? intensity.max : undefined });
       pl = null;
