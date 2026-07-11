@@ -294,6 +294,35 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .r-finish { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--text-faint); font: inherit; font-size: 13px; padding: 22px 0 4px; cursor: pointer; }
 .r-finish:hover { color: var(--text-dim); }
 
+/* rating chips on the finish form */
+.rate-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.rate-chip { appearance: none; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--text-dim); font: inherit; font-size: 13px; font-weight: 500; padding: 8px 14px; border-radius: 999px; transition: border-color .15s, color .15s, background .15s; }
+.rate-chip.on { border-color: var(--text); color: var(--text); background: var(--bg-soft); }
+
+/* the shelf — finished books, a visible point of view */
+.shelf { margin-top: 44px; border-top: 1px solid var(--line); padding-top: 26px; }
+.shelf-head { display: flex; align-items: baseline; justify-content: space-between; }
+.shelf-head h2 { margin: 0; }
+.shelf-sub { margin: 6px 0 16px; line-height: 1.5; }
+.shelf-card { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 16px; margin-top: 12px; animation: swapIn .28s ease both; }
+.shelf-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.shelf-title { font-size: 17px; font-weight: 620; letter-spacing: -.01em; line-height: 1.3; }
+.shelf-author { font-size: 13px; color: var(--text-faint); margin-top: 2px; }
+.shelf-rating { flex: none; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 999px; white-space: nowrap; }
+.shelf-rating.rate-loved { background: rgba(15,157,107,.12); color: #0f9d6b; }
+.shelf-rating.rate-worth { background: rgba(59,91,217,.12); color: var(--desk); }
+.shelf-rating.rate-skip { background: var(--bg-soft); color: var(--text-faint); }
+.shelf-verdict { font-size: 15px; color: var(--text); line-height: 1.55; margin: 12px 0 0; }
+.shelf-rec { font-size: 14px; color: var(--text-dim); line-height: 1.5; margin: 8px 0 0; }
+.shelf-rec-k { color: var(--text-faint); text-transform: uppercase; font-size: 11px; letter-spacing: .1em; }
+.shelf-toggle { appearance: none; background: none; border: none; cursor: pointer; color: var(--text-faint); font: inherit; font-size: 13px; padding: 12px 0 0; text-decoration: underline; text-underline-offset: 3px; }
+.shelf-toggle:hover { color: var(--text-dim); }
+.shelf-notes { margin-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.shelf-note { border-left: 2px solid var(--line); padding-left: 12px; }
+.shelf-note .ref-quote, .shelf-note .ref-thought-text { margin: 0 0 4px; font-size: 14px; }
+.shelf-cardmeta { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+.shelf-cardmeta .muted { font-size: 12px; }
+
 /* prep: when it's bedtime, we don't offer a session */
 .bedtime-block { margin-top: 6px; }
 .bedtime-note { font-size: 15px; color: var(--text-dim); line-height: 1.5; margin-bottom: 16px; }

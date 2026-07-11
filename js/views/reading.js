@@ -5,19 +5,66 @@
 import { el, clear, fill } from '../util.js';
 import {
   getReading, setCurrentBook, updateCurrentBook, addReflection, deleteReflection,
-  finishCurrentBook, getItems,
+  finishCurrentBook, removeShelfBook, getItems,
 } from '../store.js';
+
+const RATINGS = [
+  { key: 'loved', label: 'Loved it' },
+  { key: 'worth', label: 'Worth it' },
+  { key: 'skip', label: 'Skip it' },
+];
+const RATING_LABEL = { loved: 'Loved it', worth: 'Worth it', skip: 'Skip it' };
 
 export async function renderReading(mount, { arg, navigate }) {
   const wrap = el('div', { class: 'reading-wrap' });
+  const expandedShelf = new Set(); // which shelf books show their notes
   mount.append(wrap);
   await paint({ reflect: arg === 'reflect' });
 
   async function paint(opts = {}) {
     const [r, items] = await Promise.all([getReading(), getItems()]);
     const rid = (items.find((i) => (i.area || '') === 'Reading') || {}).id || null;
-    fill(clear(wrap), r.current ? bookView(r, rid, opts) : setupView());
+    const main = r.current ? bookView(r, rid, opts) : setupView();
+    fill(clear(wrap), [...main, shelfSection(r.shelf || [])]);
     if (opts.reflect) { const t = wrap.querySelector('.ref-thought'); if (t) t.focus(); }
+  }
+
+  // ---------- The shelf: finished books, your point of view ----------
+  function shelfSection(shelf) {
+    if (!shelf.length) return null;
+    return el('div', { class: 'shelf' }, [
+      el('div', { class: 'shelf-head' }, [el('h2', { text: 'Your shelf' }), el('span', { class: 'muted', text: `${shelf.length}` })]),
+      el('p', { class: 'muted shelf-sub', text: `${shelf.length} book${shelf.length > 1 ? 's' : ''} you can speak to — your point of view, in one place.` }),
+      ...shelf.map(shelfCard),
+    ]);
+  }
+
+  function shelfCard(book) {
+    const open = expandedShelf.has(book.finishedAt);
+    const notes = book.reflections || [];
+    return el('div', { class: 'shelf-card' }, [
+      el('div', { class: 'shelf-top' }, [
+        el('div', { class: 'shelf-id' }, [
+          el('div', { class: 'shelf-title', text: book.title }),
+          book.author ? el('div', { class: 'shelf-author', text: book.author }) : null,
+        ]),
+        book.rating ? el('span', { class: `shelf-rating rate-${book.rating}`, text: RATING_LABEL[book.rating] || '' }) : null,
+      ]),
+      book.verdict ? el('p', { class: 'shelf-verdict', text: book.verdict }) : null,
+      book.recommend ? el('p', { class: 'shelf-rec' }, [el('span', { class: 'shelf-rec-k', text: 'Recommend · ' }), book.recommend]) : null,
+      notes.length ? el('button', {
+        class: 'shelf-toggle', text: open ? 'Hide notes' : `${notes.length} kept note${notes.length > 1 ? 's' : ''}`,
+        onclick: () => { if (open) expandedShelf.delete(book.finishedAt); else expandedShelf.add(book.finishedAt); paint(); },
+      }) : null,
+      open ? el('div', { class: 'shelf-notes' }, notes.map((n) => el('div', { class: 'shelf-note' }, [
+        n.line ? el('p', { class: 'ref-quote', text: `“${n.line}”` }) : null,
+        n.thought ? el('p', { class: 'ref-thought-text', text: n.thought }) : null,
+      ]))) : null,
+      el('div', { class: 'shelf-cardmeta' }, [
+        el('span', { class: 'muted', text: (book.finishedAt || '').slice(0, 10) }),
+        el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await removeShelfBook(book.finishedAt); expandedShelf.delete(book.finishedAt); await paint(); } }),
+      ]),
+    ]);
   }
 
   function setupView() {
@@ -118,13 +165,20 @@ export async function renderReading(mount, { arg, navigate }) {
     }
 
     function finishForm() {
+      let rating = null;
       const verdict = el('textarea', { class: 'r-area', rows: 2, placeholder: 'Your verdict — what worked, what didn’t' });
       const rec = el('input', { class: 'r-input', type: 'text', placeholder: 'Recommend it? to whom?' });
+      const chipEls = [];
+      const rateRow = el('div', { class: 'rate-row' }, RATINGS.map((rr) => {
+        const c = el('button', { class: 'rate-chip', text: rr.label, onclick: () => { rating = rr.key; chipEls.forEach((x) => x.classList.remove('on')); c.classList.add('on'); } });
+        chipEls.push(c);
+        return c;
+      }));
       return el('div', { class: 'r-form' }, [
         el('div', { class: 'r-block-label', text: 'Before it goes on the shelf' }),
-        verdict, rec,
+        rateRow, verdict, rec,
         el('div', { class: 'row' }, [
-          el('button', { class: 'btn btn-primary', text: 'Shelve it', onclick: async () => { await finishCurrentBook({ verdict: verdict.value.trim(), recommend: rec.value.trim() }); await paint(); } }),
+          el('button', { class: 'btn btn-primary', text: 'Shelve it', onclick: async () => { await finishCurrentBook({ verdict: verdict.value.trim(), recommend: rec.value.trim(), rating }); await paint(); } }),
           el('button', { class: 'btn btn-ghost', text: 'Cancel', onclick: () => paint() }),
         ]),
       ]);

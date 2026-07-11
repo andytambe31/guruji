@@ -68,6 +68,11 @@ export async function finishCurrentBook({ verdict, recommend, rating } = {}) {
   r.reflections = [];
   return setReading(r);
 }
+export async function removeShelfBook(finishedAt) {
+  const r = await getReading();
+  r.shelf = (r.shelf || []).filter((x) => x.finishedAt !== finishedAt);
+  return setReading(r);
+}
 
 // ---------- Plan meta ----------
 export async function getMeta() {
