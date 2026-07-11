@@ -43,7 +43,8 @@ export async function renderNow(mount, { navigate }) {
   // Routine context: how long until bedtime, and the nonchalant goal countdown.
   const today = todayISO();
   const settings = await getSettings();
-  const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
+  let bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
+  if (bedMin != null && bedMin < 5 * 60) bedMin += 24 * 60; // a past-midnight bedtime is late tonight, not early today
   const toBed = bedMin != null ? bedMin - nowMinutes() : Infinity;
   const daysToGoal = settings.goalDate ? daysBetween(today, settings.goalDate) : null;
   const habitDoneToday = (area) => log.some((e) => e.area === area && e.result === 'done' && e.date === today);

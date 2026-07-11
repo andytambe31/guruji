@@ -46,7 +46,8 @@ export async function renderPrep(mount, { arg, navigate }) {
   const book = reading && reading.current;
 
   const settings = await getSettings();
-  const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
+  let bedMin = settings.bedtime ? toMinutes(settings.bedtime) : null;
+  if (bedMin != null && bedMin < 5 * 60) bedMin += 24 * 60; // a past-midnight bedtime is late tonight, not early today
   const toBed = bedMin != null ? bedMin - nowMinutes() : Infinity;
   const opts = windowDurations(item.mode, toBed);
   const blocked = opts.length === 0; // too late for this kind of work

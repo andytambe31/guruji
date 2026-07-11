@@ -332,7 +332,11 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     if (!keepSet.has(b)) await del(STORES.schedule, b.id);
   }
 
-  const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  // A bedtime at/after midnight (e.g. 12:00am) belongs to the *next* calendar
+  // day, so it must not collapse today's study window to nothing — treat an
+  // early-morning bedtime as end-of-day.
+  let bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  if (bedMin < 5 * 60) bedMin += 24 * 60;
   const endMin = Math.min(DAY_END, bedMin);
   const taken = new Set(keep.map((b) => b.itemId));
 
@@ -453,7 +457,8 @@ export async function pushBlock(id, delta) {
   tail[0].start = Math.max(0, tail[0].start + delta);
   sequence(tail, { startMin: tail[0].start, busy: [...busy, ...done, ...head] });
 
-  const bed = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  let bed = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  if (bed < 5 * 60) bed += 24 * 60; // a past-midnight bedtime is late, not early
   const kept = [];
   const dropped = [];
   for (const b of tail) {
