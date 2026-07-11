@@ -88,14 +88,23 @@ export async function renderDay(mount, { navigate }) {
     }
 
     const timeline = el('div', { class: 'timeline' });
-    const rows = [
-      ...blocks.map((b) => ({ t: b.start, node: blockCard(b) })),
-      ...busy.map((b) => ({ t: b.start, node: busyCard(b) })),
-    ].sort((a, b) => a.t - b.t);
-    if (!rows.length) {
+    const entries = [
+      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b) })),
+      ...busy.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
+    ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
+    if (!entries.length) {
       timeline.append(el('p', { class: 'muted day-empty', text: `Nothing booked for ${relLabel(date).toLowerCase()}. Let the coach plan it around your day.` }));
     } else {
-      for (const r of rows) timeline.append(r.node);
+      for (let i = 0; i < entries.length; i++) {
+        timeline.append(entries[i].node);
+        const cur = entries[i];
+        const nxt = entries[i + 1];
+        // A visible breather between two back-to-back study sessions.
+        if (nxt && cur.kind === 'block' && nxt.kind === 'block') {
+          const gap = nxt.t - cur.end;
+          if (gap >= 8) timeline.append(el('div', { class: 'break-row', text: `· ${gap} min break ·` }));
+        }
+      }
     }
 
     const surfaceableAreas = surfaceAreas(items);

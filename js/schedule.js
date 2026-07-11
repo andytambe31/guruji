@@ -71,40 +71,75 @@ export function freeWindows(start, end, busy = []) {
   return out.filter(([s, e]) => e - s >= MIN_WINDOW);
 }
 
-// Which remaining item best fits this slot given predicted load and space:
-// fresh → hardest that fits capacity; loaded → gentlest. Returns index or -1.
-function chooseIndex(items, load, avail) {
-  const fits = items.map((it, i) => ({ it, i })).filter(({ it }) => clampDur(it.estMinutes) <= avail);
-  if (!fits.length) return -1;
-  const ok = fits.filter(({ it }) => withinCapacity(it.mode, load));
-  const pool = ok.length ? ok : fits;
-  const order = load < 50 ? HARD_FIRST : EASY_FIRST;
-  pool.sort((a, b) => (order[a.it.mode] ?? 1) - (order[b.it.mode] ?? 1));
-  return pool[0].i;
+// How well a mode fits the current load: fresh → deep work, spent → gentle.
+function modeFit(mode, load) {
+  if (load < 40) return { DESK: 3, TRANSIT: 2, WIND_DOWN: 1 }[mode] ?? 1.5;
+  if (load < 65) return { DESK: 2, TRANSIT: 3, WIND_DOWN: 1.5 }[mode] ?? 1.5;
+  return { DESK: 0.5, TRANSIT: 1.5, WIND_DOWN: 3 }[mode] ?? 1.5;
 }
 
-// Lay out fresh blocks for `items` into the day's free windows, load-aware.
-export function planDay(date, items, opts = {}) {
-  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null } = opts;
-  const windows = freeWindows(startMin, endMin, busy);
-  const remaining = [...items];
+// A realistic break after a session — longer after deep work, and longer still
+// when you're already loaded (the break is where load recovers).
+function breakAfter(mode, loadAfter) {
+  let brk = mode === 'DESK' ? 15 : mode === 'TRANSIT' ? 12 : 8;
+  if (loadAfter > 65) brk += 8;
+  if (loadAfter > 82) brk += 10;
+  return Math.min(brk, 30);
+}
+
+// Per-area / per-item session caps so a day is full but not absurd.
+const AREA_CAP = { WIND_DOWN: 1 };   // reading: once is enough
+const AREA_CAP_DEFAULT = 3;
+const ITEM_CAP = 2;                  // don't schedule the same topic more than twice
+
+// Fill the day's free windows with as many sessions as realistically fit:
+// deep work while fresh, alternating areas for variety, gentler work as load
+// climbs, breaks between, tapering off when you're too spent to absorb more.
+// `cands` is [{ area, item }] — the next surfaceable item per area.
+export function planDay(date, cands, opts = {}) {
+  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [] } = opts;
+  // Fresh sessions route around both commitments and any already-pinned blocks.
+  const windows = freeWindows(startMin, endMin, [...busy, ...pinned]);
   const placed = [];
+  const itemCount = new Map();
+  const areaCount = new Map();
+  let studyTotal = 0;
+  let lastArea = null;
+
+  const capForArea = (mode) => AREA_CAP[mode] ?? AREA_CAP_DEFAULT;
+  const score = (c, load) => modeFit(c.item.mode, load)
+    + (c.area !== lastArea ? 0.6 : 0)
+    - (itemCount.get(c.item.id) || 0) * 1.5;
 
   for (const [wStart, wEnd] of windows) {
     let cursor = wStart;
-    while (remaining.length) {
+    while (studyTotal < maxStudyMinutes) {
       const avail = wEnd - cursor;
-      if (avail < 10) break;
-      const load = predictLoadAt(cursor, { context, placed, busy });
-      const idx = chooseIndex(remaining, load, avail);
-      if (idx === -1) break;
-      const it = remaining.splice(idx, 1)[0];
-      const minutes = clampDur(it.estMinutes);
+      if (avail < 15) break;
+      const load = predictLoadAt(cursor, { context, placed: [...pinned, ...placed], busy });
+
+      // Eligible: under its caps AND its mode is within capacity at this load.
+      const eligible = cands.filter((c) =>
+        (itemCount.get(c.item.id) || 0) < ITEM_CAP &&
+        (areaCount.get(c.area) || 0) < capForArea(c.item.mode) &&
+        withinCapacity(c.item.mode, load));
+      if (!eligible.length) break; // too loaded (or capped) for anything — rest
+
+      eligible.sort((a, b) => score(b, load) - score(a, load));
+      const pick = eligible[0];
+      const minutes = Math.max(15, Math.min(clampDur(pick.item.estMinutes), avail));
+
       placed.push({
-        itemId: it.id, area: it.area || 'Study', title: it.title || '', mode: it.mode,
+        itemId: pick.item.id, area: pick.area, title: pick.item.title || '', mode: pick.item.mode,
         date, start: cursor, minutes, status: 'planned', pinned: false,
       });
-      cursor += minutes + GAP;
+      itemCount.set(pick.item.id, (itemCount.get(pick.item.id) || 0) + 1);
+      areaCount.set(pick.area, (areaCount.get(pick.area) || 0) + 1);
+      studyTotal += minutes;
+      lastArea = pick.area;
+
+      const loadAfter = predictLoadAt(cursor + minutes, { context, placed: [...pinned, ...placed], busy });
+      cursor += minutes + breakAfter(pick.item.mode, loadAfter);
     }
   }
   return placed;

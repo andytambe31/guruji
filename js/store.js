@@ -273,15 +273,13 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
   const items = await getItems();
   const statusById = new Map(items.map((i) => [i.id, i.status]));
 
-  const perArea = [];
-  const seenArea = new Set();
+  // Every surfaceable item is a candidate — the planner fills free time with
+  // as many sessions as realistically fit, so a wide-open day gets a full plan.
+  const surfaceable = [];
   for (const it of items) {
     if (it.status !== 'todo') continue;
     if (!(it.dependsOn || []).every((d) => statusById.get(d) === 'done')) continue;
-    const a = it.area || 'Study';
-    if (seenArea.has(a)) continue;
-    seenArea.add(a);
-    perArea.push(it);
+    surfaceable.push(it);
   }
 
   const [existing, busy, settings, context] = await Promise.all([
@@ -295,7 +293,9 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
   const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
   const endMin = Math.min(DAY_END, bedMin);
   const taken = new Set(keep.map((b) => b.itemId));
-  const cands = perArea.filter((it) => !taken.has(it.id));
+  const cands = surfaceable
+    .filter((it) => !taken.has(it.id))
+    .map((it) => ({ area: it.area || 'Study', item: it }));
   // Earliest the day can begin: after you're up and freshened up.
   const wakeStart = settings.wake != null
     ? toMinutes(settings.wake) + (settings.freshenMinutes ?? 30)
@@ -304,13 +304,17 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
     ? Math.max(Math.ceil((nowMinutes(now) + 5) / 15) * 15, wakeStart)
     : wakeStart;
 
-  const planOpts = { startMin, endMin, busy, context };
+  // Pinned/done blocks already on the day are obstacles the fresh plan flows
+  // around (and their study load counts toward the prediction).
+  const pinned = keep.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode }));
+  const planOpts = { startMin, endMin, busy, context, pinned };
   // If it's too late for anything to fit today, still propose from the day start.
   let fresh = planDay(date, cands, planOpts);
-  if (!fresh.length && cands.length) fresh = planDay(date, cands, { endMin, busy, context });
+  if (!fresh.length && cands.length) fresh = planDay(date, cands, { endMin, busy, context, pinned });
   const rows = fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }));
+  // No final reflow here — planDay already lays a clean, break-scaled layout
+  // that respects the wake start and routes around commitments + pinned blocks.
   await bulkPut(STORES.schedule, rows);
-  await reflowDate(date);
   return getBlocksForDate(date);
 }
 
