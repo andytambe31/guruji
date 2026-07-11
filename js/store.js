@@ -5,7 +5,13 @@ import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './sched
 import { SCHEMA_VERSION } from './migrations.js';
 
 // ---------- Routine settings (bedtime, goal countdown) ----------
-const DEFAULT_SETTINGS = { bedtime: '23:30', wake: null, freshenMinutes: 30, goalDate: null, goalLabel: '' };
+const DEFAULT_SETTINGS = {
+  bedtime: '23:30', wake: null, freshenMinutes: 30, goalDate: null, goalLabel: '',
+  // Recurring routine: which weekdays (0=Sun … 6=Sat) are office days by default,
+  // and your usual office timing. The wizard pre-fills from these; a per-day
+  // override in the wizard doesn't change the routine.
+  officeDays: [2, 3, 4], officeLeave: 510, officeCommute: 60, officeBack: 1080, getReady: 30,
+};
 export async function getSettings() {
   const rec = await get(STORES.kv, 'settings');
   return { ...DEFAULT_SETTINGS, ...(rec ? rec.v : {}) };
@@ -520,6 +526,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   if (meta.goalDate !== undefined) metaSettings.goalDate = meta.goalDate;
   if (meta.goalLabel !== undefined) metaSettings.goalLabel = meta.goalLabel;
   if (meta.bedtime !== undefined) metaSettings.bedtime = meta.bedtime;
+  if (Array.isArray(meta.officeDays)) metaSettings.officeDays = meta.officeDays;
   if (Object.keys(metaSettings).length) await setSettings(metaSettings);
   if (plan.settings) await setSettings(plan.settings);
 

@@ -1,8 +1,8 @@
-// Day — the adaptive schedule. "Plan my day" runs a short conversation (are you
-// going to the gym? when, roughly? will it drain you?) and the coach infers a
-// realistic window for each thing, then lays study into the free time around
-// them — hard work when it predicts you'll be fresh, gentler work after a
-// draining task. Retime/bump any block and the rest re-allocate.
+// Day — the adaptive schedule. "Plan my day" opens a short wizard (a few
+// grouped steps, Next / Back) covering your rhythm, work + commute, life +
+// meals, and focus. The coach then lays study into the free time around it —
+// deep work when it predicts you're fresh, gentler work after a draining task,
+// the commute turned into transit study. Retime / drag / push any block.
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS } from '../util.js';
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
@@ -13,47 +13,46 @@ import { downloadICS } from '../ics.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-// Rough answers the coach turns into concrete windows — you never set a time.
 const WHEN = [
-  { key: 'morning', label: 'This morning', start: 10 * 60 },
-  { key: 'midday', label: 'Around midday', start: 13 * 60 },
-  { key: 'afternoon', label: 'This afternoon', start: 15 * 60 },
-  { key: 'evening', label: 'This evening', start: 18 * 60 },
-  { key: 'late', label: 'Later tonight', start: 20 * 60 },
+  { label: 'This morning', val: 10 * 60 },
+  { label: 'Around midday', val: 13 * 60 },
+  { label: 'This afternoon', val: 15 * 60 },
+  { label: 'This evening', val: 18 * 60 },
+  { label: 'Later tonight', val: 20 * 60 },
 ];
 const DUR = [
-  { key: 'quick', label: 'Quick — under 30 min', minutes: 30 },
-  { key: 'hour', label: 'About an hour', minutes: 60 },
-  { key: 'long', label: 'A couple of hours', minutes: 120 },
+  { label: 'Quick — under 30 min', val: 30 },
+  { label: 'About an hour', val: 60 },
+  { label: 'A couple of hours', val: 120 },
 ];
 const DRAIN = [
-  { key: 'none', label: 'No — it’s a break', drain: 'none' },
-  { key: 'low', label: 'A little', drain: 'low' },
-  { key: 'high', label: 'Yeah — I’ll be wiped', drain: 'high' },
+  { label: 'No — it’s a break', val: 'none' },
+  { label: 'A little', val: 'low' },
+  { label: 'Yeah — I’ll be wiped', val: 'high' },
 ];
 const WAKE = [
-  { key: 'early', label: 'Early — around 7', wake: 7 * 60 },
-  { key: 'mid', label: 'Around 8:30', wake: 8 * 60 + 30 },
-  { key: 'late', label: 'Around 9:30', wake: 9 * 60 + 30 },
-  { key: 'verylate', label: 'Late — around 11', wake: 11 * 60 },
+  { label: 'Around 7', val: 7 * 60 },
+  { label: '8:30', val: 8 * 60 + 30 },
+  { label: '9:30', val: 9 * 60 + 30 },
+  { label: 'Around 11', val: 11 * 60 },
 ];
 const OFFICE_LEAVE = [
-  { label: 'Around 7:30', min: 7 * 60 + 30 },
-  { label: 'Around 8', min: 8 * 60 },
-  { label: 'Around 8:30', min: 8 * 60 + 30 },
-  { label: 'Around 9', min: 9 * 60 },
+  { label: '7:30', val: 7 * 60 + 30 },
+  { label: '8:00', val: 8 * 60 },
+  { label: '8:30', val: 8 * 60 + 30 },
+  { label: '9:00', val: 9 * 60 },
 ];
 const COMMUTE = [
-  { label: '~30 minutes', min: 30 },
-  { label: '~45 minutes', min: 45 },
-  { label: 'About an hour', min: 60 },
-  { label: 'An hour and a half', min: 90 },
+  { label: '~30 minutes', val: 30 },
+  { label: '~45 minutes', val: 45 },
+  { label: 'About an hour', val: 60 },
+  { label: 'An hour and a half', val: 90 },
 ];
 const OFFICE_BACK = [
-  { label: 'Around 5pm', min: 17 * 60 },
-  { label: 'Around 6pm', min: 18 * 60 },
-  { label: 'Around 7pm', min: 19 * 60 },
-  { label: 'Around 8pm', min: 20 * 60 },
+  { label: 'Around 5pm', val: 17 * 60 },
+  { label: 'Around 6pm', val: 18 * 60 },
+  { label: 'Around 7pm', val: 19 * 60 },
+  { label: 'Around 8pm', val: 20 * 60 },
 ];
 const MEALS = [
   { key: 'breakfast', label: 'Breakfast', minutes: 20 },
@@ -61,9 +60,15 @@ const MEALS = [
   { key: 'dinner', label: 'Dinner', start: 20 * 60, minutes: 60 },
 ];
 const INTENSITY = [
-  { key: 'light', label: 'Light — lots of room', max: 360 },
+  { key: 'light', label: 'Light', max: 360 },
   { key: 'normal', label: 'Normal', max: 300 },
   { key: 'packed', label: 'Packed & draining', max: 150 },
+];
+const STEPS = [
+  { key: 'work', title: 'Work & commute' },
+  { key: 'rhythm', title: 'Your rhythm' },
+  { key: 'life', title: 'Life & meals' },
+  { key: 'focus', title: 'Focus' },
 ];
 
 export async function renderDay(mount, { navigate }) {
@@ -78,8 +83,8 @@ export async function renderDay(mount, { navigate }) {
 
   let date = todayISO();
   let adding = false;
-  let pl = null; // the planning conversation state, when active
-  let planAreas = []; // study areas available (for the focus question)
+  let pl = null; // the planning wizard state, when active
+  let planAreas = []; // study areas available (for the focus step)
   const wrap = el('div', { class: 'day-wrap' });
   mount.append(wrap);
   await paint();
@@ -95,6 +100,10 @@ export async function renderDay(mount, { navigate }) {
   function dateLabel(d) {
     const x = new Date(d + 'T00:00:00');
     return `${MONTHS[x.getMonth()]} ${x.getDate()}`;
+  }
+  function dayWord() {
+    const t = todayISO();
+    return date === t ? 'today' : date === addDaysISO(t, 1) ? 'tomorrow' : `on ${relLabel(date)}`;
   }
 
   async function paint() {
@@ -112,11 +121,7 @@ export async function renderDay(mount, { navigate }) {
       el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = false; pl = null; await paint(); } }),
     ]);
 
-    // In the planning conversation, focus on the question — nothing else.
-    if (pl) {
-      fill(clear(wrap), [journeyCard(settings)]);
-      return;
-    }
+    if (pl) { fill(clear(wrap), [wizardCard(settings)]); return; }
 
     const timeline = el('div', { class: 'timeline' });
     // A commute becomes transit study — hide the raw commute row it's covering.
@@ -133,7 +138,6 @@ export async function renderDay(mount, { navigate }) {
         timeline.append(entries[i].node);
         const cur = entries[i];
         const nxt = entries[i + 1];
-        // A visible breather between two back-to-back study sessions.
         if (nxt && cur.kind === 'block' && nxt.kind === 'block') {
           const gap = nxt.t - cur.end;
           if (gap >= 8) timeline.append(el('div', { class: 'break-row', text: `· ${gap} min break ·` }));
@@ -143,7 +147,7 @@ export async function renderDay(mount, { navigate }) {
 
     const surfaceableAreas = surfaceAreas(items);
     const footer = el('div', { class: 'day-actions' }, [
-      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = { bedtime: settings.bedtime, wake: null, office: null, meals: [], intensity: null, focusArea: null, stage: 'wake-ask', cur: null, activities: [] }; adding = false; await paint(); } }),
+      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = freshPlan(settings); adding = false; await paint(); } }),
       el('div', { class: 'day-sub' }, [
         el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; await paint(); } }),
         (blocks.length || busy.length) ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
@@ -154,182 +158,154 @@ export async function renderDay(mount, { navigate }) {
     fill(clear(wrap), [head, timeline, footer]);
   }
 
-  // ---------- the planning conversation ----------
-  function journeyCard(settings) {
-    const s = pl.stage;
-    // Speak in the right tense for the day being planned.
-    const t = todayISO();
-    const when = date === t ? 'today' : date === addDaysISO(t, 1) ? 'tomorrow' : `on ${relLabel(date)}`;
-    const futureDay = date !== t;
-    const opt = (label, onClick, sub) => el('button', { class: 'q-opt', onclick: onClick }, sub ? [el('span', { text: label }), el('span', { class: 'q-opt-sub', text: sub })] : [label]);
-    const foot = (backTo) => el('div', { class: 'q-foot' }, [
-      backTo ? el('button', { class: 'q-back', text: '← Back', onclick: async () => { pl.stage = backTo; await paint(); } }) : el('span'),
-      el('button', { class: 'q-cancel', text: 'Cancel', onclick: async () => { pl = null; await paint(); } }),
-    ]);
-    const card = (title, subtitle, opts, extra) => el('div', { class: 'journey' }, [
-      el('h2', { class: 'q-title', text: title }),
-      subtitle ? el('p', { class: 'q-sub', text: subtitle }) : null,
-      el('div', { class: 'q-opts' }, opts),
-      extra || null,
-      extra && extra.__foot ? null : foot(backFor(s)),
-    ]);
+  function freshPlan(settings) {
+    // Recurring routine: pre-fill office for your usual office weekdays, with
+    // your usual timing. You can still flip it either way in the wizard.
+    const dow = new Date(date + 'T00:00:00').getDay();
+    const isOffice = (settings.officeDays || [2, 3, 4]).includes(dow);
+    const office = { on: isOffice, leave: settings.officeLeave ?? 510, commute: settings.officeCommute ?? 60, back: settings.officeBack ?? 1080 };
+    return {
+      step: 0,
+      wake: isOffice ? office.leave - (settings.getReady ?? 30) : (settings.wake ? toMinutes(settings.wake) : null),
+      bedtime: settings.bedtime || '23:30',
+      getReady: settings.getReady ?? 30,
+      office,
+      meals: [],
+      gym: { on: false, when: 18 * 60, dur: 60, drain: 'none' },
+      walk: { on: false, when: 17 * 60, dur: 30, drain: 'none' },
+      other: { name: '', when: 16 * 60, dur: 60, drain: 'none' },
+      intensity: 'normal',
+      focusArea: null,
+    };
+  }
 
-    if (s === 'wake-ask') {
-      return card(futureDay ? 'What time are you getting up?' : 'What time are you up?', 'I’ll leave you ~30 minutes to freshen up before anything starts.', [
-        ...WAKE.map((w) => opt(w.label, () => { pl.wake = w.wake; go('office-ask'); })),
-        opt(futureDay ? 'Not sure yet' : 'Been up a while', () => { pl.wake = null; go('office-ask'); }),
-      ]);
-    }
-    if (s === 'office-ask') {
-      return card(`Going into the office ${when}?`, 'I’ll block your work hours, and turn the commute into transit study.', [
-        opt('Yes, in-office', () => { pl.office = {}; go('office-leave'); }),
-        opt(futureDay ? 'No — home that day' : 'No — home today', () => { pl.office = null; go('meals'); }),
-      ]);
-    }
-    if (s === 'office-leave') {
-      return card('When do you leave?', 'Roughly is fine.', OFFICE_LEAVE.map((o) => opt(o.label, () => { pl.office.leave = o.min; go('office-commute'); })));
-    }
-    if (s === 'office-commute') {
-      return card('How long’s the commute — each way?', 'That hour on the train is prime transit-study time.', COMMUTE.map((c) => opt(c.label, () => { pl.office.commute = c.min; go('office-back'); })));
-    }
-    if (s === 'office-back') {
-      return card('Back home around?', null, OFFICE_BACK.map((o) => opt(o.label, () => { pl.office.back = o.min; go('meals'); })));
-    }
-    if (s === 'meals') {
-      const sel = new Set(pl.meals || []);
-      const chips = el('div', { class: 'q-opts' }, MEALS.map((m) => {
-        const c = el('button', { class: 'q-opt' + (sel.has(m.key) ? ' on' : ''), onclick: () => { if (sel.has(m.key)) { sel.delete(m.key); c.classList.remove('on'); } else { sel.add(m.key); c.classList.add('on'); } } }, [m.label]);
-        return c;
+  // ---------- the planning wizard (grouped steps · Next / Back) ----------
+  function wizardCard(settings) {
+    const step = pl.step;
+    let collect = () => {};
+
+    const sel = (options, current) => el('select', { class: 'wz-select' }, options.map((o) => el('option', { value: String(o.val), text: o.label, selected: String(o.val) === String(current) })));
+    const group = (label, ...nodes) => el('div', { class: 'wz-group' }, [el('div', { class: 'wz-glabel', text: label }), ...nodes]);
+    const rows = (pairs) => pairs.map(([label, node]) => el('div', { class: 'wz-row' }, [el('span', { class: 'wz-rl', text: label }), node]));
+    const chipRow = (options, get, set) => {
+      const els = [];
+      return el('div', { class: 'wz-chips' }, options.map((o) => {
+        const c = el('button', { class: 'wz-chip' + (get() === o.val ? ' on' : ''), text: o.label, onclick: () => { set(o.val); els.forEach((x) => x.classList.remove('on')); c.classList.add('on'); } });
+        els.push(c); return c;
       }));
-      return el('div', { class: 'journey' }, [
-        el('h2', { class: 'q-title', text: 'Meals to set time aside for?' }),
-        el('p', { class: 'q-sub', text: 'I’ll block time to make or grab each one. Tap all that apply.' }),
-        chips,
-        el('div', { class: 'q-opts' }, [el('button', { class: 'btn btn-primary btn-block', onclick: () => { pl.meals = [...sel]; go('gym-ask'); } }, ['Continue'])]),
-        foot(pl.office ? 'office-back' : 'office-ask'),
+    };
+    const seg = (onLabel, offLabel, current, setter) => {
+      const a = el('button', { class: 'wz-seg' + (current ? ' on' : ''), text: onLabel });
+      const b = el('button', { class: 'wz-seg' + (!current ? ' on' : ''), text: offLabel });
+      a.addEventListener('click', () => { setter(true); a.classList.add('on'); b.classList.remove('on'); });
+      b.addEventListener('click', () => { setter(false); b.classList.add('on'); a.classList.remove('on'); });
+      return el('div', { class: 'wz-seg-wrap' }, [a, b]);
+    };
+    const activity = (state) => {
+      const whenS = sel(WHEN, state.when);
+      const durS = sel(DUR, state.dur);
+      const drainS = sel(DRAIN, state.drain);
+      const detail = el('div', { class: 'wz-detail' + (state.on ? '' : ' hidden') }, rows([['When', whenS], ['How long', durS], ['Draining?', drainS]]));
+      return { seg: seg('Yes', 'No', state.on, (on) => { state.on = on; detail.classList.toggle('hidden', !on); }), detail, collect: () => { state.when = +whenS.value; state.dur = +durS.value; state.drain = drainS.value; } };
+    };
+
+    function stepRhythm() {
+      const bed = el('input', { type: 'time', class: 'wz-time', value: pl.bedtime || '23:30' });
+      collect = () => { pl.bedtime = bed.value || pl.bedtime; };
+      const nodes = [];
+      if (pl.office.on) {
+        // Wake is fixed by the commute — up in time to get ready and leave.
+        const up = pl.office.leave - (pl.getReady ?? 30);
+        pl.wake = up;
+        nodes.push(group('Morning', el('p', { class: 'wz-note', text: `You’re up around ${fmtTimeOfDay(up)} to make your ${fmtTimeOfDay(pl.office.leave)} commute — so no pre-work study; the day starts on the train.` })));
+      } else {
+        nodes.push(group('When are you up?', chipRow(WAKE, () => pl.wake, (v) => { pl.wake = v; })));
+      }
+      nodes.push(group('Turning in by', el('div', { class: 'wz-inline' }, [bed])));
+      return el('div', { class: 'wz-body' }, nodes);
+    }
+    function stepWork() {
+      const leave = sel(OFFICE_LEAVE, pl.office.leave);
+      const commute = sel(COMMUTE, pl.office.commute);
+      const back = sel(OFFICE_BACK, pl.office.back);
+      const detail = el('div', { class: 'wz-detail' + (pl.office.on ? '' : ' hidden') }, [
+        ...rows([['Leave', leave], ['Commute each way', commute], ['Back home', back]]),
+        el('p', { class: 'wz-note', text: 'Work hours get blocked; the commute becomes transit study.' }),
+      ]);
+      collect = () => { pl.office.leave = +leave.value; pl.office.commute = +commute.value; pl.office.back = +back.value; };
+      return el('div', { class: 'wz-body' }, [
+        group(`Going into the office ${dayWord()}?`, seg('In-office', 'Home', pl.office.on, (on) => { pl.office.on = on; detail.classList.toggle('hidden', !on); }), detail),
       ]);
     }
-    if (s === 'gym-ask') {
-      return card(`Hitting the gym ${when}?`, 'The coach will keep study clear of it.', [
-        opt('Yes', () => beginActivity('gym', 'Gym')),
-        opt('Not ' + (futureDay ? 'then' : 'today'), () => go('walk-ask')),
+    function stepLife() {
+      const mealChips = el('div', { class: 'wz-chips' }, MEALS.map((m) =>
+        el('button', { class: 'wz-chip' + (pl.meals.includes(m.key) ? ' on' : ''), text: m.label, onclick: (e) => { const i = pl.meals.indexOf(m.key); if (i >= 0) pl.meals.splice(i, 1); else pl.meals.push(m.key); e.currentTarget.classList.toggle('on'); } })));
+      const gym = activity(pl.gym);
+      const walk = activity(pl.walk);
+      const oName = el('input', { type: 'text', class: 'wz-input', placeholder: 'e.g. an errand, a call', value: pl.other.name });
+      const oWhen = sel(WHEN, pl.other.when); const oDur = sel(DUR, pl.other.dur); const oDrain = sel(DRAIN, pl.other.drain);
+      collect = () => { gym.collect(); walk.collect(); pl.other.name = oName.value.trim(); pl.other.when = +oWhen.value; pl.other.dur = +oDur.value; pl.other.drain = oDrain.value; };
+      return el('div', { class: 'wz-body' }, [
+        group('Meals to set time aside for', mealChips),
+        group('Gym', gym.seg, gym.detail),
+        group('Walk', walk.seg, walk.detail),
+        group('Anything else', oName, el('div', { class: 'wz-detail' }, rows([['When', oWhen], ['How long', oDur], ['Draining?', oDrain]]))),
       ]);
     }
-    if (s === 'walk-ask') {
-      return card(`Going for a walk ${when}?`, null, [
-        opt('Yes', () => beginActivity('walk', 'Walk')),
-        opt('Not ' + (futureDay ? 'then' : 'today'), () => go('else-ask')),
+    function stepFocus() {
+      collect = () => {};
+      return el('div', { class: 'wz-body' }, [
+        group('How heavy is your day?', chipRow(INTENSITY.map((i) => ({ label: i.label, val: i.key })), () => pl.intensity, (v) => { pl.intensity = v; })),
+        group('Where’s your head?', chipRow([{ label: 'You take charge', val: null }, ...planAreas.slice(0, 3).map((a) => ({ label: `Lean into ${a}`, val: a }))], () => pl.focusArea, (v) => { pl.focusArea = v; })),
       ]);
     }
-    if (s === 'when') {
-      return card('When are you going?', pl.cur.name + ' — roughly is fine.', WHEN.map((w) => opt(w.label, () => { pl.cur.when = w; go('dur'); })));
-    }
-    if (s === 'dur') {
-      return card('Roughly how long?', pl.cur.name, DUR.map((d) => opt(d.label, () => { pl.cur.dur = d; go('drain'); })));
-    }
-    if (s === 'drain') {
-      return card('Will it drain you mentally?', `${pl.cur.name} — so I don’t line up hard studying right after.`, DRAIN.map((d) => opt(d.label, () => finishActivity(d.drain))));
-    }
-    if (s === 'else-ask') {
-      const summary = pl.activities.length ? `So far: ${pl.activities.map((a) => a.name).join(', ')}.` : null;
-      return card(`Anything else taking your time ${when}?`, summary || 'Errands, an appointment, a call…', [
-        opt('Add something', () => go('else-label')),
-        opt('No, that’s everything', () => go('intensity')),
-      ]);
-    }
-    if (s === 'intensity') {
-      return card('How heavy is your day?', 'Meetings, life, energy — how much is going on outside study.', INTENSITY.map((i) => opt(i.label, () => { pl.intensity = i; go('focus'); })));
-    }
-    if (s === 'focus') {
-      const opts = [opt('You take charge', () => { pl.focusArea = null; go('bedtime'); }, 'I’ll balance it')];
-      for (const a of planAreas.slice(0, 3)) opts.push(opt(`Lean into ${a}`, () => { pl.focusArea = a; go('bedtime'); }));
-      return card('Where’s your head today?', null, opts);
-    }
-    if (s === 'else-label') {
-      const input = el('input', { type: 'text', class: 'q-input', placeholder: 'e.g. Office work', autofocus: true });
-      const cont = el('div', { class: 'q-opts' }, [
-        el('button', { class: 'q-opt', onclick: () => { const v = input.value.trim(); if (v) beginActivity('else', v); } }, ['Continue']),
-      ]);
-      return el('div', { class: 'journey' }, [
-        el('h2', { class: 'q-title', text: 'What is it?' }),
-        input, cont, foot('else-ask'),
-      ]);
-    }
-    if (s === 'bedtime') {
-      const bedInput = el('input', { type: 'time', class: 'blk-time q-time', value: pl.bedtime || '23:30' });
-      const cont = el('div', { class: 'q-opts' }, [
-        el('button', { class: 'q-opt', onclick: () => { pl.bedtime = bedInput.value || pl.bedtime; go('go'); } }, ['That’s my night']),
-      ]);
-      return el('div', { class: 'journey' }, [
-        el('h2', { class: 'q-title', text: 'When are you turning in?' }),
-        el('p', { class: 'q-sub', text: 'I’ll keep the last of the day gentle and stop pushing deep work near this.' }),
-        el('div', { class: 'q-bedrow' }, [el('span', { class: 'muted', text: 'Bed by' }), bedInput]),
-        cont, foot('focus'),
-      ]);
-    }
-    // s === 'go' — recap + commit
-    const lines = pl.activities.map((a) => `${a.name} · ${a.when.label.toLowerCase()} · ~${a.dur.minutes}m${a.drain !== 'none' ? ' · draining' : ''}`);
-    return el('div', { class: 'journey' }, [
-      el('h2', { class: 'q-title', text: 'Here’s your day' }),
-      lines.length
-        ? el('ul', { class: 'q-recap' }, lines.map((l) => el('li', { text: l })))
-        : el('p', { class: 'q-sub', text: 'No commitments — I’ll lay study across the open day.' }),
-      el('p', { class: 'q-sub', text: `Bed by ${fmtTimeOfDay(toMinutes(pl.bedtime || '23:30'))}. I’ll fit study into the gaps, hardest work when you’re freshest.` }),
-      el('div', { class: 'q-opts' }, [
-        el('button', { class: 'btn btn-primary btn-block', onclick: () => commit() }, ['Plan my day around this']),
-      ]),
-      foot('bedtime'),
+
+    const body = [stepWork, stepRhythm, stepLife, stepFocus][step]();
+
+    const dots = el('div', { class: 'wz-dots' }, STEPS.map((_, i) => el('span', { class: 'wz-dot' + (i === step ? ' on' : i < step ? ' done' : '') })));
+    const nav = el('div', { class: 'wz-nav' }, [
+      step > 0
+        ? el('button', { class: 'q-back', text: '← Back', onclick: async () => { collect(); pl.step -= 1; await paint(); } })
+        : el('button', { class: 'q-cancel', text: 'Cancel', onclick: async () => { pl = null; await paint(); } }),
+      el('button', { class: 'btn btn-primary wz-next', text: step === STEPS.length - 1 ? 'Plan my day' : 'Next →', onclick: async () => { collect(); if (step === STEPS.length - 1) await commit(); else { pl.step += 1; await paint(); } } }),
     ]);
 
-    async function go(stage) { pl.stage = stage; await paint(); }
-    async function beginActivity(key, name) { pl.cur = { key, name }; pl.stage = 'when'; await paint(); }
-    async function finishActivity(drain) {
-      pl.cur.drain = drain;
-      pl.activities.push(pl.cur);
-      const from = pl.cur.key;
-      pl.cur = null;
-      pl.stage = from === 'gym' ? 'walk-ask' : 'else-ask';
-      await paint();
-    }
+    return el('div', { class: 'wizard' }, [
+      el('div', { class: 'wz-top' }, [
+        el('div', { class: 'wz-step', text: `Step ${step + 1} of ${STEPS.length}` }),
+        el('h2', { class: 'wz-h', text: STEPS[step].title }),
+      ]),
+      body, dots, nav,
+    ]);
+
     async function commit() {
-      await setSettings({
-        bedtime: pl.bedtime || settings.bedtime,
-        ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}),
-      });
-      // Office: commute out (transit study) + work hours (draining) + commute back.
+      await setSettings({ bedtime: pl.bedtime || settings.bedtime, ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}) });
       const o = pl.office;
-      if (o && o.leave != null && o.commute != null && o.back != null) {
+      if (o.on) {
+        // Remember this as the usual office timing for next time.
+        await setSettings({ officeLeave: o.leave, officeCommute: o.commute, officeBack: o.back });
         await putBusy({ date, start: o.leave, minutes: o.commute, label: 'Commute', transit: true });
         const workStart = o.leave + o.commute;
         const workEnd = Math.max(workStart + 30, o.back - o.commute);
         await putBusy({ date, start: workStart, minutes: workEnd - workStart, label: 'Office', drain: 'high' });
         await putBusy({ date, start: o.back - o.commute, minutes: o.commute, label: 'Commute', transit: true });
       }
-      // Meals — prep/order time baked into the duration.
       const wakeMin = pl.wake != null ? pl.wake : 8 * 60;
-      for (const key of (pl.meals || [])) {
+      for (const key of pl.meals) {
         const m = MEALS.find((x) => x.key === key);
         if (!m) continue;
-        if (key === 'lunch' && o) continue; // lunch is eaten at the office
+        if (key === 'lunch' && o.on) continue; // eaten at the office
         const start = key === 'breakfast' ? wakeMin + 35 : m.start;
         await putBusy({ date, start, minutes: m.minutes, label: m.label });
       }
-      for (const a of pl.activities) {
-        await putBusy({ date, start: a.when.start, minutes: a.dur.minutes, label: a.name, drain: a.drain });
-      }
-      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: pl.intensity ? pl.intensity.max : undefined });
+      if (pl.gym.on) await putBusy({ date, start: pl.gym.when, minutes: pl.gym.dur, label: 'Gym', drain: pl.gym.drain });
+      if (pl.walk.on) await putBusy({ date, start: pl.walk.when, minutes: pl.walk.dur, label: 'Walk', drain: pl.walk.drain });
+      if (pl.other.name) await putBusy({ date, start: pl.other.when, minutes: pl.other.dur, label: pl.other.name, drain: pl.other.drain });
+      const intensity = INTENSITY.find((i) => i.key === pl.intensity);
+      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: intensity ? intensity.max : undefined });
       pl = null;
       await paint();
     }
-  }
-
-  function backFor(stage) {
-    return {
-      'office-ask': 'wake-ask', 'office-leave': 'office-ask', 'office-commute': 'office-leave', 'office-back': 'office-commute',
-      'gym-ask': 'meals', 'walk-ask': 'gym-ask', 'else-ask': 'walk-ask', intensity: 'else-ask', focus: 'intensity',
-      when: pl && pl.cur && pl.cur.key === 'gym' ? 'gym-ask' : pl && pl.cur && pl.cur.key === 'walk' ? 'walk-ask' : 'else-label',
-      dur: 'when', drain: 'dur',
-    }[stage] || null;
   }
 
   function blockCard(b) {
