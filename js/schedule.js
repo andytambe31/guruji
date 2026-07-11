@@ -78,13 +78,14 @@ function modeFit(mode, load) {
   return { DESK: 0.5, TRANSIT: 1.5, WIND_DOWN: 3 }[mode] ?? 1.5;
 }
 
-// A realistic break after a session — longer after deep work, and longer still
-// when you're already loaded (the break is where load recovers).
-function breakAfter(mode, loadAfter) {
-  let brk = mode === 'DESK' ? 15 : mode === 'TRANSIT' ? 12 : 8;
-  if (loadAfter > 65) brk += 8;
-  if (loadAfter > 82) brk += 10;
-  return Math.min(brk, 30);
+// A realistic, structured break after a session: a proper long reset every
+// ~2 hours of study, otherwise 12–20 min scaled to the session's length and
+// how loaded you are. Never the pointless 8-minute stub.
+function breakAfter(minutes, loadAfter, sinceLong = 0) {
+  if (sinceLong >= 110) return 30;                 // long break — stretch, eat, walk
+  let brk = minutes >= 50 ? 20 : minutes >= 30 ? 15 : 12;
+  if (loadAfter > 70) brk += 5;
+  return Math.min(brk, 25);
 }
 
 // Per-area / per-item session caps so a day is full but not absurd.
@@ -97,18 +98,20 @@ const ITEM_CAP = 2;                  // don't schedule the same topic more than 
 // climbs, breaks between, tapering off when you're too spent to absorb more.
 // `cands` is [{ area, item }] — the next surfaceable item per area.
 export function planDay(date, cands, opts = {}) {
-  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [] } = opts;
+  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null } = opts;
   // Fresh sessions route around both commitments and any already-pinned blocks.
   const windows = freeWindows(startMin, endMin, [...busy, ...pinned]);
   const placed = [];
   const itemCount = new Map();
   const areaCount = new Map();
   let studyTotal = 0;
+  let sinceLong = 0;
   let lastArea = null;
 
   const capForArea = (mode) => AREA_CAP[mode] ?? AREA_CAP_DEFAULT;
   const score = (c, load) => modeFit(c.item.mode, load)
     + (c.area !== lastArea ? 0.6 : 0)
+    + (focusArea && c.area === focusArea ? 1.3 : 0)
     - (itemCount.get(c.item.id) || 0) * 1.5;
 
   for (const [wStart, wEnd] of windows) {
@@ -136,10 +139,13 @@ export function planDay(date, cands, opts = {}) {
       itemCount.set(pick.item.id, (itemCount.get(pick.item.id) || 0) + 1);
       areaCount.set(pick.area, (areaCount.get(pick.area) || 0) + 1);
       studyTotal += minutes;
+      sinceLong += minutes;
       lastArea = pick.area;
 
       const loadAfter = predictLoadAt(cursor + minutes, { context, placed: [...pinned, ...placed], busy });
-      cursor += minutes + breakAfter(pick.item.mode, loadAfter);
+      const brk = breakAfter(minutes, loadAfter, sinceLong);
+      if (brk >= 30) sinceLong = 0;
+      cursor += minutes + brk;
     }
   }
   return placed;
@@ -153,7 +159,7 @@ export function sequence(blocks, { startMin = DAY_START, busy = [] } = {}) {
   for (const b of blocks) {
     const s = pushPastFixed(Math.max(cursor, startMin), b.minutes, fixed);
     b.start = s;
-    cursor = s + b.minutes + breakAfter(b.mode, 55);
+    cursor = s + b.minutes + breakAfter(b.minutes, 50, 0);
   }
   return blocks.sort((a, b) => a.start - b.start);
 }

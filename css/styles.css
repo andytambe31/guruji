@@ -224,7 +224,9 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .drop-line { height: 2px; background: var(--accent, var(--text)); border-radius: 2px; margin: 6px 0; opacity: .7; }
 
 .blk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.blk-arearow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .blk-area { font-size: 17px; font-weight: 620; letter-spacing: -.02em; color: var(--text); }
+.blk-commute { font-size: 11px; font-weight: 600; color: var(--transit); background: rgba(15,157,107,.12); padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
 .blk-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .blk-when { display: flex; align-items: center; gap: 6px; margin: 2px 0 11px; }
 .blk-time { appearance: none; background: none; border: none; padding: 0; color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
@@ -266,6 +268,7 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .q-opts { display: flex; flex-direction: column; gap: 9px; }
 .q-opt { appearance: none; cursor: pointer; text-align: center; background: transparent; border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 15px 16px; font: inherit; font-size: 15px; font-weight: 550; color: var(--text); display: flex; justify-content: center; align-items: center; gap: 10px; transition: border-color .15s, background .15s; }
 .q-opt:hover { border-color: var(--text-faint); background: var(--bg-soft); }
+.q-opt.on { border-color: var(--text); background: var(--bg-soft); }
 .q-opt-sub { color: var(--text-faint); font-size: 13px; font-weight: 400; }
 .q-input { font: inherit; font-size: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: transparent; color: var(--text); text-align: center; }
 .q-bedrow { display: flex; align-items: center; justify-content: center; gap: 10px; }

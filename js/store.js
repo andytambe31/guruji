@@ -244,8 +244,8 @@ export async function getBusyForDate(date) {
   const rows = await getAll(STORES.schedule);
   return rows.filter((r) => r && r.kind === 'busy' && r.date === date).sort((a, b) => a.start - b.start);
 }
-export async function putBusy({ date, start, minutes, label, drain }) {
-  const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy', drain: drain || 'none' };
+export async function putBusy({ date, start, minutes, label, drain, transit }) {
+  const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy', drain: drain || 'none', transit: !!transit };
   await put(STORES.schedule, rec);
   await reflowDate(date);
   return rec;
@@ -269,7 +269,7 @@ export async function reflowDate(date) {
 
 // Auto-plan a date: lay the next surfaceable item per area into the free
 // windows around commitments, load-aware, capped at bedtime. Keeps pinned/done.
-export async function autoPlanDay(date, { now = new Date() } = {}) {
+export async function autoPlanDay(date, { now = new Date(), focusArea = null, maxStudyMinutes } = {}) {
   const items = await getItems();
   const statusById = new Map(items.map((i) => [i.id, i.status]));
 
@@ -293,6 +293,25 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
   const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
   const endMin = Math.min(DAY_END, bedMin);
   const taken = new Set(keep.map((b) => b.itemId));
+
+  // Commute windows (transit commitments) become transit-study sessions — that
+  // dead hour on the train is exactly when concept-level work fits.
+  const commuteWindows = busy.filter((b) => b.transit).sort((a, b) => a.start - b.start);
+  const transitItems = surfaceable.filter((it) => it.mode === 'TRANSIT' && !taken.has(it.id));
+  const commuteBlocks = [];
+  let tIdx = 0;
+  for (const cw of commuteWindows) {
+    const it = transitItems[tIdx];
+    if (!it) break;
+    tIdx++;
+    taken.add(it.id);
+    commuteBlocks.push({
+      kind: 'block', id: uid('blk'), itemId: it.id, area: it.area || 'Study', title: it.title || '',
+      mode: 'TRANSIT', date, start: cw.start, minutes: Math.min(clampDur(it.estMinutes), cw.minutes),
+      status: 'planned', pinned: true, onCommute: true,
+    });
+  }
+
   const cands = surfaceable
     .filter((it) => !taken.has(it.id))
     .map((it) => ({ area: it.area || 'Study', item: it }));
@@ -304,14 +323,18 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
     ? Math.max(Math.ceil((nowMinutes(now) + 5) / 15) * 15, wakeStart)
     : wakeStart;
 
-  // Pinned/done blocks already on the day are obstacles the fresh plan flows
-  // around (and their study load counts toward the prediction).
-  const pinned = keep.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode }));
-  const planOpts = { startMin, endMin, busy, context, pinned };
+  // Obstacles the fresh plan flows around: all commitments (incl. full commute
+  // windows), kept pinned/done blocks, and the commute-study we just placed.
+  const pinned = [
+    ...keep.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode })),
+    ...commuteWindows.map((b) => ({ start: b.start, minutes: b.minutes, mode: 'TRANSIT' })),
+    ...commuteBlocks.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode })),
+  ];
+  const planOpts = { startMin, endMin, busy: busy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes };
   // If it's too late for anything to fit today, still propose from the day start.
   let fresh = planDay(date, cands, planOpts);
-  if (!fresh.length && cands.length) fresh = planDay(date, cands, { endMin, busy, context, pinned });
-  const rows = fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }));
+  if (!fresh.length && cands.length) fresh = planDay(date, cands, { ...planOpts, startMin: undefined });
+  const rows = [...commuteBlocks, ...fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }))];
   // No final reflow here — planDay already lays a clean, break-scaled layout
   // that respects the wake start and routes around commitments + pinned blocks.
   await bulkPut(STORES.schedule, rows);
@@ -359,6 +382,40 @@ export async function resequenceBlocks(date, orderedIds) {
 
   sequence(planned, { startMin, busy: [...busy, ...done] });
   await bulkPut(STORES.schedule, planned.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  return getBlocksForDate(date);
+}
+
+// Running late: push this block (and everything after it) later by `delta`
+// minutes, re-sequencing the tail around commitments. If the tail spills past
+// bedtime, the last sessions shrink to fit, then drop — so the day self-heals.
+export async function pushBlock(id, delta) {
+  const b0 = await get(STORES.schedule, id);
+  if (!b0) return null;
+  const date = b0.date;
+  const [blocks, busy, settings] = await Promise.all([
+    getBlocksForDate(date), getBusyForDate(date), getSettings(),
+  ]);
+  const planned = blocks.filter((b) => b.status !== 'done').sort((a, b) => a.start - b.start);
+  const done = blocks.filter((b) => b.status === 'done');
+  const idx = planned.findIndex((b) => b.id === id);
+  if (idx < 0) return null;
+
+  const head = planned.slice(0, idx);
+  const tail = planned.slice(idx);
+  tail[0].start = Math.max(0, tail[0].start + delta);
+  sequence(tail, { startMin: tail[0].start, busy: [...busy, ...done, ...head] });
+
+  const bed = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  const kept = [];
+  const dropped = [];
+  for (const b of tail) {
+    if (b.start >= bed) { dropped.push(b); continue; }
+    if (b.start + b.minutes > bed) b.minutes = bed - b.start; // squeeze into what's left
+    if (b.minutes < 15) { dropped.push(b); continue; }
+    kept.push(b);
+  }
+  for (const d of dropped) await del(STORES.schedule, d.id);
+  await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block', pinned: false })));
   return getBlocksForDate(date);
 }
 
@@ -513,7 +570,7 @@ export async function buildExport() {
   ]);
   const allSchedule = await getAll(STORES.schedule);
   const busy = allSchedule.filter((r) => r && r.kind === 'busy')
-    .map((b) => ({ id: b.id, date: b.date, start: b.start, minutes: b.minutes, label: b.label, drain: b.drain || 'none' }));
+    .map((b) => ({ id: b.id, date: b.date, start: b.start, minutes: b.minutes, label: b.label, drain: b.drain || 'none', transit: !!b.transit }));
 
   const itemsByPhase = new Map();
   for (const it of items) {
@@ -555,7 +612,7 @@ export async function buildExport() {
   // Blocks carry only what's needed to reconstruct the schedule (drop kind).
   const blocksOut = blocks.map((b) => ({
     id: b.id, itemId: b.itemId, area: b.area, title: b.title, mode: b.mode,
-    date: b.date, start: b.start, minutes: b.minutes, status: b.status, pinned: !!b.pinned,
+    date: b.date, start: b.start, minutes: b.minutes, status: b.status, pinned: !!b.pinned, onCommute: !!b.onCommute,
   }));
 
   return {

@@ -7,7 +7,7 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings,
-  resequenceBlocks, depsSatisfied,
+  resequenceBlocks, pushBlock, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -37,6 +37,34 @@ const WAKE = [
   { key: 'late', label: 'Around 9:30', wake: 9 * 60 + 30 },
   { key: 'verylate', label: 'Late — around 11', wake: 11 * 60 },
 ];
+const OFFICE_LEAVE = [
+  { label: 'Around 7:30', min: 7 * 60 + 30 },
+  { label: 'Around 8', min: 8 * 60 },
+  { label: 'Around 8:30', min: 8 * 60 + 30 },
+  { label: 'Around 9', min: 9 * 60 },
+];
+const COMMUTE = [
+  { label: '~30 minutes', min: 30 },
+  { label: '~45 minutes', min: 45 },
+  { label: 'About an hour', min: 60 },
+  { label: 'An hour and a half', min: 90 },
+];
+const OFFICE_BACK = [
+  { label: 'Around 5pm', min: 17 * 60 },
+  { label: 'Around 6pm', min: 18 * 60 },
+  { label: 'Around 7pm', min: 19 * 60 },
+  { label: 'Around 8pm', min: 20 * 60 },
+];
+const MEALS = [
+  { key: 'breakfast', label: 'Breakfast', minutes: 20 },
+  { key: 'lunch', label: 'Lunch', start: 13 * 60, minutes: 45 },
+  { key: 'dinner', label: 'Dinner', start: 20 * 60, minutes: 60 },
+];
+const INTENSITY = [
+  { key: 'light', label: 'Light — lots of room', max: 360 },
+  { key: 'normal', label: 'Normal', max: 300 },
+  { key: 'packed', label: 'Packed & draining', max: 150 },
+];
 
 export async function renderDay(mount, { navigate }) {
   if (!(await hasPlan())) {
@@ -51,6 +79,7 @@ export async function renderDay(mount, { navigate }) {
   let date = todayISO();
   let adding = false;
   let pl = null; // the planning conversation state, when active
+  let planAreas = []; // study areas available (for the focus question)
   const wrap = el('div', { class: 'day-wrap' });
   mount.append(wrap);
   await paint();
@@ -72,6 +101,7 @@ export async function renderDay(mount, { navigate }) {
     const [blocks, busy, items, settings] = await Promise.all([
       getBlocksForDate(date), getBusyForDate(date), getItems(), getSettings(),
     ]);
+    planAreas = [...new Set(items.map((i) => i.area).filter(Boolean).filter((a) => a !== 'Reading'))];
 
     const head = el('div', { class: 'day-head' }, [
       el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint(); } }),
@@ -89,9 +119,12 @@ export async function renderDay(mount, { navigate }) {
     }
 
     const timeline = el('div', { class: 'timeline' });
+    // A commute becomes transit study — hide the raw commute row it's covering.
+    const covered = (bb) => bb.transit && blocks.some((bl) => bl.onCommute && bl.start < bb.start + bb.minutes && bl.start + bl.minutes > bb.start);
+    const busyShown = busy.filter((bb) => !covered(bb));
     const entries = [
       ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b) })),
-      ...busy.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
+      ...busyShown.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
     ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
     if (!entries.length) {
       timeline.append(el('p', { class: 'muted day-empty', text: `Nothing booked for ${relLabel(date).toLowerCase()}. Let the coach plan it around your day.` }));
@@ -110,7 +143,7 @@ export async function renderDay(mount, { navigate }) {
 
     const surfaceableAreas = surfaceAreas(items);
     const footer = el('div', { class: 'day-actions' }, [
-      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = { bedtime: settings.bedtime, wake: null, stage: 'wake-ask', cur: null, activities: [] }; adding = false; await paint(); } }),
+      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = { bedtime: settings.bedtime, wake: null, office: null, meals: [], intensity: null, focusArea: null, stage: 'wake-ask', cur: null, activities: [] }; adding = false; await paint(); } }),
       el('div', { class: 'day-sub' }, [
         el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; await paint(); } }),
         (blocks.length || busy.length) ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
@@ -143,8 +176,37 @@ export async function renderDay(mount, { navigate }) {
 
     if (s === 'wake-ask') {
       return card(futureDay ? 'What time are you getting up?' : 'What time are you up?', 'I’ll leave you ~30 minutes to freshen up before anything starts.', [
-        ...WAKE.map((w) => opt(w.label, () => { pl.wake = w.wake; go('gym-ask'); })),
-        opt(futureDay ? 'Not sure yet' : 'Been up a while', () => { pl.wake = null; go('gym-ask'); }),
+        ...WAKE.map((w) => opt(w.label, () => { pl.wake = w.wake; go('office-ask'); })),
+        opt(futureDay ? 'Not sure yet' : 'Been up a while', () => { pl.wake = null; go('office-ask'); }),
+      ]);
+    }
+    if (s === 'office-ask') {
+      return card(`Going into the office ${when}?`, 'I’ll block your work hours, and turn the commute into transit study.', [
+        opt('Yes, in-office', () => { pl.office = {}; go('office-leave'); }),
+        opt(futureDay ? 'No — home that day' : 'No — home today', () => { pl.office = null; go('meals'); }),
+      ]);
+    }
+    if (s === 'office-leave') {
+      return card('When do you leave?', 'Roughly is fine.', OFFICE_LEAVE.map((o) => opt(o.label, () => { pl.office.leave = o.min; go('office-commute'); })));
+    }
+    if (s === 'office-commute') {
+      return card('How long’s the commute — each way?', 'That hour on the train is prime transit-study time.', COMMUTE.map((c) => opt(c.label, () => { pl.office.commute = c.min; go('office-back'); })));
+    }
+    if (s === 'office-back') {
+      return card('Back home around?', null, OFFICE_BACK.map((o) => opt(o.label, () => { pl.office.back = o.min; go('meals'); })));
+    }
+    if (s === 'meals') {
+      const sel = new Set(pl.meals || []);
+      const chips = el('div', { class: 'q-opts' }, MEALS.map((m) => {
+        const c = el('button', { class: 'q-opt' + (sel.has(m.key) ? ' on' : ''), onclick: () => { if (sel.has(m.key)) { sel.delete(m.key); c.classList.remove('on'); } else { sel.add(m.key); c.classList.add('on'); } } }, [m.label]);
+        return c;
+      }));
+      return el('div', { class: 'journey' }, [
+        el('h2', { class: 'q-title', text: 'Meals to set time aside for?' }),
+        el('p', { class: 'q-sub', text: 'I’ll block time to make or grab each one. Tap all that apply.' }),
+        chips,
+        el('div', { class: 'q-opts' }, [el('button', { class: 'btn btn-primary btn-block', onclick: () => { pl.meals = [...sel]; go('gym-ask'); } }, ['Continue'])]),
+        foot(pl.office ? 'office-back' : 'office-ask'),
       ]);
     }
     if (s === 'gym-ask') {
@@ -170,10 +232,18 @@ export async function renderDay(mount, { navigate }) {
     }
     if (s === 'else-ask') {
       const summary = pl.activities.length ? `So far: ${pl.activities.map((a) => a.name).join(', ')}.` : null;
-      return card(`Anything else taking your time ${when}?`, summary || 'Office work, errands, an appointment…', [
+      return card(`Anything else taking your time ${when}?`, summary || 'Errands, an appointment, a call…', [
         opt('Add something', () => go('else-label')),
-        opt('No, that’s everything', () => go('bedtime')),
+        opt('No, that’s everything', () => go('intensity')),
       ]);
+    }
+    if (s === 'intensity') {
+      return card('How heavy is your day?', 'Meetings, life, energy — how much is going on outside study.', INTENSITY.map((i) => opt(i.label, () => { pl.intensity = i; go('focus'); })));
+    }
+    if (s === 'focus') {
+      const opts = [opt('You take charge', () => { pl.focusArea = null; go('bedtime'); }, 'I’ll balance it')];
+      for (const a of planAreas.slice(0, 3)) opts.push(opt(`Lean into ${a}`, () => { pl.focusArea = a; go('bedtime'); }));
+      return card('Where’s your head today?', null, opts);
     }
     if (s === 'else-label') {
       const input = el('input', { type: 'text', class: 'q-input', placeholder: 'e.g. Office work', autofocus: true });
@@ -194,7 +264,7 @@ export async function renderDay(mount, { navigate }) {
         el('h2', { class: 'q-title', text: 'When are you turning in?' }),
         el('p', { class: 'q-sub', text: 'I’ll keep the last of the day gentle and stop pushing deep work near this.' }),
         el('div', { class: 'q-bedrow' }, [el('span', { class: 'muted', text: 'Bed by' }), bedInput]),
-        cont, foot('else-ask'),
+        cont, foot('focus'),
       ]);
     }
     // s === 'go' — recap + commit
@@ -226,17 +296,40 @@ export async function renderDay(mount, { navigate }) {
         bedtime: pl.bedtime || settings.bedtime,
         ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}),
       });
+      // Office: commute out (transit study) + work hours (draining) + commute back.
+      const o = pl.office;
+      if (o && o.leave != null && o.commute != null && o.back != null) {
+        await putBusy({ date, start: o.leave, minutes: o.commute, label: 'Commute', transit: true });
+        const workStart = o.leave + o.commute;
+        const workEnd = Math.max(workStart + 30, o.back - o.commute);
+        await putBusy({ date, start: workStart, minutes: workEnd - workStart, label: 'Office', drain: 'high' });
+        await putBusy({ date, start: o.back - o.commute, minutes: o.commute, label: 'Commute', transit: true });
+      }
+      // Meals — prep/order time baked into the duration.
+      const wakeMin = pl.wake != null ? pl.wake : 8 * 60;
+      for (const key of (pl.meals || [])) {
+        const m = MEALS.find((x) => x.key === key);
+        if (!m) continue;
+        if (key === 'lunch' && o) continue; // lunch is eaten at the office
+        const start = key === 'breakfast' ? wakeMin + 35 : m.start;
+        await putBusy({ date, start, minutes: m.minutes, label: m.label });
+      }
       for (const a of pl.activities) {
         await putBusy({ date, start: a.when.start, minutes: a.dur.minutes, label: a.name, drain: a.drain });
       }
-      await autoPlanDay(date);
+      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: pl.intensity ? pl.intensity.max : undefined });
       pl = null;
       await paint();
     }
   }
 
   function backFor(stage) {
-    return { when: pl && pl.cur && pl.cur.key === 'gym' ? 'gym-ask' : pl && pl.cur && pl.cur.key === 'walk' ? 'walk-ask' : 'else-label', dur: 'when', drain: 'dur', 'gym-ask': 'wake-ask', 'walk-ask': 'gym-ask', 'else-ask': 'walk-ask' }[stage] || null;
+    return {
+      'office-ask': 'wake-ask', 'office-leave': 'office-ask', 'office-commute': 'office-leave', 'office-back': 'office-commute',
+      'gym-ask': 'meals', 'walk-ask': 'gym-ask', 'else-ask': 'walk-ask', intensity: 'else-ask', focus: 'intensity',
+      when: pl && pl.cur && pl.cur.key === 'gym' ? 'gym-ask' : pl && pl.cur && pl.cur.key === 'walk' ? 'walk-ask' : 'else-label',
+      dur: 'when', drain: 'dur',
+    }[stage] || null;
   }
 
   function blockCard(b) {
@@ -246,7 +339,10 @@ export async function renderDay(mount, { navigate }) {
       done ? null : el('button', { class: 'blk-grip', 'aria-label': 'Drag to reorder', title: 'Drag to reorder', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']),
       el('div', { class: 'blk-body' }, [
         el('div', { class: 'blk-head' }, [
-          el('div', { class: 'blk-area', text: b.area }),
+          el('div', { class: 'blk-arearow' }, [
+            el('span', { class: 'blk-area', text: b.area }),
+            b.onCommute ? el('span', { class: 'blk-commute', text: 'on the commute' }) : null,
+          ]),
           el('div', { class: 'blk-dur', text: `${b.minutes} min` }),
         ]),
         el('div', { class: 'blk-when' }, [
@@ -258,6 +354,7 @@ export async function renderDay(mount, { navigate }) {
         ]),
         el('div', { class: 'blk-acts' }, [
           done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
+          done ? null : el('button', { class: 'blk-act', text: '+15m', title: 'Running late — push the rest of the day', onclick: async () => { await pushBlock(b.id, 15); await paint(); } }),
           el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
           done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
           el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
