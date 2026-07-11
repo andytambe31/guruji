@@ -157,7 +157,7 @@ export async function renderNow(mount, { navigate }) {
       const hidden = ctxChips.hasAttribute('hidden');
       if (hidden) ctxChips.removeAttribute('hidden'); else ctxChips.setAttribute('hidden', '');
     } }, [
-      el('span', { text: `Coming in from · ${ctxNow}` }),
+      el('span', { text: `Right now · ${ctxNow}` }),
       el('span', { class: 'ctx-caret', text: '›' }),
     ]);
 

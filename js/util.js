@@ -107,8 +107,8 @@ export function addDaysISO(iso, n) {
 // (your break). Reinforces quality over quantity, nothing more.
 // Life-context that arrives already elevated and discharges over time.
 export const CONTEXTS = {
-  commuted: { label: 'A commute', level: 24, tau: 60 },
-  office: { label: 'The office', level: 38, tau: 130 },
+  commuted: { label: 'Just commuted', level: 24, tau: 60 },
+  office: { label: 'After work', level: 38, tau: 130 },
   drained: { label: 'Drained', level: 48, tau: 150 },
 };
 
