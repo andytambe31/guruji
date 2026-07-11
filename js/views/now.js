@@ -59,43 +59,61 @@ export async function renderNow(mount, { navigate }) {
   }
 
   function render() {
-    const item = nextForArea(selectedArea);
-    const reading = isHabit(selectedArea);
+    // Build the shell once; only the per-area bits (eyebrow, coach, CTA) swap,
+    // so switching areas animates smoothly instead of rebuilding everything.
+    const eyebrowEl = el('p', { class: 'eyebrow swap' });
+    const coachEl = el('div', { class: 'coach swap' });
+    const ctaWrap = el('div', { class: 'cta-wrap swap' });
 
-    const areaChips = el('div', { class: 'areas' }, allAreas.map((a) =>
-      el('button', {
-        class: 'ctx-chip' + (a === selectedArea ? ' on' : ''),
-        text: a,
-        onclick: () => { selectedArea = a; render(); },
-      })));
+    const chipEls = new Map();
+    const areasEl = el('div', { class: 'areas' }, allAreas.map((a) => {
+      const btn = el('button', { class: 'ctx-chip' + (a === selectedArea ? ' on' : ''), text: a, onclick: () => selectArea(a) });
+      chipEls.set(a, btn);
+      return btn;
+    }));
 
-    const cta = item
-      ? el('button', {
-          class: 'btn btn-primary btn-lg btn-block',
-          text: reading ? 'Start reading' : 'Start studying',
-          onclick: () => navigate(`/prep/${item.id}`),
-        })
-      : el('button', {
-          class: 'btn btn-ghost btn-lg btn-block',
-          text: 'See the map',
-          onclick: () => navigate('/plan'),
-        });
+    const cog = el('div', { class: `cog tone-${status.tone}` }, [
+      el('div', { class: 'cog-row' }, [
+        el('span', { class: 'cog-label', text: 'Cognitive load' }),
+        el('span', { class: 'cog-pct', text: `${load}%` }),
+      ]),
+      el('div', { class: 'cog-track' }, [el('div', { class: 'cog-fill', style: `width:${load}%` })]),
+      el('div', { class: 'cog-note', text: status.note }),
+    ]);
 
     fill(clear(wrap), [
-      item && item.week != null && item.week > 0 ? el('p', { class: 'eyebrow', text: `Week ${item.week}` }) : null,
-      el('div', { class: 'coach', text: coachFor(selectedArea) }),
+      eyebrowEl, coachEl,
       el('div', { class: 'dur-label', text: 'What are you focusing on?' }),
-      areaChips,
-      cta,
-      el('div', { class: `cog tone-${status.tone}` }, [
-        el('div', { class: 'cog-row' }, [
-          el('span', { class: 'cog-label', text: 'Cognitive load' }),
-          el('span', { class: 'cog-pct', text: `${load}%` }),
-        ]),
-        el('div', { class: 'cog-track' }, [el('div', { class: 'cog-fill', style: `width:${load}%` })]),
-        el('div', { class: 'cog-note', text: status.note }),
-      ]),
+      areasEl, ctaWrap, cog,
     ]);
+
+    applyArea();
+
+    function selectArea(a) {
+      if (a === selectedArea) return;
+      selectedArea = a;
+      chipEls.forEach((btn, area) => btn.classList.toggle('on', area === selectedArea));
+      applyArea(true);
+    }
+
+    function applyArea(animate) {
+      const item = nextForArea(selectedArea);
+      const reading = isHabit(selectedArea);
+
+      const wk = item && item.week != null && item.week > 0 ? `Week ${item.week}` : '';
+      eyebrowEl.textContent = wk;
+      eyebrowEl.style.display = wk ? '' : 'none';
+      coachEl.textContent = coachFor(selectedArea);
+
+      const cta = item
+        ? el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })
+        : el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') });
+      clear(ctaWrap).append(cta);
+
+      if (animate) {
+        for (const e of [eyebrowEl, coachEl, ctaWrap]) { e.classList.remove('swap'); void e.offsetWidth; e.classList.add('swap'); }
+      }
+    }
   }
 }
 

@@ -58,6 +58,13 @@ async function router() {
     console.error('view error', err);
     mount.innerHTML = `<div class="center-state"><h2>Something went wrong</h2><p class="muted">${String(err.message || err)}</p></div>`;
   }
+
+  // Gentle entrance for each view.
+  const v = viewEl();
+  v.classList.remove('v-enter');
+  void v.offsetWidth;
+  v.classList.add('v-enter');
+
   // Scroll to top on navigation.
   window.scrollTo(0, 0);
 }

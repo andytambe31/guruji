@@ -363,3 +363,28 @@ input[type="file"] { color: var(--text-dim); font-size: 14px; }
 .stack > * + * { margin-top: 14px; }
 .row { display: flex; gap: 10px; flex-wrap: wrap; }
 hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
+
+/* ---------- Motion ---------- */
+@keyframes swapIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes viewIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+.swap { animation: swapIn .28s ease both; }
+.view.v-enter { animation: viewIn .26s ease both; }
+.cta-wrap { display: block; }
+
+.progress-fill { transition: width .5s ease; }
+.plan-item, .dag-detail, .card { transition: background .15s ease; }
+
+/* Desktop niceties (pointer devices only) */
+@media (hover: hover) {
+  .ctx-chip:hover { border-color: var(--text-faint); color: var(--text); }
+  .dur-chip:hover { border-color: var(--text-faint); }
+  .btn-ghost:hover { background: var(--bg-soft); }
+  .btn-primary:hover { filter: brightness(1.08); }
+  .nav-item:hover { color: var(--text-dim); }
+  .seg-btn:hover:not(.on) { color: var(--text); }
+  .plan-item:hover { background: var(--bg-soft); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .swap, .view.v-enter { animation: none !important; }
+}
