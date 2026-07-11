@@ -81,7 +81,14 @@ function modeFit(mode, load) {
 // A realistic, structured break after a session: a proper long reset every
 // ~2 hours of study, otherwise 12–20 min scaled to the session's length and
 // how loaded you are. Never the pointless 8-minute stub.
-function breakAfter(minutes, loadAfter, sinceLong = 0) {
+function breakAfter(minutes, loadAfter, sinceLong = 0, deep = false) {
+  if (deep) {
+    // Weekends: a couple of proper recharges through the day — a real ~55-min
+    // rest roughly every 2.5–3h of study — with relaxed breathers otherwise,
+    // so it feels less like a strict break after every block.
+    if (sinceLong >= 165) return 55;
+    return minutes >= 100 ? 30 : 25;
+  }
   if (sinceLong >= 110) return 30;                 // long break — stretch, eat, walk
   let brk = minutes >= 50 ? 20 : minutes >= 30 ? 15 : 12;
   if (loadAfter > 70) brk += 5;
@@ -157,8 +164,10 @@ export function planDay(date, cands, opts = {}) {
       lastArea = pick.area;
 
       const loadAfter = predictLoadAt(cursor + minutes, { context, placed: [...pinned, ...placed], busy });
-      const brk = breakAfter(minutes, loadAfter, sinceLong);
-      if (brk >= 30) sinceLong = 0;
+      const brk = breakAfter(minutes, loadAfter, sinceLong, deep);
+      // Only a genuine long recharge resets the "time since a real break" clock;
+      // short breathers accumulate toward the next one.
+      if (brk >= (deep ? 45 : 30)) sinceLong = 0;
       cursor += minutes + brk;
     }
   }
