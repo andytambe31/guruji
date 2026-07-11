@@ -1,8 +1,8 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus } from '../util.js';
-import { hasPlan, getItems, getLog, depsSatisfied } from '../store.js';
+import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
+import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext } from '../store.js';
 
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
@@ -36,7 +36,8 @@ export async function renderNow(mount, { navigate }) {
   const nextForArea = (a) => surfaceable.find((i) => (i.area || 'Study') === a) || null;
 
   const log = await getLog();
-  const load = estimateCognitiveLoad(log);
+  const context = await getContext();
+  const load = estimateCognitiveLoad(log, context);
   const status = loadStatus(load);
   const suggestion = availAreas.length ? suggest(availAreas, log) : { area: allAreas[0], nudge: '' };
   let selectedArea = suggestion.area;
@@ -81,10 +82,24 @@ export async function renderNow(mount, { navigate }) {
       el('div', { class: 'cog-note', text: status.note }),
     ]);
 
+    const ctxKey = (context && context.key) ? context.key : 'fresh';
+    const ctxRow = el('div', { class: 'ctxrow' }, [
+      el('span', { class: 'ctxrow-label', text: 'Coming in from' }),
+      el('div', { class: 'ctxchips' }, ['fresh', ...Object.keys(CONTEXTS)].map((key) =>
+        el('button', {
+          class: 'ctxchip' + (key === ctxKey ? ' on' : ''),
+          text: key === 'fresh' ? 'Fresh' : CONTEXTS[key].label,
+          onclick: async () => {
+            await setContext(key === 'fresh' ? null : { key, setAt: new Date().toISOString() });
+            navigate('/now');
+          },
+        }))),
+    ]);
+
     fill(clear(wrap), [
       eyebrowEl, coachEl,
       el('div', { class: 'dur-label', text: 'What are you focusing on?' }),
-      areasEl, ctaWrap, cog,
+      areasEl, ctaWrap, cog, ctxRow,
     ]);
 
     applyArea();
@@ -96,6 +111,16 @@ export async function renderNow(mount, { navigate }) {
       applyArea(true);
     }
 
+    function modeWord(mode) { return mode === 'DESK' ? 'deep work' : mode === 'TRANSIT' ? 'concept work' : 'this'; }
+    function lighterArea() {
+      let best = null;
+      for (const a of allAreas) {
+        const it = nextForArea(a);
+        if (it && withinCapacity(it.mode, load)) { if (!best) best = a; if (it.mode === 'WIND_DOWN') return a; }
+      }
+      return best;
+    }
+
     function applyArea(animate) {
       const item = nextForArea(selectedArea);
       const reading = isHabit(selectedArea);
@@ -105,10 +130,22 @@ export async function renderNow(mount, { navigate }) {
       eyebrowEl.style.display = wk ? '' : 'none';
       coachEl.textContent = coachFor(selectedArea);
 
-      const cta = item
-        ? el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })
-        : el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') });
-      clear(ctaWrap).append(cta);
+      let children;
+      if (!item) {
+        children = [el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') })];
+      } else if (withinCapacity(item.mode, load)) {
+        children = [el('button', { class: 'btn btn-primary btn-lg btn-block', text: reading ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) })];
+      } else {
+        const lighter = lighterArea();
+        children = [
+          el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),
+          el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'Start anyway', onclick: () => navigate(`/prep/${item.id}`) }),
+          (lighter && lighter !== selectedArea)
+            ? el('button', { class: 'btn-link', text: `${lighter} fits your energy better →`, onclick: () => selectArea(lighter) })
+            : null,
+        ];
+      }
+      fill(clear(ctaWrap), children);
 
       if (animate) {
         for (const e of [eyebrowEl, coachEl, ctaWrap]) { e.classList.remove('swap'); void e.offsetWidth; e.classList.add('swap'); }

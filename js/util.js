@@ -105,7 +105,14 @@ export function addDaysISO(iso, n) {
 // Fresh in the morning; each of today's sessions adds load (hard DESK work
 // more than a gentle read); it recovers as time passes since a session ended
 // (your break). Reinforces quality over quantity, nothing more.
-export function estimateCognitiveLoad(log, now = new Date()) {
+// Life-context that arrives already elevated and discharges over time.
+export const CONTEXTS = {
+  commuted: { label: 'A commute', level: 24, tau: 60 },
+  office: { label: 'The office', level: 38, tau: 130 },
+  drained: { label: 'Drained', level: 48, tau: 150 },
+};
+
+export function estimateCognitiveLoad(log, context = null, now = new Date()) {
   const DIFFICULTY = { DESK: 1.0, TRANSIT: 0.8, WIND_DOWN: 0.35 };
   const LOAD_PER_MIN = 0.9;   // ~50 min of deep work ≈ 45 points at its peak
   const RECOVERY_TAU = 50;    // minutes; larger = slower recovery
@@ -125,7 +132,22 @@ export function estimateCognitiveLoad(log, now = new Date()) {
     const raw = (e.focusMinutes || 0) * diff * LOAD_PER_MIN;
     load += raw * Math.exp(-minsSince / RECOVERY_TAU);
   }
+
+  // life context (office / commute / drained) — starts high, discharges slowly
+  if (context && context.key && CONTEXTS[context.key] && context.setAt) {
+    const c = CONTEXTS[context.key];
+    const mins = Math.max(0, (nowMs - new Date(context.setAt).getTime()) / 60000);
+    if (Number.isFinite(mins)) load += c.level * Math.exp(-mins / c.tau);
+  }
+
   return Math.max(0, Math.min(100, Math.round(load)));
+}
+
+// Is this mode's demand within your current capacity? Deep work needs more
+// headroom than a gentle read. Fuzzy on purpose — a nudge, not a lock.
+export function withinCapacity(mode, load) {
+  const GATE = { DESK: 66, TRANSIT: 82, WIND_DOWN: 200 };
+  return load < (GATE[mode] ?? 82);
 }
 
 export function loadStatus(pct) {

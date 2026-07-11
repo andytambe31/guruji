@@ -170,6 +170,18 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .cog.tone-max  { --cog: #c2483d; }
 .cog.tone-high .cog-note, .cog.tone-max .cog-note { color: var(--cog); }
 
+/* life-context chips */
+.ctxrow { margin-top: 20px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.ctxrow-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+.ctxchips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ctxchip { appearance: none; background: transparent; border: 1px solid var(--line); color: var(--text-faint); font: inherit; font-size: 12px; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: border-color .15s, color .15s, background .15s; }
+.ctxchip.on { border-color: var(--text); color: var(--text); background: var(--bg-soft); }
+
+/* capacity gate */
+.gate-note { font-size: 13px; color: #c98a2e; margin-bottom: 10px; line-height: 1.45; }
+.btn-link { display: block; width: 100%; text-align: center; background: none; border: none; color: var(--text-dim); font: inherit; font-size: 13px; padding: 12px 0 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.btn-link:hover { color: var(--text); }
+
 /* ---------- Empty / centered states ---------- */
 .center-state {
   min-height: 62vh; display: flex; flex-direction: column;

@@ -11,6 +11,15 @@ export async function setMeta(meta) {
   return put(STORES.kv, { k: 'meta', v: meta || {} });
 }
 
+// ---------- Cognitive-load context (office / commute / …) ----------
+export async function getContext() {
+  const rec = await get(STORES.kv, 'context');
+  return rec ? rec.v : null;
+}
+export async function setContext(v) {
+  return put(STORES.kv, { k: 'context', v: v || null });
+}
+
 // ---------- Plans (top-level tracks) ----------
 export async function getPlans() {
   const rec = await get(STORES.kv, 'plans');
