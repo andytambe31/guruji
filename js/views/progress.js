@@ -76,5 +76,32 @@ export async function renderProgress(mount, { navigate }) {
     ]));
   }
 
-  wrap.append(el('button', { class: 'btn-link', style: 'margin-top:20px', text: '‹ Back to Now', onclick: () => navigate('/now') }));
+  // Recent sessions — every logged focus block, so the total is auditable.
+  if (s.recentSessions.length) {
+    const rel = (iso) => {
+      const t = new Date();
+      const todayISO = t.toISOString().slice(0, 10);
+      const y = new Date(t.getTime() - 864e5).toISOString().slice(0, 10);
+      if (iso === todayISO) return 'Today';
+      if (iso === y) return 'Yesterday';
+      const d = new Date(iso + 'T00:00:00');
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+    wrap.append(el('div', { class: 'prog-section' }, [
+      el('div', { class: 'prog-h', text: 'Recent sessions' }),
+      el('div', { class: 'sess-list' }, s.recentSessions.map((r) => el('div', { class: 'sess-row' }, [
+        el('div', { class: 'sess-left' }, [
+          el('span', { class: `sess-dot ${r.result === 'done' ? 'done' : r.result === 'skipped' ? 'skip' : ''}` }),
+          el('span', { class: 'sess-area', text: r.area }),
+          r.title ? el('span', { class: 'sess-title', text: r.title }) : null,
+        ]),
+        el('div', { class: 'sess-right' }, [
+          el('span', { class: 'sess-min', text: fmtDur(r.minutes) }),
+          el('span', { class: 'sess-date', text: rel(r.date) }),
+        ]),
+      ]))),
+    ]));
+  }
+
+  wrap.append(el('button', { class: 'btn-link', style: 'margin-top:8px', text: '‹ Back to Now', onclick: () => navigate('/now') }));
 }

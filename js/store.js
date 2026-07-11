@@ -658,11 +658,20 @@ export async function computeStats(now = new Date()) {
   const last14 = [];
   for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); last14.push({ date: d, minutes: minutesOn(d) }); }
 
+  // Most recent sessions first, so the effort total is auditable.
+  const recentSessions = [...log].reverse().slice(0, 15).map((e) => ({
+    date: e.date,
+    area: e.area || 'Study',
+    title: e.itemTitle || '',
+    minutes: Math.max(0, Math.round(e.focusMinutes || 0)),
+    result: e.result || '',
+  }));
+
   return {
     totalMinutes, weekMinutes, todayMinutes: minutesOn(today), sessions,
     streak, studyDays: byDate.size,
     plannedDays, followedThrough: followed, adherencePct,
-    last14,
+    last14, recentSessions,
     byArea: [...byArea.entries()].map(([area, minutes]) => ({ area, minutes })).sort((a, b) => b.minutes - a.minutes),
     topicsDone: items.filter((i) => i.status === 'done').length,
     topicsTotal: items.length,

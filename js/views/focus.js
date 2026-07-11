@@ -205,7 +205,10 @@ export async function renderFocus(mount, { arg, navigate }) {
     persist();
   }
 
-  function elapsedMin() { return Math.max(0, Math.round((total - remaining) / 60)); }
+  // Actual focused minutes, straight from the wall clock (excludes paused time),
+  // capped at the planned length. Doesn't rely on the ticking `remaining`, which
+  // can be stale if the app was backgrounded right before you resolve.
+  function elapsedMin() { return Math.max(0, Math.round(Math.min(total, activeElapsed()) / 60)); }
 
   function showResolve(timedOut) {
     stopTicker();
