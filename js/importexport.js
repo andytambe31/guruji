@@ -74,16 +74,22 @@ export function readFile(file) {
 // plan/backup, and runs schema migrations on the latter. Returns { ok, errors,
 // summary, kind }.
 export async function importFromText(text, opts = {}) {
+  const { onProgress, ...ingestOpts } = opts;
+  const step = async (info) => { if (onProgress) await onProgress(info); };
+
   const { value, error } = parseJSON(text);
   if (error) return { ok: false, errors: [`Invalid JSON: ${error}`], summary: null };
 
-  if (isPatch(value)) return applyPatch(value);
+  if (isPatch(value)) { await step({ phase: 'patch' }); return applyPatch(value); }
 
   // Bring any older file up to the current schema before validating/ingesting.
   const { data, from, to, applied } = migrate(value);
   const v = validatePlan(data);
   if (!v.ok) return { ok: false, errors: v.errors, summary: null };
-  const summary = await ingestPlan(data, opts);
+  // Surface a real schema upgrade before we save, so the migration is visible.
+  if (applied.length) await step({ phase: 'migrate', from, to, applied });
+  await step({ phase: 'save' });
+  const summary = await ingestPlan(data, ingestOpts);
   return { ok: true, errors: [], summary, kind: 'plan', migrated: applied, from, to };
 }
 

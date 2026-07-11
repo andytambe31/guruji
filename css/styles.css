@@ -60,8 +60,24 @@ body { overscroll-behavior-y: none; }
 @keyframes splashBreath { 0%, 100% { opacity: .5; } 50% { opacity: 1; } }
 @keyframes splashSlide { 0% { transform: translateX(-115%); } 100% { transform: translateX(320%); } }
 @media (prefers-reduced-motion: reduce) {
-  .splash-mark, .splash-bar span { animation: none; }
+  .splash-mark, .splash-bar span, .iv-bar span { animation: none; }
 }
+
+/* Import veil — visible progress while a file loads / a schema upgrade runs. */
+.import-veil {
+  position: fixed; inset: 0; z-index: 300;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: 0 34px; text-align: center;
+  background: var(--bg); opacity: 0; transition: opacity .25s ease;
+}
+.import-veil.show { opacity: 1; }
+.import-veil:not(.show) { pointer-events: none; } /* don't intercept taps while fading out */
+.iv-bar { width: 132px; height: 3px; border-radius: 3px; background: var(--bg-soft); overflow: hidden; }
+.iv-bar span { display: block; height: 100%; width: 42%; border-radius: 3px; background: var(--accent); animation: splashSlide 1.15s cubic-bezier(.65,0,.35,1) infinite; }
+.iv-main { font-size: 16px; font-weight: 650; color: var(--text); }
+.iv-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; max-width: 320px; }
+.iv-steps li { font-size: 12.5px; color: var(--text-dim); line-height: 1.45; }
+.iv-steps li::before { content: '✓ '; color: var(--accent); font-weight: 700; }
 
 /* ---------- Top bar (brand + quiet Data action) ---------- */
 .topbar {

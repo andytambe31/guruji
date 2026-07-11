@@ -1,6 +1,6 @@
 // Data view: iCloud sync (canonical file), import (file + paste, plan or
 // migration patch), dated backup, and a wipe.
-import { el, toast } from '../util.js';
+import { el, clear, toast } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile } from '../importexport.js';
 import { wipeAll, hasPlan } from '../store.js';
 import { SCHEMA_VERSION } from '../migrations.js';
@@ -65,12 +65,38 @@ export async function renderData(mount, { navigate }) {
 
   async function doImport(text) {
     errorBox.textContent = '';
-    const res = await importFromText(text, { mergeStatus: !resetChk.checked });
+    const veil = showImport('Reading your file…');
+    const started = Date.now();
+    let res;
+    try {
+      res = await importFromText(text, {
+        mergeStatus: !resetChk.checked,
+        // Make a real schema upgrade visible — pause on it so it can be read.
+        onProgress: async (p) => {
+          if (p.phase === 'migrate') {
+            setImport(veil, `Upgrading your file · v${p.from} → v${p.to}`, p.applied.map((a) => a.description));
+            await delay(1000);
+          } else if (p.phase === 'save') {
+            setImport(veil, 'Saving to this device…');
+          } else if (p.phase === 'patch') {
+            setImport(veil, 'Applying migration…');
+          }
+        },
+      });
+    } catch (err) {
+      hideImport(veil);
+      errorBox.textContent = String((err && err.message) || err);
+      toast('Load failed', true);
+      return;
+    }
     if (!res.ok) {
+      hideImport(veil);
       errorBox.textContent = res.errors.slice(0, 12).join('\n');
       toast('Load failed — see details', true);
       return;
     }
+    await delay(Math.max(0, 480 - (Date.now() - started))); // avoid a flash for tiny files
+    hideImport(veil);
     if (res.kind === 'patch') {
       toast(res.already ? 'Migration already applied' : `Migration applied${res.description ? ': ' + res.description : ''}`);
     } else {
@@ -161,4 +187,33 @@ export async function renderData(mount, { navigate }) {
     el('p', { class: 'muted', text: 'Removes everything stored in this browser. Cannot be undone.' }),
     wipeBtn,
   );
+}
+
+const delay = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// A full-screen veil shown while a file loads — and, when an older file is
+// being brought up to the current schema, it names the upgrade steps so the
+// migration is visible instead of happening silently.
+function showImport(msg) {
+  const main = el('div', { class: 'iv-main', text: msg });
+  const steps = el('ul', { class: 'iv-steps' });
+  const veil = el('div', { class: 'import-veil' }, [
+    el('div', { class: 'iv-bar' }, [el('span')]),
+    main, steps,
+  ]);
+  veil._main = main; veil._steps = steps;
+  document.body.appendChild(veil);
+  requestAnimationFrame(() => veil.classList.add('show'));
+  return veil;
+}
+function setImport(veil, msg, steps) {
+  if (!veil) return;
+  veil._main.textContent = msg;
+  clear(veil._steps);
+  (steps || []).forEach((s) => veil._steps.appendChild(el('li', { text: s })));
+}
+function hideImport(veil) {
+  if (!veil) return;
+  veil.classList.remove('show');
+  setTimeout(() => veil.remove(), 350);
 }
