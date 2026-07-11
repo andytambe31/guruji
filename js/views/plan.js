@@ -92,6 +92,7 @@ export async function renderPlan(mount, { navigate }) {
       el('div', { class: 'row-actions' }, [
         el('button', { class: 'mini-btn' + (it.status === 'done' ? ' active-done' : ''), text: 'Done', onclick: () => toggle(it, 'done') }),
         el('button', { class: 'mini-btn' + (it.status === 'skipped' ? ' active-skip' : ''), text: 'Skip', onclick: () => toggle(it, 'skipped') }),
+        it.status !== 'todo' ? el('button', { class: 'mini-btn mini-undo', text: 'To‑do', title: 'Mark as not started', onclick: () => setTodo(it) }) : null,
       ]),
     ]);
   }
@@ -162,6 +163,7 @@ export async function renderPlan(mount, { navigate }) {
         el('div', { class: 'row-actions' }, [
           el('button', { class: 'mini-btn' + (it.status === 'done' ? ' active-done' : ''), text: 'Done', onclick: () => toggle(it, 'done') }),
           el('button', { class: 'mini-btn' + (it.status === 'skipped' ? ' active-skip' : ''), text: 'Skip', onclick: () => toggle(it, 'skipped') }),
+          it.status !== 'todo' ? el('button', { class: 'mini-btn mini-undo', text: 'To‑do', title: 'Mark as not started', onclick: () => setTodo(it) }) : null,
         ]),
       );
     });
@@ -242,6 +244,13 @@ export async function renderPlan(mount, { navigate }) {
     const next = it.status === target ? 'todo' : target;
     await setItemStatus(it.id, next);
     toast(next === 'todo' ? 'Back to todo' : next === 'done' ? 'Done' : 'Skipped');
+    await paint();
+  }
+
+  // Explicit un-mark — put an accidentally done/skipped topic back to not-started.
+  async function setTodo(it) {
+    await setItemStatus(it.id, 'todo');
+    toast('Back to to‑do');
     await paint();
   }
 

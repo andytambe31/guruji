@@ -565,6 +565,7 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .mini-btn:hover { color: var(--text); }
 .mini-btn.active-done { color: var(--text); font-weight: 650; }
 .mini-btn.active-skip { color: var(--text); }
+.mini-btn.mini-undo { color: var(--accent, #3b5bd9); border: 1px solid currentColor; padding: 5px 9px; }
 
 /* ---------- Data (import/export) ---------- */
 .field { margin-bottom: 18px; }

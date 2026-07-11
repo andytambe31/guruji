@@ -105,7 +105,10 @@ export async function applyPatch(patch) {
   if (applied === 0) {
     return { ok: false, errors: ['This migration changed nothing — check the plan / phase / item ids in its ops.'], summary: null };
   }
-  const summary = await ingestPlan(patched, { mergeStatus: true });
+  // A reset-status patch must overwrite statuses, so don't preserve the old
+  // ones on re-ingest — otherwise the merge would undo the reset.
+  const resets = (patch.ops || []).some((o) => o.op === 'reset-status');
+  const summary = await ingestPlan(patched, { mergeStatus: !resets });
   if (patch.id) await markPatchApplied(patch.id);
   return { ok: true, errors: [], summary, kind: 'patch', applied, description: patch.description || '' };
 }

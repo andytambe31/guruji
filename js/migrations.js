@@ -85,7 +85,8 @@ export function migrate(raw) {
 }
 
 // ---------- Content patches ----------
-const OPS = ['add-item', 'update-item', 'remove-item', 'add-phase', 'set-meta'];
+const OPS = ['add-item', 'update-item', 'remove-item', 'add-phase', 'set-meta', 'reset-status'];
+const STATUSES = ['todo', 'done', 'skipped'];
 
 export function isPatch(obj) {
   return !!(obj && typeof obj === 'object' && (obj.app === 'guruji-patch' || (Array.isArray(obj.ops) && !Array.isArray(obj.plans))));
@@ -101,6 +102,7 @@ export function validatePatch(obj) {
     if ((o.op === 'update-item' || o.op === 'remove-item') && !o.id) errors.push(`op[${i}] (${o.op}) needs an "id"`);
     if (o.op === 'add-item' && (!o.item || !o.item.id)) errors.push(`op[${i}] (add-item) needs item.id`);
     if (o.op === 'add-phase' && (!o.phase || !o.phase.id || !o.plan)) errors.push(`op[${i}] (add-phase) needs plan + phase.id`);
+    if (o.op === 'reset-status' && o.status && !STATUSES.includes(o.status)) errors.push(`op[${i}] (reset-status) status must be one of ${STATUSES.join('/')}`);
   });
   return { ok: errors.length === 0, errors };
 }
@@ -141,6 +143,17 @@ export function applyPatchOps(data, ops) {
       if (pl) { pl.phases = pl.phases || []; if (!pl.phases.some((x) => x.id === o.phase.id)) { pl.phases.push(o.phase); applied++; } }
     } else if (o.op === 'set-meta') {
       d.meta = { ...(d.meta || {}), ...(o.set || {}) }; applied++;
+    } else if (o.op === 'reset-status') {
+      // Force every topic to one status (default: to-do). Used by the
+      // "fresh start" migration to undo accidental done/skip marks.
+      const target = o.status || 'todo';
+      for (const pl of d.plans || []) {
+        for (const ph of pl.phases || []) {
+          for (const it of ph.items || []) {
+            if (it.status !== target) { it.status = target; applied++; }
+          }
+        }
+      }
     }
   }
   return { data: d, applied };
