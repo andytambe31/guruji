@@ -269,6 +269,8 @@ p  { color: var(--text-dim); line-height: 1.55; }
 /* a breather between study sessions */
 .break-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .1em; padding: 4px 0; opacity: .8; }
 .wake-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .14em; text-transform: uppercase; padding: 2px 0 6px; opacity: .75; }
+.reset-row { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; font-size: 13px; color: var(--text-dim); line-height: 1.45; cursor: pointer; }
+.reset-row input { margin-top: 2px; flex: none; }
 .plan-why { margin: 2px 0 16px; padding: 12px 14px; border-radius: 14px; background: var(--surface, rgba(0,0,0,.03)); }
 .plan-why-mix { font-size: 13px; font-weight: 600; color: var(--text-dim); letter-spacing: .01em; }
 .plan-why-note { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--text-faint); }

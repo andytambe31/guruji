@@ -54,9 +54,18 @@ export async function renderData(mount, { navigate }) {
 
   const errorBox = el('div', { class: 'muted', style: 'margin-top:10px;white-space:pre-wrap;font-size:13px;' });
 
+  // Off by default, re-importing keeps your progress (done/skipped topics stay
+  // as they are). Tick this to wipe that and start every topic fresh — the way
+  // to actually reset when a re-import "doesn't change anything".
+  const resetChk = el('input', { type: 'checkbox' });
+  const resetRow = el('label', { class: 'reset-row' }, [
+    resetChk,
+    el('span', { text: 'Start fresh — reset every topic to “to-do”, clearing done/skipped marks. Leave off to keep your progress.' }),
+  ]);
+
   async function doImport(text) {
     errorBox.textContent = '';
-    const res = await importFromText(text);
+    const res = await importFromText(text, { mergeStatus: !resetChk.checked });
     if (!res.ok) {
       errorBox.textContent = res.errors.slice(0, 12).join('\n');
       toast('Load failed — see details', true);
@@ -128,6 +137,7 @@ export async function renderData(mount, { navigate }) {
 
     el('h2', { text: 'Load' }),
     el('p', { class: 'muted', text: 'A plan, a full backup, or a migration file — Guruji detects which. Older files are upgraded to the current schema automatically.' }),
+    resetRow,
     el('div', { class: 'field' }, [
       el('label', { text: 'From a file (iCloud Drive, Files…)' }),
       fileInput,
