@@ -144,6 +144,17 @@ export async function setItemStatus(id, status) {
   return item;
 }
 
+// Put every topic back to one status (default: not-started). Returns how many
+// changed — the one-tap way to undo accidental Done/Skip marks.
+export async function resetAllStatuses(status = 'todo') {
+  const items = await getItems();
+  let changed = 0;
+  for (const it of items) {
+    if (it.status !== status) { it.status = status; await put(STORES.items, it); changed++; }
+  }
+  return changed;
+}
+
 export async function hasPlan() {
   const items = await getAll(STORES.items);
   return items.length > 0;

@@ -3,7 +3,7 @@
 // "Trees" into the actual tasks. Node text wraps to two lines instead of
 // ellipsing.
 import { el, clear, toast } from '../util.js';
-import { getPlans, getPhases, getItems, setItemStatus, depsSatisfied } from '../store.js';
+import { getPlans, getPhases, getItems, setItemStatus, resetAllStatuses, depsSatisfied } from '../store.js';
 
 const AREA_COLOR = {
   'DSA': '#3b5bd9', 'System Design': '#0f9d6b', 'Reading': '#c98a2e',
@@ -49,6 +49,24 @@ export async function renderPlan(mount, { navigate }) {
       el('button', { class: 'seg-btn' + (view === 'map' ? ' on' : ''), text: 'Map', onclick: () => { view = 'map'; paint(); } }),
     ]);
     mount.append(el('div', { class: 'plan-top' }, [el('h1', { text: 'Plans' }), seg]));
+
+    // Offer a one-tap reset whenever anything is marked done/skipped — the
+    // simplest way to undo accidental progress without touching files.
+    const marked = items.filter((i) => i.status !== 'todo').length;
+    if (marked) {
+      mount.append(el('div', { class: 'plan-reset-row' }, [
+        el('span', { class: 'muted', text: `${marked} marked done or skipped` }),
+        el('button', {
+          class: 'btn-link', text: 'Reset all to not‑started',
+          onclick: async () => {
+            if (!confirm('Put every topic back to not‑started? This clears all Done and Skip marks.')) return;
+            const n = await resetAllStatuses('todo');
+            toast(`Reset ${n} ${n === 1 ? 'topic' : 'topics'} to not‑started`);
+            await paint();
+          },
+        }),
+      ]));
+    }
 
     if (view === 'list') { paintList(planList, phasesByTrack, itemsByPhase, statusById); return; }
     if (zoomArea && zoomGroup) paintItemLevel(items, statusById);
