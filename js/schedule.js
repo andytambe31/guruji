@@ -83,11 +83,12 @@ function modeFit(mode, load) {
 // how loaded you are. Never the pointless 8-minute stub.
 function breakAfter(minutes, loadAfter, sinceLong = 0, deep = false) {
   if (deep) {
-    // Weekends: a couple of proper recharges through the day — a real ~55-min
-    // rest roughly every 2.5–3h of study — with relaxed breathers otherwise,
-    // so it feels less like a strict break after every block.
-    if (sinceLong >= 165) return 55;
-    return minutes >= 100 ? 30 : 25;
+    // A break restores less when you're more depleted, so breaks lengthen as
+    // cognitive load climbs through the day: a quick breather in the morning,
+    // a proper decompress in the evening for the same recovery. A couple of
+    // real recharges punctuate the day; relaxed breathers fill between.
+    if (sinceLong >= 165) return loadAfter > 80 ? 70 : loadAfter > 60 ? 55 : 45;
+    return loadAfter > 80 ? 35 : loadAfter > 60 ? 28 : 20;
   }
   if (sinceLong >= 110) return 30;                 // long break — stretch, eat, walk
   let brk = minutes >= 50 ? 20 : minutes >= 30 ? 15 : 12;
@@ -142,12 +143,19 @@ export function planDay(date, cands, opts = {}) {
       if (avail < 15) break;
       const load = predictLoadAt(cursor, { context, placed: [...pinned, ...placed], busy });
 
-      // Eligible: under its caps AND its mode is within capacity at this load.
-      const eligible = cands.filter((c) =>
+      // Candidates still under their caps — if none, we've scheduled all we
+      // should, so this window (and day) is done.
+      const underCaps = cands.filter((c) =>
         (itemCount.get(c.item.id) || 0) < itemCap &&
-        (areaCount.get(c.area) || 0) < capForArea(c.item.mode) &&
-        withinCapacity(c.item.mode, load));
-      if (!eligible.length) break; // too loaded (or capped) for anything — rest
+        (areaCount.get(c.area) || 0) < capForArea(c.item.mode));
+      if (!underCaps.length) break;
+
+      // Of those, which fit the current cognitive load. If nothing fits right
+      // now (too loaded), advance and let load decay rather than abandoning the
+      // rest of the window — e.g. an office evening that's fine to study by
+      // 8–9pm even when 6pm is still too heavy from the workday.
+      const eligible = underCaps.filter((c) => withinCapacity(c.item.mode, load));
+      if (!eligible.length) { cursor += 30; continue; }
 
       eligible.sort((a, b) => score(b, load) - score(a, load));
       const pick = eligible[0];

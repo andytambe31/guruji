@@ -354,17 +354,24 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   // Commute windows (transit commitments) become transit-study sessions — that
   // dead hour on the train is exactly when concept-level work fits.
   const commuteWindows = busy.filter((b) => b.transit).sort((a, b) => a.start - b.start);
+  // Reading is low-effort — you're absorbing, not grinding — so on office days
+  // it rides the commute first, freeing your desk hours for DSA / system design.
+  // Concept-level TRANSIT work fills any remaining commute windows.
+  const readingItems = surfaceable.filter((it) => it.mode === 'WIND_DOWN' && !taken.has(it.id));
   const transitItems = surfaceable.filter((it) => it.mode === 'TRANSIT' && !taken.has(it.id));
+  const commuteCands = [...readingItems, ...transitItems];
   const commuteBlocks = [];
   let tIdx = 0;
   for (const cw of commuteWindows) {
-    const it = transitItems[tIdx];
+    const it = commuteCands[tIdx];
     if (!it) break;
     tIdx++;
     taken.add(it.id);
     commuteBlocks.push({
       kind: 'block', id: uid('blk'), itemId: it.id, area: it.area || 'Study', title: it.title || '',
-      mode: 'TRANSIT', date, start: cw.start, minutes: Math.min(clampDur(it.estMinutes), cw.minutes),
+      mode: it.mode, date, start: cw.start,
+      // Reading fills the whole ride; concept work uses its usual length.
+      minutes: it.mode === 'WIND_DOWN' ? cw.minutes : Math.min(clampDur(it.estMinutes), cw.minutes),
       status: 'planned', pinned: true, onCommute: true,
     });
   }
@@ -466,8 +473,17 @@ export async function pushBlock(id, delta) {
 
   const head = planned.slice(0, idx);
   const tail = planned.slice(idx);
-  tail[0].start = Math.max(0, tail[0].start + delta);
-  sequence(tail, { startMin: tail[0].start, busy: [...busy, ...done, ...head] });
+  // Shift the whole tail later by `delta`, PRESERVING the gaps (breaks) between
+  // blocks — only nudge a block further when a fixed commitment is in the way.
+  // (Re-sequencing from scratch would flatten the day's break rhythm.)
+  const fixed = [...busy, ...done, ...head].map((x) => ({ start: x.start, minutes: x.minutes }));
+  let prevEnd = -Infinity;
+  for (const bl of tail) {
+    let s = slidePast(Math.max(0, bl.start + delta), bl.minutes, fixed);
+    if (s < prevEnd) s = slidePast(prevEnd, bl.minutes, fixed); // keep order, no overlap
+    bl.start = s;
+    prevEnd = s + bl.minutes;
+  }
 
   let bed = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
   if (bed < 5 * 60) bed += 24 * 60; // a past-midnight bedtime is late, not early
