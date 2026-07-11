@@ -313,6 +313,23 @@ export async function renderDay(mount, { navigate }) {
   function blockCard(b) {
     const endLabel = fmtTimeOfDay(b.start + b.minutes);
     const done = b.status === 'done';
+
+    // The action row swaps to a "push by" preset picker when you tap Delay.
+    const acts = el('div', { class: 'blk-acts' });
+    const normalActs = () => [
+      done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
+      done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
+      el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
+      done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
+      el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
+    ];
+    const delayActs = () => [
+      el('span', { class: 'blk-delay-k', text: 'Push by' }),
+      ...[10, 15, 30].map((n) => el('button', { class: 'blk-act blk-delay', text: `${n}m`, onclick: async () => { await pushBlock(b.id, n); await paint(); } })),
+      el('button', { class: 'blk-act', text: 'Cancel', onclick: () => fill(clear(acts), normalActs()) }),
+    ];
+    fill(acts, normalActs());
+
     return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1', drag: done ? '0' : '1' } }, [
       done ? null : el('button', { class: 'blk-grip', 'aria-label': 'Drag to reorder', title: 'Drag to reorder', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']),
       el('div', { class: 'blk-body' }, [
@@ -330,13 +347,7 @@ export async function renderDay(mount, { navigate }) {
           }),
           el('span', { class: 'blk-end', text: `– ${endLabel}` }),
         ]),
-        el('div', { class: 'blk-acts' }, [
-          done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
-          done ? null : el('button', { class: 'blk-act', text: '+15m', title: 'Running late — push the rest of the day', onclick: async () => { await pushBlock(b.id, 15); await paint(); } }),
-          el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
-          done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
-          el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
-        ]),
+        acts,
       ]),
     ]);
   }
