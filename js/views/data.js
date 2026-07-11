@@ -1,7 +1,7 @@
 // Data view: iCloud sync (canonical file), import (file + paste, plan or
 // migration patch), dated backup, and a wipe.
 import { el, clear, toast } from '../util.js';
-import { importFromText, readFile, exportCanonical, exportToFile } from '../importexport.js';
+import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch } from '../importexport.js';
 import { wipeAll, hasPlan } from '../store.js';
 import { SCHEMA_VERSION } from '../migrations.js';
 
@@ -134,6 +134,21 @@ export async function renderData(mount, { navigate }) {
     },
   });
 
+  const contentBtn = el('button', {
+    class: 'btn btn-ghost',
+    disabled: !planLoaded,
+    text: 'Export content changes',
+    onclick: async () => {
+      try {
+        const res = await exportContentPatch();
+        if (!res.ok) { toast('No content notes to export yet', true); return; }
+        toast(`Saved ${res.name} · ${res.count} topics`);
+      } catch (err) {
+        toast('Export failed', true);
+      }
+    },
+  });
+
   const wipeBtn = el('button', {
     class: 'btn btn-danger',
     text: 'Erase all local data',
@@ -180,6 +195,14 @@ export async function renderData(mount, { navigate }) {
     el('h2', { text: 'Backup' }),
     el('p', { class: 'muted', text: planLoaded ? 'A dated, never-overwritten copy — for keeping history.' : 'Nothing to back up yet.' }),
     backupBtn,
+
+    // Content sync — desktop only, since content is authored on the desktop.
+    el('div', { class: 'desktop-only' }, [
+      el('hr', { class: 'sep' }),
+      el('h2', { text: 'Sync content' }),
+      el('p', { class: 'muted', text: 'Your topic notes as a timestamped migration file. Load it on another device (or into your iCloud file) to carry your study content across — it only updates notes, never touching that device’s tracking, status or schedule.' }),
+      contentBtn,
+    ]),
 
     el('hr', { class: 'sep' }),
 

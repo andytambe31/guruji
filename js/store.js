@@ -154,6 +154,24 @@ export async function setItemNotes(id, notes) {
   return item;
 }
 
+// Build a content-only patch (all topics that have notes) for syncing your
+// desktop-authored study material to another device. Applied on the other end
+// it only updates notes — tracking, schedule and status there are untouched —
+// and it's tagged with a timestamp so it applies once. `stamp` is supplied by
+// the caller (the browser clock).
+export async function buildContentPatch(stamp) {
+  const items = await getItems();
+  const ops = items
+    .filter((i) => i.notes && i.notes.trim())
+    .map((i) => ({ op: 'update-item', id: i.id, set: { notes: i.notes } }));
+  return {
+    app: 'guruji-patch',
+    id: `content-${stamp}`,
+    description: `Study content · ${ops.length} ${ops.length === 1 ? 'topic' : 'topics'}`,
+    ops,
+  };
+}
+
 // Put every topic back to one status (default: not-started). Returns how many
 // changed — the one-tap way to undo accidental Done/Skip marks.
 export async function resetAllStatuses(status = 'todo') {

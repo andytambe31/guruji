@@ -1,6 +1,6 @@
 // Import / export plumbing. Parse + validate a plan, ingest it, and build a
 // downloadable backup. No network — everything is local file / clipboard.
-import { ingestPlan, buildExport, normalizePlans, hasPlan, getAppliedPatches, markPatchApplied } from './store.js';
+import { ingestPlan, buildExport, buildContentPatch, normalizePlans, hasPlan, getAppliedPatches, markPatchApplied } from './store.js';
 import { MODES } from './util.js';
 import { migrate, isPatch, validatePatch, applyPatchOps } from './migrations.js';
 
@@ -144,4 +144,17 @@ export async function exportToFile() {
   const data = await buildExport();
   const stamp = data.exportedAt.slice(0, 10);
   return download(`guruji-${stamp}-export.json`, JSON.stringify(data, null, 2));
+}
+
+// A timestamped content patch — your desktop-authored notes as a migration
+// file. Applying it on another device only updates notes (nothing else), and
+// it applies once. This is how content flows to the phone / canonical file
+// without overwriting that device's tracking.
+export async function exportContentPatch() {
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const patch = await buildContentPatch(stamp);
+  if (!patch.ops.length) return { ok: false, count: 0 };
+  const name = `guruji-content-${stamp}.guruji.json`;
+  download(name, JSON.stringify(patch, null, 2));
+  return { ok: true, count: patch.ops.length, name };
 }
