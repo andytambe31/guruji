@@ -25,7 +25,11 @@ export async function renderPlan(mount, { navigate }) {
   let zoomGroup = null;
   let selected = null;
   let scale = 1;
-  const openNotes = new Set(); // topics whose desktop-only content editor is expanded
+  let editing = false; // desktop study pane: reading vs editing the content
+  // Desktop gets a wide two-pane study view; the phone stays a compact tracker.
+  const mq = window.matchMedia('(min-width: 900px)');
+  const onMq = () => paint();
+  mq.addEventListener('change', onMq);
 
   async function paint() {
     const [plans, phases, items] = await Promise.all([getPlans(), getPhases(), getItems()]);
@@ -69,10 +73,106 @@ export async function renderPlan(mount, { navigate }) {
       ]));
     }
 
-    if (view === 'list') { paintList(planList, phasesByTrack, itemsByPhase, statusById); return; }
+    if (view === 'list') {
+      if (mq.matches) paintStudy(planList, phasesByTrack, itemsByPhase, items, statusById);
+      else paintList(planList, phasesByTrack, itemsByPhase, statusById);
+      return;
+    }
     if (zoomArea && zoomGroup) paintItemLevel(items, statusById);
     else if (zoomArea) paintGroupLevel(items, statusById);
     else paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById);
+  }
+
+  // ---------------- Desktop: two-pane study view (topic list | content) -----
+  // Uses the full landscape width to show real study material for the selected
+  // topic. The phone never renders this — it stays a lightweight tracker.
+  function paintStudy(planList, phasesByTrack, itemsByPhase, items, statusById) {
+    // Default selection: keep it if still valid, else the first unlocked to-do,
+    // else the first topic.
+    const byId = new Map(items.map((i) => [i.id, i]));
+    if (!selected || !byId.has(selected)) {
+      const firstTodo = items.find((i) => i.status === 'todo' && depsSatisfied(i, statusById));
+      selected = (firstTodo || items[0]).id;
+      editing = false;
+    }
+
+    const navList = el('div', { class: 'study-nav' });
+    for (const pl of planList) {
+      const planPhases = phasesByTrack.get(pl.id) || [];
+      const planItems = planPhases.flatMap((ph) => itemsByPhase.get(ph.id) || []);
+      if (!planItems.length) continue;
+      navList.append(el('div', { class: 'study-plan', text: pl.name }));
+      for (const ph of planPhases) {
+        const list = itemsByPhase.get(ph.id) || [];
+        if (!list.length) continue;
+        navList.append(el('div', { class: 'study-phase', text: ph.name }));
+        for (const it of list) {
+          const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+          const hasNotes = !!(it.notes && it.notes.trim());
+          navList.append(el('button', {
+            class: 'study-navrow' + (it.id === selected ? ' on' : '') + (locked ? ' locked' : '') + ` s-${it.status}`,
+            onclick: () => { selected = it.id; editing = false; refreshMain(); markActive(); },
+            dataset: { id: it.id },
+          }, [
+            el('span', { class: `pdot ${it.mode || ''}` }),
+            el('span', { class: 'study-navt', text: it.title }),
+            hasNotes ? el('span', { class: 'study-dot', title: 'Has a study guide', text: '•' }) : null,
+          ]));
+        }
+      }
+    }
+
+    const main = el('div', { class: 'study-main' });
+    const wrap = el('div', { class: 'study desktop-only' }, [navList, main]);
+    mount.append(wrap);
+
+    function markActive() {
+      navList.querySelectorAll('.study-navrow').forEach((r) => r.classList.toggle('on', r.dataset.id === selected));
+    }
+    function refreshMain() { renderStudyMain(main, byId.get(selected), statusById); }
+    refreshMain();
+  }
+
+  function renderStudyMain(main, it, statusById) {
+    clear(main);
+    if (!it) { main.append(el('p', { class: 'muted', text: 'Select a topic.' })); return; }
+    const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+    const hasNotes = !!(it.notes && it.notes.trim());
+
+    const head = el('div', { class: 'study-head' }, [
+      el('div', { class: 'study-eyebrow' }, [
+        el('span', { class: 'study-area', text: it.area || 'Study' }),
+        it.estMinutes ? el('span', { class: 'study-meta', text: `~${it.estMinutes} min` }) : null,
+        el('span', { class: 'study-meta', text: locked ? 'locked' : it.status }),
+      ]),
+      el('h1', { class: 'study-title', text: it.title }),
+      el('div', { class: 'study-actions' }, [
+        el('button', { class: 'mini-btn' + (it.status === 'done' ? ' active-done' : ''), text: 'Done', onclick: () => toggle(it, 'done') }),
+        el('button', { class: 'mini-btn' + (it.status === 'skipped' ? ' active-skip' : ''), text: 'Skip', onclick: () => toggle(it, 'skipped') }),
+        it.status !== 'todo' ? el('button', { class: 'mini-btn mini-undo', text: 'To‑do', onclick: () => setTodo(it) }) : null,
+        el('button', { class: 'btn-link study-edit', text: editing ? 'Done editing' : (hasNotes ? 'Edit' : 'Write a guide'),
+          onclick: () => { editing = !editing; renderStudyMain(main, it, statusById); } }),
+      ]),
+    ]);
+    main.append(head);
+
+    if (editing) {
+      const ta = el('textarea', {
+        class: 'study-editor', spellcheck: false,
+        placeholder: 'Write the study guide — Markdown works (#, ##, - bullets, `code`, ```blocks```, **bold**).',
+        value: it.notes || '',
+        oninput: (e) => { it.notes = e.target.value; setItemNotes(it.id, e.target.value); },
+      });
+      main.append(ta);
+      ta.focus();
+    } else if (hasNotes) {
+      main.append(el('div', { class: 'study-content' }, [mdToDom(it.notes)]));
+    } else {
+      main.append(el('div', { class: 'study-empty' }, [
+        el('p', { text: 'No study guide for this topic yet.' }),
+        el('p', { class: 'muted', text: 'Write your own, or import a content pack in Data → Load.' }),
+      ]));
+    }
   }
 
   // ---------------- List ----------------
@@ -100,20 +200,10 @@ export async function renderPlan(mount, { navigate }) {
     }
   }
 
+  // Phone list row — a compact tracker: title + status. (Study content lives in
+  // the desktop-only two-pane study view, not here.)
   function listRow(it, statusById) {
     const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
-    const notesOpen = openNotes.has(it.id);
-    const hasNotes = !!(it.notes && it.notes.trim());
-    // The content editor + its toggle are desktop-only — hidden on the phone,
-    // which stays a lightweight tracker. Study material lives on the desktop.
-    const editor = notesOpen ? el('div', { class: 'topic-notes desktop-only' }, [
-      el('textarea', {
-        class: 'topic-notes-ta', rows: '8', spellcheck: false,
-        placeholder: 'Study content for this topic — the breakdown, key ideas, resources, worked problems…',
-        value: it.notes || '',
-        onchange: (e) => { setItemNotes(it.id, e.target.value); it.notes = e.target.value; },
-      }),
-    ]) : null;
     return el('div', { class: `plan-item ${it.status}${locked ? ' locked' : ''}` }, [
       el('span', { class: `pdot ${it.mode || ''}` }),
       el('div', { class: 'body' }, [
@@ -124,14 +214,7 @@ export async function renderPlan(mount, { navigate }) {
         el('button', { class: 'mini-btn' + (it.status === 'done' ? ' active-done' : ''), text: 'Done', onclick: () => toggle(it, 'done') }),
         el('button', { class: 'mini-btn' + (it.status === 'skipped' ? ' active-skip' : ''), text: 'Skip', onclick: () => toggle(it, 'skipped') }),
         it.status !== 'todo' ? el('button', { class: 'mini-btn mini-undo', text: 'To‑do', title: 'Mark as not started', onclick: () => setTodo(it) }) : null,
-        el('button', {
-          class: 'mini-btn notes-btn desktop-only' + (notesOpen ? ' on' : '') + (hasNotes ? ' has-notes' : ''),
-          text: notesOpen ? 'Close' : (hasNotes ? 'Notes •' : 'Notes'),
-          title: 'Study content (desktop only)',
-          onclick: () => { if (notesOpen) openNotes.delete(it.id); else openNotes.add(it.id); paint(); },
-        }),
       ]),
-      editor,
     ]);
   }
 
@@ -293,6 +376,69 @@ export async function renderPlan(mount, { navigate }) {
   }
 
   await paint();
+  return () => mq.removeEventListener('change', onMq);
+}
+
+// Minimal, dependency-free Markdown → DOM for study guides. Supports headings
+// (#, ##, ###), unordered / ordered lists, fenced ``` code blocks, and inline
+// **bold** + `code`. Builds real nodes (no innerHTML), so content is safe.
+function mdToDom(text) {
+  const root = document.createElement('div');
+  const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+  let i = 0;
+  let list = null; // current <ul>/<ol> being filled
+
+  const inline = (s, parent) => {
+    // Split on **bold**, *italic* and `code`, keeping delimiters (bold before
+    // italic so ** isn't mistaken for two single asterisks).
+    const parts = s.split(/(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g);
+    for (const p of parts) {
+      if (!p) continue;
+      if (p.startsWith('**') && p.endsWith('**')) {
+        const b = document.createElement('strong'); b.textContent = p.slice(2, -2); parent.appendChild(b);
+      } else if (p.startsWith('`') && p.endsWith('`')) {
+        const c = document.createElement('code'); c.textContent = p.slice(1, -1); parent.appendChild(c);
+      } else if (p.length > 2 && p.startsWith('*') && p.endsWith('*')) {
+        const em = document.createElement('em'); em.textContent = p.slice(1, -1); parent.appendChild(em);
+      } else {
+        parent.appendChild(document.createTextNode(p));
+      }
+    }
+  };
+  const endList = () => { if (list) { root.appendChild(list); list = null; } };
+
+  while (i < lines.length) {
+    const line = lines[i];
+    if (/^```/.test(line)) { // fenced code block
+      endList();
+      i++;
+      const buf = [];
+      while (i < lines.length && !/^```/.test(lines[i])) { buf.push(lines[i]); i++; }
+      i++; // closing fence
+      const pre = document.createElement('pre');
+      const code = document.createElement('code');
+      code.textContent = buf.join('\n');
+      pre.appendChild(code); root.appendChild(pre);
+      continue;
+    }
+    const h = line.match(/^(#{1,3})\s+(.*)$/);
+    if (h) { endList(); const el = document.createElement('h' + (h[1].length + 1)); inline(h[2], el); root.appendChild(el); i++; continue; }
+    const ul = line.match(/^\s*[-•]\s+(.*)$/);
+    if (ul) { if (!list || list.tagName !== 'UL') { endList(); list = document.createElement('ul'); } const li = document.createElement('li'); inline(ul[1], li); list.appendChild(li); i++; continue; }
+    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+    if (ol) { if (!list || list.tagName !== 'OL') { endList(); list = document.createElement('ol'); } const li = document.createElement('li'); inline(ol[1], li); list.appendChild(li); i++; continue; }
+    if (!line.trim()) { endList(); i++; continue; }
+    // paragraph: gather consecutive non-blank, non-special lines
+    endList();
+    const buf = [line];
+    i++;
+    while (i < lines.length && lines[i].trim() && !/^(#{1,3}\s|```|\s*[-•]\s|\s*\d+\.\s)/.test(lines[i])) { buf.push(lines[i]); i++; }
+    const p = document.createElement('p');
+    inline(buf.join(' '), p);
+    root.appendChild(p);
+  }
+  endList();
+  return root;
 }
 
 // prerequisite edges between cluster keys (areas or groups), from item deps
