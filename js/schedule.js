@@ -88,6 +88,20 @@ function breakAfter(minutes, loadAfter, sinceLong = 0) {
   return Math.min(brk, 25);
 }
 
+// How long a single session runs. On an ordinary day, one topic's estimate
+// (capped ~90 min). In `deep` mode (a wide-open weekend), the coach builds
+// longer focused blocks while you're fresh — up to ~2.5 hours of one thing —
+// tapering as load climbs, so eight hours of study lands as a few big sittings
+// plus lighter work, not a dozen little ones.
+function sessionMinutes(item, load, avail, deep, remaining) {
+  const base = clampDur(item.estMinutes); // 10..90
+  if (!deep) return Math.max(15, Math.min(base, avail));
+  const target = load < 40 ? 150 : load < 60 ? 110 : load < 72 ? 75 : 45;
+  let want = Math.max(base, target);
+  if (remaining > 0) want = Math.min(want, Math.max(45, remaining)); // don't blow far past the day's total
+  return Math.max(15, Math.min(want, avail));
+}
+
 // Per-area / per-item session caps so a day is full but not absurd.
 const AREA_CAP = { WIND_DOWN: 1 };   // reading: once is enough
 const AREA_CAP_DEFAULT = 3;
@@ -98,7 +112,7 @@ const ITEM_CAP = 2;                  // don't schedule the same topic more than 
 // climbs, breaks between, tapering off when you're too spent to absorb more.
 // `cands` is [{ area, item }] — the next surfaceable item per area.
 export function planDay(date, cands, opts = {}) {
-  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null, itemCap = ITEM_CAP, areaCapDefault = AREA_CAP_DEFAULT } = opts;
+  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null, itemCap = ITEM_CAP, areaCapDefault = AREA_CAP_DEFAULT, deep = false } = opts;
   // Fresh sessions route around both commitments and any already-pinned blocks.
   const windows = freeWindows(startMin, endMin, [...busy, ...pinned]);
   const placed = [];
@@ -130,7 +144,7 @@ export function planDay(date, cands, opts = {}) {
 
       eligible.sort((a, b) => score(b, load) - score(a, load));
       const pick = eligible[0];
-      const minutes = Math.max(15, Math.min(clampDur(pick.item.estMinutes), avail));
+      const minutes = sessionMinutes(pick.item, load, avail, deep, maxStudyMinutes - studyTotal);
 
       placed.push({
         itemId: pick.item.id, area: pick.area, title: pick.item.title || '', mode: pick.item.mode,

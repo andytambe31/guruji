@@ -376,12 +376,13 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     ...commuteWindows.map((b) => ({ start: b.start, minutes: b.minutes, mode: 'TRANSIT' })),
     ...commuteBlocks.map((b) => ({ start: b.start, minutes: b.minutes, mode: b.mode })),
   ];
-  // Weekends are wide open and meant for real progress: let the same topic
-  // recur more and pack more areas in, so DSA / system design get several
-  // solid sessions instead of one.
+  // Weekends are wide open and meant for real progress: build longer, deeper
+  // focus blocks (up to ~2.5h while fresh) so a full ~8-hour study day lands as
+  // a few big sittings plus lighter work, spread across the day — not a dozen
+  // little sessions.
   const planOpts = {
     startMin, endMin, busy: busy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes,
-    ...(weekend ? { itemCap: 3, areaCapDefault: 5 } : {}),
+    ...(weekend ? { itemCap: 2, areaCapDefault: 4, deep: true } : {}),
   };
   // If it's too late for anything to fit today, still propose from the day start.
   let fresh = planDay(date, cands, planOpts);
