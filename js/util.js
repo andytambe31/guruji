@@ -114,11 +114,19 @@ export function addDaysISO(iso, n) {
 // Fresh in the morning; each of today's sessions adds load (hard DESK work
 // more than a gentle read); it recovers as time passes since a session ended
 // (your break). Reinforces quality over quantity, nothing more.
-// Life-context that arrives already elevated and discharges over time.
+// How you feel right now — a state that arrives already elevated and discharges
+// over time. `level` is the starting hit to your capacity; `tau` is how slowly
+// it fades (minutes to lose ~63%): a heavy lunch passes in an hour or two, sleep
+// debt or feeling unwell lingers most of the day. Pick the one that fits and the
+// gauge — and the coach's call — bend to match.
 export const CONTEXTS = {
-  commuted: { label: 'Just commuted', level: 24, tau: 60 },
+  commuted: { label: 'Just commuted', level: 22, tau: 60 },   // settles quickly once you sit down
+  postmeal: { label: 'After a big meal', level: 30, tau: 100 }, // the post-lunch dip
+  wired: { label: 'Wired / restless', level: 26, tau: 90 },    // caffeinated or anxious, hard to settle
   office: { label: 'After work', level: 38, tau: 130 },
-  drained: { label: 'Drained', level: 48, tau: 150 },
+  sleepy: { label: 'Sleepy / groggy', level: 50, tau: 220 },   // under-slept — hangs around
+  drained: { label: 'Drained', level: 50, tau: 160 },
+  unwell: { label: 'Under the weather', level: 60, tau: 320 }, // off all day
 };
 
 export function estimateCognitiveLoad(log, context = null, now = new Date()) {
