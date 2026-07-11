@@ -1,6 +1,6 @@
-// Now — the dashboard. High level: pick an area (DSA / System Design /
-// Reading / …), all peers, nudged by recent history. Reading is a first-class
-// area that tracks a streak. The topic + how is revealed later, in prep.
+// Now — the dashboard. The study areas are always shown (a stable switcher),
+// nudged by recent history. Reading is a first-class peer that tracks a streak.
+// The topic + how is revealed later, in prep.
 import { el, clear, fill, habitStats, todayISO } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied } from '../store.js';
 
@@ -27,25 +27,16 @@ export async function renderNow(mount, { navigate }) {
   const statusById = new Map(items.map((i) => [i.id, i.status]));
   const surfaceable = items.filter((i) => i.status === 'todo' && depsSatisfied(i, statusById));
 
-  // Every surfaceable area is a peer — including recurring habits like Reading.
-  const areas = [];
-  for (const it of surfaceable) { const a = it.area || 'Study'; if (!areas.includes(a)) areas.push(a); }
+  // Every area in the plan is always a chip (stable), in plan order.
+  const allAreas = [];
+  for (const it of items) { const a = it.area || 'Study'; if (!allAreas.includes(a)) allAreas.push(a); }
+  // Areas that have something to start right now (for the smart default).
+  const availAreas = [];
+  for (const it of surfaceable) { const a = it.area || 'Study'; if (!availAreas.includes(a)) availAreas.push(a); }
   const nextForArea = (a) => surfaceable.find((i) => (i.area || 'Study') === a) || null;
 
-  if (areas.length === 0) {
-    const anyLeft = items.some((i) => i.status === 'todo');
-    mount.append(el('div', { class: 'center-state' }, [
-      el('h1', { text: anyLeft ? 'Nothing unlocked' : 'All clear' }),
-      el('p', { class: 'muted', text: anyLeft
-        ? 'The next items are waiting on their dependencies. Finish what unlocks them, or review the plan.'
-        : 'Everything in the plan is done or skipped. Time to update the plan.' }),
-      el('button', { class: 'btn btn-ghost', style: 'margin-top:12px', text: 'Review plan', onclick: () => navigate('/plan') }),
-    ]));
-    return;
-  }
-
   const log = await getLog();
-  const suggestion = suggest(areas, log);
+  const suggestion = availAreas.length ? suggest(availAreas, log) : { area: allAreas[0], nudge: '' };
   let selectedArea = suggestion.area;
 
   const wrap = el('div', { class: 'now-wrap' });
@@ -56,7 +47,12 @@ export async function renderNow(mount, { navigate }) {
 
   function coachFor(area) {
     if (isHabit(area)) return habitLine(area, log);
-    if (area === suggestion.area) return suggestion.nudge;
+    const item = nextForArea(area);
+    if (!item) {
+      const hasTodo = items.some((i) => (i.area || 'Study') === area && i.status === 'todo');
+      return hasTodo ? `${area} is locked for now — clear its prerequisites first.` : `You’ve cleared everything in ${area}.`;
+    }
+    if (area === suggestion.area) return suggestion.nudge || (AREA_LINE[area] || AREA_LINE.Study);
     return AREA_LINE[area] || AREA_LINE.Study;
   }
 
@@ -64,23 +60,31 @@ export async function renderNow(mount, { navigate }) {
     const item = nextForArea(selectedArea);
     const reading = isHabit(selectedArea);
 
-    const areaChips = el('div', { class: 'areas' }, areas.map((a) =>
+    const areaChips = el('div', { class: 'areas' }, allAreas.map((a) =>
       el('button', {
         class: 'ctx-chip' + (a === selectedArea ? ' on' : ''),
         text: a,
         onclick: () => { selectedArea = a; render(); },
       })));
 
+    const cta = item
+      ? el('button', {
+          class: 'btn btn-primary btn-lg btn-block',
+          text: reading ? 'Start reading' : 'Start studying',
+          onclick: () => navigate(`/prep/${item.id}`),
+        })
+      : el('button', {
+          class: 'btn btn-ghost btn-lg btn-block',
+          text: 'See the map',
+          onclick: () => navigate('/plan'),
+        });
+
     fill(clear(wrap), [
       item && item.week != null && item.week > 0 ? el('p', { class: 'eyebrow', text: `Week ${item.week}` }) : null,
       el('div', { class: 'coach', text: coachFor(selectedArea) }),
       el('div', { class: 'dur-label', text: 'What are you focusing on?' }),
       areaChips,
-      el('button', {
-        class: 'btn btn-primary btn-lg btn-block',
-        text: reading ? 'Start reading' : 'Start studying',
-        onclick: () => item && navigate(`/prep/${item.id}`),
-      }),
+      cta,
     ]);
   }
 }
@@ -98,7 +102,7 @@ function habitLine(area, log) {
 // ----- area suggestion from recent history -----
 function suggest(areas, log) {
   const recent = [...log].reverse().map((e) => e.area).filter(Boolean);
-  if (areas.length === 1) return { area: areas[0], nudge: AREA_LINE_default(areas[0]) };
+  if (areas.length === 1) return { area: areas[0], nudge: AREA_LINE[areas[0]] || AREA_LINE.Study };
 
   const streakArea = recent[0] || null;
   let streak = 0;
@@ -122,5 +126,3 @@ function suggest(areas, log) {
   }
   return { area: best, nudge };
 }
-
-function AREA_LINE_default(area) { return AREA_LINE[area] || AREA_LINE.Study; }

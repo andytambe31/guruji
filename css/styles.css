@@ -288,6 +288,17 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .dag-text { font-size: 11px; fill: var(--text); }
 .dag-node.done .dag-text, .dag-node.skipped .dag-text, .dag-node.locked .dag-text { fill: var(--text-faint); }
 
+/* area overview nodes + zoom header */
+.area-rect { fill: #fff; stroke-width: 2; }
+.area-name { font-size: 13px; font-weight: 650; fill: var(--text); }
+.area-sub { font-size: 11px; fill: var(--text-faint); }
+.dag-head { display: flex; align-items: center; gap: 10px; margin: 8px 0 2px; }
+.dag-head-title { flex: 1; font-weight: 650; font-size: 16px; letter-spacing: -.01em; }
+.seg-btn.back { border: 1px solid var(--line); border-radius: 9px; color: var(--text); padding: 7px 12px; }
+.zoom-ctl { display: flex; gap: 6px; }
+.zoom-btn { width: 36px; height: 32px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font-size: 17px; line-height: 1; cursor: pointer; color: var(--text); }
+.zoom-btn:active { background: var(--bg-soft); }
+
 .plan-section { margin-bottom: 36px; }
 .plan-name-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 2px; }
 .plan-name { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: -.02em; }
