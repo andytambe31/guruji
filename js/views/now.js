@@ -1,7 +1,7 @@
 // Now — the dashboard. The study areas are always shown (a stable switcher),
 // nudged by recent history. Reading is a first-class peer that tracks a streak.
 // The topic + how is revealed later, in prep.
-import { el, clear, fill, habitStats, todayISO } from '../util.js';
+import { el, clear, fill, habitStats, todayISO, estimateCognitiveLoad, loadStatus } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied } from '../store.js';
 
 const AREA_LINE = {
@@ -36,6 +36,8 @@ export async function renderNow(mount, { navigate }) {
   const nextForArea = (a) => surfaceable.find((i) => (i.area || 'Study') === a) || null;
 
   const log = await getLog();
+  const load = estimateCognitiveLoad(log);
+  const status = loadStatus(load);
   const suggestion = availAreas.length ? suggest(availAreas, log) : { area: allAreas[0], nudge: '' };
   let selectedArea = suggestion.area;
 
@@ -85,6 +87,14 @@ export async function renderNow(mount, { navigate }) {
       el('div', { class: 'dur-label', text: 'What are you focusing on?' }),
       areaChips,
       cta,
+      el('div', { class: `cog tone-${status.tone}` }, [
+        el('div', { class: 'cog-row' }, [
+          el('span', { class: 'cog-label', text: 'Cognitive load' }),
+          el('span', { class: 'cog-pct', text: `${load}%` }),
+        ]),
+        el('div', { class: 'cog-track' }, [el('div', { class: 'cog-fill', style: `width:${load}%` })]),
+        el('div', { class: 'cog-note', text: status.note }),
+      ]),
     ]);
   }
 }

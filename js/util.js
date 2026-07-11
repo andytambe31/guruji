@@ -101,6 +101,40 @@ export function addDaysISO(iso, n) {
   return d.toISOString().slice(0, 10);
 }
 
+// ---- cognitive load (a deliberately rough gauge, not a measurement) ----
+// Fresh in the morning; each of today's sessions adds load (hard DESK work
+// more than a gentle read); it recovers as time passes since a session ended
+// (your break). Reinforces quality over quantity, nothing more.
+export function estimateCognitiveLoad(log, now = new Date()) {
+  const DIFFICULTY = { DESK: 1.0, TRANSIT: 0.8, WIND_DOWN: 0.35 };
+  const LOAD_PER_MIN = 0.9;   // ~50 min of deep work ≈ 45 points at its peak
+  const RECOVERY_TAU = 50;    // minutes; larger = slower recovery
+  const today = todayISO(now);
+  const nowMs = now.getTime();
+
+  // time-of-day baseline: ~0 at 6am, drifting up to ~22 by midnight
+  const hours = now.getHours() + now.getMinutes() / 60;
+  let load = Math.max(0, Math.min(22, ((hours - 6) / 18) * 22));
+
+  for (const e of log) {
+    if (e.date !== today || !e.endedAt) continue;
+    const end = new Date(e.endedAt).getTime();
+    if (Number.isNaN(end)) continue;
+    const minsSince = Math.max(0, (nowMs - end) / 60000);
+    const diff = DIFFICULTY[e.mode] ?? 0.7;
+    const raw = (e.focusMinutes || 0) * diff * LOAD_PER_MIN;
+    load += raw * Math.exp(-minsSince / RECOVERY_TAU);
+  }
+  return Math.max(0, Math.min(100, Math.round(load)));
+}
+
+export function loadStatus(pct) {
+  if (pct < 35) return { tone: 'low', note: 'Fresh — take on the hard stuff.' };
+  if (pct < 65) return { tone: 'mid', note: 'Warmed up. Focus still in the tank.' };
+  if (pct < 85) return { tone: 'high', note: 'Filling up — an easier rep, or a break.' };
+  return { tone: 'max', note: 'Spent. Step away — quality over quantity.' };
+}
+
 // Streak + recency for a habit, from the set of dates it was done.
 export function habitStats(dates, today = todayISO()) {
   const set = new Set(dates);

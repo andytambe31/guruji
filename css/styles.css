@@ -156,6 +156,20 @@ p  { color: var(--text-dim); line-height: 1.55; }
 
 .now-foot { text-align: center; margin-top: 26px; }
 
+/* Cognitive-load gauge — quiet, reinforces quality over quantity. */
+.cog { margin-top: 36px; }
+.cog-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
+.cog-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
+.cog-pct { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.cog-track { height: 5px; background: var(--line); border-radius: 5px; overflow: hidden; }
+.cog-fill { height: 100%; border-radius: 5px; background: var(--cog, var(--text-dim)); transition: width .5s ease, background .3s; }
+.cog-note { font-size: 12.5px; color: var(--text-faint); margin-top: 9px; }
+.cog.tone-low  { --cog: #0f9d6b; }
+.cog.tone-mid  { --cog: #6b8afd; }
+.cog.tone-high { --cog: #d98324; }
+.cog.tone-max  { --cog: #c2483d; }
+.cog.tone-high .cog-note, .cog.tone-max .cog-note { color: var(--cog); }
+
 /* ---------- Empty / centered states ---------- */
 .center-state {
   min-height: 62vh; display: flex; flex-direction: column;
