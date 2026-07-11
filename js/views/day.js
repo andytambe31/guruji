@@ -7,7 +7,7 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings,
-  resequenceBlocks, pushBlock, depsSatisfied,
+  resequenceBlocks, resequenceMixed, isMovableBusy, clearBusyForDate, pushBlock, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -280,6 +280,7 @@ export async function renderDay(mount, { navigate }) {
 
     async function commit() {
       await setSettings({ bedtime: pl.bedtime || settings.bedtime, ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}) });
+      await clearBusyForDate(date); // re-plan replaces the day's commitments
       const o = pl.office;
       if (o.on) {
         // Remember this as the usual office timing for next time.
@@ -311,7 +312,7 @@ export async function renderDay(mount, { navigate }) {
   function blockCard(b) {
     const endLabel = fmtTimeOfDay(b.start + b.minutes);
     const done = b.status === 'done';
-    return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1' } }, [
+    return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1', drag: done ? '0' : '1' } }, [
       done ? null : el('button', { class: 'blk-grip', 'aria-label': 'Drag to reorder', title: 'Drag to reorder', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']),
       el('div', { class: 'blk-body' }, [
         el('div', { class: 'blk-head' }, [
@@ -344,7 +345,7 @@ export async function renderDay(mount, { navigate }) {
     if (e.button && e.button !== 0) return;
     const timeline = wrap.querySelector('.timeline');
     if (!timeline) return;
-    const cards = [...timeline.querySelectorAll('.blk[data-planned="1"]')];
+    const cards = [...timeline.querySelectorAll('[data-drag="1"]')];
     const dragCard = cards.find((c) => c.dataset.id === id);
     if (!dragCard || cards.length < 2) return;
     e.preventDefault();
@@ -375,7 +376,7 @@ export async function renderDay(mount, { navigate }) {
       dragCard.style.transform = '';
       const order = mids.map((m) => m.id).filter((x) => x !== id);
       order.splice(targetIndex, 0, id);
-      await resequenceBlocks(date, order);
+      await resequenceMixed(date, order);
       await paint();
     }
     document.addEventListener('pointermove', move);
@@ -383,7 +384,9 @@ export async function renderDay(mount, { navigate }) {
   }
 
   function busyCard(b) {
-    return el('div', { class: 'busy' }, [
+    const movable = isMovableBusy(b);
+    return el('div', { class: 'busy' + (movable ? ' movable' : ''), dataset: movable ? { id: b.id, drag: '1' } : {} }, [
+      movable ? el('button', { class: 'busy-grip', 'aria-label': 'Drag to move', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']) : null,
       el('span', { class: 'busy-time', text: `${fmtTimeOfDay(b.start)} – ${fmtTimeOfDay(b.start + b.minutes)}` }),
       el('span', { class: 'busy-label', text: b.label }),
       b.drain && b.drain !== 'none' ? el('span', { class: 'busy-drain', text: 'draining' }) : null,

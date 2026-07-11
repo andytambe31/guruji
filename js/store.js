@@ -262,6 +262,12 @@ export async function deleteBusy(id) {
   if (b) await reflowDate(b.date);
   return b;
 }
+// Re-planning fully re-specifies the day's commitments, so clear the old ones
+// first — otherwise each re-plan stacks another gym/walk/office.
+export async function clearBusyForDate(date) {
+  const rows = await getBusyForDate(date);
+  for (const b of rows) await del(STORES.schedule, b.id);
+}
 
 // Re-pack a day so nothing overlaps: pinned/done blocks and commitments keep
 // their time, the rest flow around them.
@@ -291,9 +297,12 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   const [existing, busy, settings, context] = await Promise.all([
     getBlocksForDate(date), getBusyForDate(date), getSettings(), getContext(),
   ]);
-  const keep = existing.filter((b) => b.pinned || b.status === 'done');
+  // Keep manually-pinned and completed work; regenerate the auto commute-study
+  // (onCommute) so re-planning doesn't leave a stale duplicate behind.
+  const keep = existing.filter((b) => b.status === 'done' || (b.pinned && !b.onCommute));
+  const keepSet = new Set(keep);
   for (const b of existing) {
-    if (!(b.pinned || b.status === 'done')) await del(STORES.schedule, b.id);
+    if (!keepSet.has(b)) await del(STORES.schedule, b.id);
   }
 
   const bedMin = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
@@ -422,6 +431,32 @@ export async function pushBlock(id, delta) {
   }
   for (const d of dropped) await del(STORES.schedule, d.id);
   await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  return getBlocksForDate(date);
+}
+
+// Reorder the whole day — study sessions AND movable commitments (gym, walk,
+// errands) as one sequence — laid out from the day's start around the things
+// that are genuinely fixed: office hours, the commute, meals, and done work.
+const FIXED_LABELS = new Set(['Breakfast', 'Lunch', 'Dinner', 'Office']);
+export function isMovableBusy(b) { return !(b.transit || FIXED_LABELS.has(b.label)); }
+
+export async function resequenceMixed(date, orderedIds) {
+  const [blocks, busy, settings] = await Promise.all([
+    getBlocksForDate(date), getBusyForDate(date), getSettings(),
+  ]);
+  const done = blocks.filter((b) => b.status === 'done');
+  const fixedBusy = busy.filter((b) => !isMovableBusy(b));
+  const movableBusy = busy.filter(isMovableBusy);
+  const pool = [...blocks.filter((b) => b.status !== 'done'), ...movableBusy];
+  const byId = new Map(pool.map((x) => [x.id, x]));
+  const ordered = orderedIds.map((id) => byId.get(id)).filter(Boolean);
+  for (const x of pool) if (!orderedIds.includes(x.id)) ordered.push(x);
+
+  const wakeStart = settings.wake != null ? toMinutes(settings.wake) + (settings.freshenMinutes ?? 30) : DAY_START;
+  const startMin = date === todayISO() ? Math.max(Math.ceil((nowMinutes() + 5) / 15) * 15, wakeStart) : wakeStart;
+  sequence(ordered, { startMin, busy: [...fixedBusy, ...done] });
+  const rows = ordered.map((x) => (x.kind === 'busy' ? { ...x } : { ...x, kind: 'block', pinned: false }));
+  await bulkPut(STORES.schedule, rows);
   return getBlocksForDate(date);
 }
 
