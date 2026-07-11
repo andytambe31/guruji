@@ -771,3 +771,11 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
   .study-nav { padding-bottom: 96px; }
   .study-main { padding-bottom: 120px; }
 }
+
+/* study-guide tables */
+@media (min-width: 900px) {
+  .study-content table { border-collapse: collapse; margin: 0 0 16px; font-size: 14px; width: auto; }
+  .study-content th, .study-content td { border: 1px solid var(--line); padding: 7px 14px; text-align: left; }
+  .study-content th { background: var(--bg-soft); color: var(--text); font-weight: 650; }
+  .study-content td { color: var(--text-dim); }
+}

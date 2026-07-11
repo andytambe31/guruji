@@ -457,6 +457,25 @@ function mdToDom(text) {
       pre.appendChild(code); root.appendChild(pre);
       continue;
     }
+    // table: a "| a | b |" header line followed by a "|---|---|" separator.
+    if (/^\|(.+)\|\s*$/.test(line) && i + 1 < lines.length && /^\|[\s:|-]+\|\s*$/.test(lines[i + 1])) {
+      endList();
+      const cells = (row) => row.trim().replace(/^\||\|$/g, '').split('|').map((c) => c.trim());
+      const table = document.createElement('table');
+      const thead = document.createElement('thead');
+      const htr = document.createElement('tr');
+      for (const c of cells(line)) { const th = document.createElement('th'); inline(c, th); htr.appendChild(th); }
+      thead.appendChild(htr); table.appendChild(thead);
+      i += 2; // skip the header + separator rows
+      const tbody = document.createElement('tbody');
+      while (i < lines.length && /^\|(.+)\|\s*$/.test(lines[i])) {
+        const tr = document.createElement('tr');
+        for (const c of cells(lines[i])) { const td = document.createElement('td'); inline(c, td); tr.appendChild(td); }
+        tbody.appendChild(tr); i++;
+      }
+      table.appendChild(tbody); root.appendChild(table);
+      continue;
+    }
     const h = line.match(/^(#{1,3})\s+(.*)$/);
     if (h) { endList(); const el = document.createElement('h' + (h[1].length + 1)); inline(h[2], el); root.appendChild(el); i++; continue; }
     const ul = line.match(/^\s*[-•]\s+(.*)$/);
