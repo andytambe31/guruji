@@ -30,6 +30,12 @@ const DRAIN = [
   { key: 'low', label: 'A little', drain: 'low' },
   { key: 'high', label: 'Yeah — I’ll be wiped', drain: 'high' },
 ];
+const WAKE = [
+  { key: 'early', label: 'Early — around 7', wake: 7 * 60 },
+  { key: 'mid', label: 'Around 8:30', wake: 8 * 60 + 30 },
+  { key: 'late', label: 'Around 9:30', wake: 9 * 60 + 30 },
+  { key: 'verylate', label: 'Late — around 11', wake: 11 * 60 },
+];
 
 export async function renderDay(mount, { navigate }) {
   if (!(await hasPlan())) {
@@ -75,9 +81,9 @@ export async function renderDay(mount, { navigate }) {
       el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = false; pl = null; await paint(); } }),
     ]);
 
-    // In the planning conversation, focus on the question — hide the rest.
+    // In the planning conversation, focus on the question — nothing else.
     if (pl) {
-      fill(clear(wrap), [head, journeyCard(settings)]);
+      fill(clear(wrap), [journeyCard(settings)]);
       return;
     }
 
@@ -94,7 +100,7 @@ export async function renderDay(mount, { navigate }) {
 
     const surfaceableAreas = surfaceAreas(items);
     const footer = el('div', { class: 'day-actions' }, [
-      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = { bedtime: settings.bedtime, stage: 'gym-ask', cur: null, activities: [] }; adding = false; await paint(); } }),
+      el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = { bedtime: settings.bedtime, wake: null, stage: 'wake-ask', cur: null, activities: [] }; adding = false; await paint(); } }),
       el('div', { class: 'day-sub' }, [
         el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; await paint(); } }),
         (blocks.length || busy.length) ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
@@ -121,6 +127,12 @@ export async function renderDay(mount, { navigate }) {
       extra && extra.__foot ? null : foot(backFor(s)),
     ]);
 
+    if (s === 'wake-ask') {
+      return card('What time are you up?', 'I’ll leave you ~30 minutes to freshen up before anything starts.', [
+        ...WAKE.map((w) => opt(w.label, () => { pl.wake = w.wake; go('gym-ask'); })),
+        opt('Been up a while', () => { pl.wake = null; go('gym-ask'); }),
+      ]);
+    }
     if (s === 'gym-ask') {
       return card('Heading to the gym today?', 'The coach will keep study clear of it.', [
         opt('Yes', () => beginActivity('gym', 'Gym')),
@@ -196,7 +208,10 @@ export async function renderDay(mount, { navigate }) {
       await paint();
     }
     async function commit() {
-      await setSettings({ bedtime: pl.bedtime || settings.bedtime });
+      await setSettings({
+        bedtime: pl.bedtime || settings.bedtime,
+        ...(pl.wake != null ? { wake: minutesToHHMM(pl.wake) } : {}),
+      });
       for (const a of pl.activities) {
         await putBusy({ date, start: a.when.start, minutes: a.dur.minutes, label: a.name, drain: a.drain });
       }
@@ -207,7 +222,7 @@ export async function renderDay(mount, { navigate }) {
   }
 
   function backFor(stage) {
-    return { when: pl && pl.cur && pl.cur.key === 'gym' ? 'gym-ask' : pl && pl.cur && pl.cur.key === 'walk' ? 'walk-ask' : 'else-label', dur: 'when', drain: 'dur', 'walk-ask': 'gym-ask', 'else-ask': 'walk-ask' }[stage] || null;
+    return { when: pl && pl.cur && pl.cur.key === 'gym' ? 'gym-ask' : pl && pl.cur && pl.cur.key === 'walk' ? 'walk-ask' : 'else-label', dur: 'when', drain: 'dur', 'gym-ask': 'wake-ask', 'walk-ask': 'gym-ask', 'else-ask': 'walk-ask' }[stage] || null;
   }
 
   function blockCard(b) {

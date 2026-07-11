@@ -5,7 +5,7 @@ import { planDay, reflow, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
 // ---------- Routine settings (bedtime, goal countdown) ----------
-const DEFAULT_SETTINGS = { bedtime: '23:30', goalDate: null, goalLabel: '' };
+const DEFAULT_SETTINGS = { bedtime: '23:30', wake: null, freshenMinutes: 30, goalDate: null, goalLabel: '' };
 export async function getSettings() {
   const rec = await get(STORES.kv, 'settings');
   return { ...DEFAULT_SETTINGS, ...(rec ? rec.v : {}) };
@@ -291,7 +291,13 @@ export async function autoPlanDay(date, { now = new Date() } = {}) {
   const endMin = Math.min(DAY_END, bedMin);
   const taken = new Set(keep.map((b) => b.itemId));
   const cands = perArea.filter((it) => !taken.has(it.id));
-  const startMin = date === todayISO(now) ? Math.ceil((nowMinutes(now) + 5) / 15) * 15 : DAY_START;
+  // Earliest the day can begin: after you're up and freshened up.
+  const wakeStart = settings.wake != null
+    ? toMinutes(settings.wake) + (settings.freshenMinutes ?? 30)
+    : DAY_START;
+  const startMin = date === todayISO(now)
+    ? Math.max(Math.ceil((nowMinutes(now) + 5) / 15) * 15, wakeStart)
+    : wakeStart;
 
   const planOpts = { startMin, endMin, busy, context };
   // If it's too late for anything to fit today, still propose from the day start.

@@ -173,14 +173,27 @@ export async function renderNow(mount, { navigate }) {
       ctxLine, ctxChips,
     ]);
 
-    // A quiet bedtime nudge — the routine's north star, escalating as it nears.
+    // A quiet bedtime nudge — the routine's north star, escalating as it nears,
+    // and pointing at a wake time that gives tomorrow the fullest run.
     let sleepEl = null;
     if (bedMin != null) {
       const soon = toBed > 0 && toBed <= 90;
-      const txt = toBed <= 0 ? 'Past bedtime — rest resets you.'
-        : soon ? `Wind down soon · bed by ${fmtTimeOfDay(bedMin)}`
-        : `Ideal lights-out · ${fmtTimeOfDay(bedMin)}`;
-      sleepEl = el('div', { class: 'sleep-nudge' + (soon || toBed <= 0 ? ' soon' : ''), text: txt });
+      const past = toBed <= 0;
+      const idealWake = (bedMin + 8 * 60) % (24 * 60); // ~8h of sleep
+      const goalBit = settings.goalLabel ? ` toward ${settings.goalLabel}` : '';
+      if (past) {
+        sleepEl = el('div', { class: 'sleep-nudge soon' }, [
+          el('div', { class: 'sleep-main', text: 'Past bedtime — time to sleep.' }),
+          el('div', { class: 'sleep-sub', text: `Rest now; up by ${fmtTimeOfDay(idealWake)} sets up the fullest day${goalBit}.` }),
+        ]);
+      } else if (soon) {
+        sleepEl = el('div', { class: 'sleep-nudge soon' }, [
+          el('div', { class: 'sleep-main', text: 'Time to wind down.' }),
+          el('div', { class: 'sleep-sub', text: `Bed by ${fmtTimeOfDay(bedMin)} · aim to be up by ${fmtTimeOfDay(idealWake)} for the most focus tomorrow.` }),
+        ]);
+      } else {
+        sleepEl = el('div', { class: 'sleep-nudge', text: `Ideal lights-out · ${fmtTimeOfDay(bedMin)}` });
+      }
     }
 
     // Nonchalant goal countdown, tucked in the corner — never bold.
