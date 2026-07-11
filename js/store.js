@@ -721,6 +721,12 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   if ('context' in plan) {
     await setContext(plan.context || null);
   }
+  // A full backup carries the live focus session so the other device can show
+  // "studying now". A plain plan / content patch has no such key — leave the
+  // local session untouched then.
+  if ('activeSession' in plan) {
+    await setActiveSession(plan.activeSession || null);
+  }
 
   return { plans: planRecords.length, phases: phaseRecords.length, items: itemRecords.length };
 }
@@ -798,6 +804,7 @@ export async function buildExport() {
     settings,
     reading,
     log,
+    activeSession: await getActiveSession(), // so another device sees a live session
     exportedAt: new Date().toISOString(),
     app: 'guruji',
     schemaVersion: SCHEMA_VERSION,

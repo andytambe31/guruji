@@ -1,6 +1,7 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
-import { clear } from './util.js';
+import { clear, el, toast } from './util.js';
 import { getActiveSession, clearActiveSession } from './store.js';
+import { exportCanonical } from './importexport.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
@@ -95,6 +96,9 @@ function hideSplash(startedAt) {
 // render. Ignore a session abandoned long ago so we don't resurrect stale ones.
 async function maybeResumeSession() {
   try {
+    // Desktop doesn't hijack into the full-screen timer — it surfaces the live
+    // session inside the study view (content + timer together) instead.
+    if (window.matchMedia('(min-width: 900px)').matches) return;
     const s = await getActiveSession();
     if (!s || !s.itemId) return;
     const ageMs = Date.now() - new Date(s.startedAt).getTime();
@@ -102,6 +106,22 @@ async function maybeResumeSession() {
     const focusHash = `#/focus/${s.itemId}/${s.minutes || 25}`;
     if (location.hash !== focusHash) location.hash = focusHash;
   } catch { /* non-fatal */ }
+}
+
+// A floating "snapshot to iCloud" control, reachable from anywhere — including
+// mid-session — so you can push the current state and pick it up on the desktop.
+function mountSyncFab() {
+  const fab = el('button', {
+    class: 'sync-fab', 'aria-label': 'Save a snapshot to iCloud', title: 'Snapshot to iCloud (guruji.json)',
+  }, ['⤒']);
+  fab.addEventListener('click', async () => {
+    if (fab.classList.contains('busy')) return;
+    fab.classList.add('busy');
+    try { await exportCanonical(); toast('Snapshot saved — keep guruji.json in iCloud'); }
+    catch { toast('Snapshot failed', true); }
+    setTimeout(() => fab.classList.remove('busy'), 600);
+  });
+  document.body.appendChild(fab);
 }
 
 async function boot() {
@@ -123,6 +143,7 @@ async function boot() {
   await router();
   clearTimeout(splashFailsafe);
   hideSplash(bootStart);
+  mountSyncFab();
 
   // Register the service worker (offline shell). Non-fatal if it fails.
   // Register directly — this module is deferred, so the window 'load' event may

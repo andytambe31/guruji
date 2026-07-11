@@ -2,8 +2,8 @@
 // a small DAG (edges from items' dependsOn), so you drill from "DSA" into
 // "Trees" into the actual tasks. Node text wraps to two lines instead of
 // ellipsing.
-import { el, clear, toast } from '../util.js';
-import { getPlans, getPhases, getItems, setItemStatus, setItemNotes, resetAllStatuses, depsSatisfied } from '../store.js';
+import { el, clear, toast, fmtClock } from '../util.js';
+import { getPlans, getPhases, getItems, setItemStatus, setItemNotes, resetAllStatuses, getActiveSession, depsSatisfied } from '../store.js';
 
 const AREA_COLOR = {
   'DSA': '#3b5bd9', 'System Design': '#0f9d6b', 'Reading': '#c98a2e',
@@ -26,13 +26,26 @@ export async function renderPlan(mount, { navigate }) {
   let selected = null;
   let scale = 1;
   let editing = false; // desktop study pane: reading vs editing the content
+  let activeSession = null; // a focus session in progress (shown live on desktop)
+  let studyTimer = null;    // interval ticking the "studying now" banner
+  const stopStudyTimer = () => { if (studyTimer) { clearInterval(studyTimer); studyTimer = null; } };
   // Desktop gets a wide two-pane study view; the phone stays a compact tracker.
   const mq = window.matchMedia('(min-width: 900px)');
   const onMq = () => paint();
   mq.addEventListener('change', onMq);
 
+  // Seconds left in a persisted session, from the wall clock (mirrors focus.js).
+  const sessionRemaining = (s) => {
+    const total = (s.minutes || 25) * 60;
+    let pausedMs = (s.pausedAccum || 0) * 1000;
+    if (s.paused && s.pausedAt) pausedMs += Date.now() - new Date(s.pausedAt).getTime();
+    return Math.max(0, total - Math.floor((Date.now() - new Date(s.startedAt).getTime() - pausedMs) / 1000));
+  };
+
   async function paint() {
-    const [plans, phases, items] = await Promise.all([getPlans(), getPhases(), getItems()]);
+    stopStudyTimer();
+    const [plans, phases, items, session] = await Promise.all([getPlans(), getPhases(), getItems(), getActiveSession()]);
+    activeSession = session && session.itemId ? session : null;
     clear(mount);
 
     if (!items.length) {
@@ -91,8 +104,9 @@ export async function renderPlan(mount, { navigate }) {
     // else the first topic.
     const byId = new Map(items.map((i) => [i.id, i]));
     if (!selected || !byId.has(selected)) {
-      const firstTodo = items.find((i) => i.status === 'todo' && depsSatisfied(i, statusById));
-      selected = (firstTodo || items[0]).id;
+      // A live session takes focus; otherwise the first unlocked to-do.
+      if (activeSession && byId.has(activeSession.itemId)) selected = activeSession.itemId;
+      else { const firstTodo = items.find((i) => i.status === 'todo' && depsSatisfied(i, statusById)); selected = (firstTodo || items[0]).id; }
       editing = false;
     }
 
@@ -135,9 +149,31 @@ export async function renderPlan(mount, { navigate }) {
 
   function renderStudyMain(main, it, statusById) {
     clear(main);
+    stopStudyTimer();
     if (!it) { main.append(el('p', { class: 'muted', text: 'Select a topic.' })); return; }
     const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
     const hasNotes = !!(it.notes && it.notes.trim());
+
+    // A session running on this topic (often started on the phone, synced over)
+    // shows a live timer right above the content — study the material while the
+    // clock runs. Tap it to open the full focus screen.
+    if (activeSession && activeSession.itemId === it.id) {
+      const clockEl = el('span', { class: 'sb-clock', text: fmtClock(sessionRemaining(activeSession)) });
+      main.append(el('button', {
+        class: 'study-banner' + (activeSession.paused ? ' paused' : ''),
+        title: 'Open the focus timer',
+        onclick: () => navigate(`/focus/${activeSession.itemId}/${activeSession.minutes || 25}`),
+      }, [
+        el('span', { class: 'sb-dot' }),
+        el('span', { class: 'sb-label', text: activeSession.paused ? 'Paused' : 'Studying now' }),
+        clockEl,
+      ]));
+      studyTimer = setInterval(() => {
+        const r = sessionRemaining(activeSession);
+        clockEl.textContent = r <= 0 ? "Time's up" : fmtClock(r);
+        if (r <= 0) stopStudyTimer();
+      }, 1000);
+    }
 
     const head = el('div', { class: 'study-head' }, [
       el('div', { class: 'study-eyebrow' }, [
@@ -376,7 +412,7 @@ export async function renderPlan(mount, { navigate }) {
   }
 
   await paint();
-  return () => mq.removeEventListener('change', onMq);
+  return () => { mq.removeEventListener('change', onMq); stopStudyTimer(); };
 }
 
 // Minimal, dependency-free Markdown → DOM for study guides. Supports headings
