@@ -208,24 +208,36 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .timeline { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; }
 .day-empty { padding: 22px 2px; }
 
-.blk { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: 12px 14px; display: flex; flex-direction: column; gap: 9px; transition: opacity .2s, border-color .15s; animation: swapIn .28s ease both; }
-.blk.done { opacity: .5; }
-.blk-when { display: flex; align-items: center; gap: 8px; }
-.blk-time { appearance: none; background: transparent; border: 1px solid var(--line); border-radius: 8px; color: var(--text); font: inherit; font-size: 14px; font-weight: 600; padding: 4px 6px; }
-.blk-time:disabled { border-color: transparent; padding-left: 0; }
-.blk-end { font-size: 13px; color: var(--text-faint); }
-.blk-main { display: flex; align-items: center; gap: 8px; }
-.blk-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-faint); }
-.blk-dot.DESK { background: var(--desk); }
-.blk-dot.TRANSIT { background: var(--transit); }
-.blk-dot.WIND_DOWN { background: var(--wind); }
-.blk-area { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
-.blk-dur { font-size: 12px; color: var(--text-faint); margin-left: auto; }
-.blk-acts { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.blk-start { appearance: none; cursor: pointer; background: var(--text); color: var(--bg); border: none; font: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: 999px; }
-.blk-act { appearance: none; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--text-dim); font: inherit; font-size: 12px; padding: 6px 11px; border-radius: 999px; transition: border-color .15s, color .15s; }
-.blk-act:hover { border-color: var(--text-faint); color: var(--text); }
-.blk-x { color: var(--text-faint); }
+/* a study session — soft and warm, accented with the area's palette colour,
+   no boxy borders; the area is the hero, the time a quiet subline. */
+.blk { position: relative; display: flex; gap: 10px; align-items: flex-start; padding: 15px 16px 13px 20px; border-radius: 16px; background: var(--bg-soft); transition: opacity .2s, box-shadow .15s; animation: swapIn .28s ease both; }
+.blk::before { content: ''; position: absolute; left: 7px; top: 15px; bottom: 15px; width: 3px; border-radius: 3px; background: var(--accent, var(--text-faint)); }
+.blk.m-DESK { --accent: var(--desk); }
+.blk.m-TRANSIT { --accent: var(--transit); }
+.blk.m-WIND_DOWN { --accent: var(--wind); }
+.blk.done { opacity: .48; }
+.blk-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.blk-grip { appearance: none; background: none; border: none; cursor: grab; color: var(--text-faint); opacity: .45; font-size: 14px; line-height: 1; padding: 4px 2px; margin-top: 1px; touch-action: none; user-select: none; transition: opacity .15s; }
+.blk-grip:hover { opacity: .9; }
+.blk-grip:active { cursor: grabbing; }
+.blk.dragging { opacity: .97; background: var(--bg); box-shadow: 0 12px 30px rgba(0,0,0,.16); z-index: 6; }
+.drop-line { height: 2px; background: var(--accent, var(--text)); border-radius: 2px; margin: 6px 0; opacity: .7; }
+
+.blk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.blk-area { font-size: 17px; font-weight: 620; letter-spacing: -.02em; color: var(--text); }
+.blk-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.blk-when { display: flex; align-items: center; gap: 6px; margin: 2px 0 11px; }
+.blk-time { appearance: none; background: none; border: none; padding: 0; color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.blk-time:disabled { color: var(--text-faint); opacity: 1; }
+.blk-time::-webkit-calendar-picker-indicator { display: none; }
+.blk-time::-webkit-date-and-time-value { text-align: left; margin: 0; padding: 0; }
+.blk-end { font-size: 14px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.blk-acts { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.blk-start { appearance: none; cursor: pointer; background: var(--accent, var(--text)); color: #fff; border: none; font: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 17px; border-radius: 999px; margin-right: 6px; transition: filter .15s; }
+.blk-start:hover { filter: brightness(1.07); }
+.blk-act { appearance: none; cursor: pointer; background: none; border: none; color: var(--text-faint); font: inherit; font-size: 12.5px; padding: 7px 9px; border-radius: 8px; transition: color .15s, background .15s; }
+.blk-act:hover { color: var(--text); background: var(--bg); }
+.blk-x:hover { color: #c2483d; }
 
 .day-actions { display: flex; flex-direction: column; gap: 12px; }
 .day-sub { display: flex; gap: 18px; justify-content: center; }
@@ -235,14 +247,15 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .add-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
 .add-at { display: flex; align-items: center; gap: 8px; }
 
-/* commitments (gym, walk…) — fixed, dashed, muted; study routes around them */
-.busy { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border: 1px dashed var(--line); border-radius: var(--radius-sm); background: var(--bg-soft); }
+/* commitments (gym, walk…) — fixed; a quiet outline so study cards stand out */
+.busy { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 16px; background: transparent; }
 .busy-time { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.busy-label { font-size: 14px; font-weight: 600; color: var(--text-dim); }
+.busy-label { font-size: 14px; font-weight: 550; color: var(--text-dim); }
 .busy-x { margin-left: auto; }
 
 /* a breather between study sessions */
-.break-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .1em; padding: 3px 0; }
+.break-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .1em; padding: 4px 0; opacity: .8; }
+.timeline { gap: 12px; }
 
 .busy-drain { font-size: 11px; color: var(--wind); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
 

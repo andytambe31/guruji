@@ -6,7 +6,8 @@
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS } from '../util.js';
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
-  retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings, depsSatisfied,
+  retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, getSettings, setSettings,
+  resequenceBlocks, depsSatisfied,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -241,26 +242,71 @@ export async function renderDay(mount, { navigate }) {
   function blockCard(b) {
     const endLabel = fmtTimeOfDay(b.start + b.minutes);
     const done = b.status === 'done';
-    return el('div', { class: 'blk' + (done ? ' done' : '') }, [
-      el('div', { class: 'blk-when' }, [
-        el('input', {
-          type: 'time', class: 'blk-time', value: minutesToHHMM(b.start), disabled: done,
-          onchange: async (e) => { const v = e.target.value; if (v) { await retimeBlock(b.id, toMinutes(v)); await paint(); } },
-        }),
-        el('span', { class: 'blk-end', text: `– ${endLabel}` }),
-      ]),
-      el('div', { class: 'blk-main' }, [
-        el('span', { class: `blk-dot ${b.mode || ''}` }),
-        el('span', { class: 'blk-area', text: b.area }),
-        el('span', { class: 'blk-dur', text: `${b.minutes}m` }),
-      ]),
-      el('div', { class: 'blk-acts' }, [
-        done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
-        el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
-        done ? null : el('button', { class: 'blk-act', text: '→ next day', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
-        el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
+    return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1' } }, [
+      done ? null : el('button', { class: 'blk-grip', 'aria-label': 'Drag to reorder', title: 'Drag to reorder', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']),
+      el('div', { class: 'blk-body' }, [
+        el('div', { class: 'blk-head' }, [
+          el('div', { class: 'blk-area', text: b.area }),
+          el('div', { class: 'blk-dur', text: `${b.minutes} min` }),
+        ]),
+        el('div', { class: 'blk-when' }, [
+          el('input', {
+            type: 'time', class: 'blk-time', value: minutesToHHMM(b.start), disabled: done,
+            onchange: async (e) => { const v = e.target.value; if (v) { await retimeBlock(b.id, toMinutes(v)); await paint(); } },
+          }),
+          el('span', { class: 'blk-end', text: `– ${endLabel}` }),
+        ]),
+        el('div', { class: 'blk-acts' }, [
+          done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
+          el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
+          done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
+          el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
+        ]),
       ]),
     ]);
+  }
+
+  // Pointer-based drag to reorder planned sessions; on drop, the day resequences.
+  function startDrag(e, id) {
+    if (e.button && e.button !== 0) return;
+    const timeline = wrap.querySelector('.timeline');
+    if (!timeline) return;
+    const cards = [...timeline.querySelectorAll('.blk[data-planned="1"]')];
+    const dragCard = cards.find((c) => c.dataset.id === id);
+    if (!dragCard || cards.length < 2) return;
+    e.preventDefault();
+    const startY = e.clientY;
+    const mids = cards.map((c) => { const r = c.getBoundingClientRect(); return { id: c.dataset.id, mid: r.top + r.height / 2 }; });
+    const others = mids.filter((m) => m.id !== id);
+    const otherEls = cards.filter((c) => c.dataset.id !== id);
+    let targetIndex = mids.findIndex((m) => m.id === id);
+    const placeholder = el('div', { class: 'drop-line' });
+    dragCard.classList.add('dragging');
+    place(targetIndex);
+
+    function place(idx) {
+      if (!otherEls.length) return;
+      if (idx >= otherEls.length) otherEls[otherEls.length - 1].after(placeholder);
+      else otherEls[idx].before(placeholder);
+    }
+    function move(ev) {
+      dragCard.style.transform = `translateY(${ev.clientY - startY}px)`;
+      targetIndex = others.filter((m) => m.mid < ev.clientY).length;
+      place(targetIndex);
+    }
+    async function up() {
+      document.removeEventListener('pointermove', move);
+      document.removeEventListener('pointerup', up);
+      placeholder.remove();
+      dragCard.classList.remove('dragging');
+      dragCard.style.transform = '';
+      const order = mids.map((m) => m.id).filter((x) => x !== id);
+      order.splice(targetIndex, 0, id);
+      await resequenceBlocks(date, order);
+      await paint();
+    }
+    document.addEventListener('pointermove', move);
+    document.addEventListener('pointerup', up);
   }
 
   function busyCard(b) {

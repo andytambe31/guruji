@@ -1,7 +1,7 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
 import { uid, todayISO, nowMinutes, toMinutes } from './util.js';
-import { planDay, reflow, clampDur, DAY_START, DAY_END } from './schedule.js';
+import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
 // ---------- Routine settings (bedtime, goal countdown) ----------
@@ -338,6 +338,28 @@ export async function blockItem(itemId, date, startMin) {
   await put(STORES.schedule, rec);
   await reflowDate(date);
   return rec;
+}
+
+// Reorder the day: lay the planned blocks out in the given id order, from the
+// day's start, around commitments and any completed sessions. Dragging makes
+// the sequence the intent, so individual pins are cleared.
+export async function resequenceBlocks(date, orderedIds) {
+  const [blocks, busy, settings] = await Promise.all([
+    getBlocksForDate(date), getBusyForDate(date), getSettings(),
+  ]);
+  const byId = new Map(blocks.map((b) => [b.id, b]));
+  const done = blocks.filter((b) => b.status === 'done');
+  const planned = orderedIds.map((id) => byId.get(id)).filter((b) => b && b.status !== 'done');
+  for (const b of blocks) if (b.status !== 'done' && !orderedIds.includes(b.id)) planned.push(b);
+
+  const wakeStart = settings.wake != null ? toMinutes(settings.wake) + (settings.freshenMinutes ?? 30) : DAY_START;
+  const startMin = date === todayISO()
+    ? Math.max(Math.ceil((nowMinutes() + 5) / 15) * 15, wakeStart)
+    : wakeStart;
+
+  sequence(planned, { startMin, busy: [...busy, ...done] });
+  await bulkPut(STORES.schedule, planned.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  return getBlocksForDate(date);
 }
 
 // Set a block to an exact start time (user chose it) — pins and re-packs.

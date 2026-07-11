@@ -145,6 +145,19 @@ export function planDay(date, cands, opts = {}) {
   return placed;
 }
 
+// Lay blocks out in the exact order given, from `startMin`, around fixed
+// `busy` obstacles, with a break after each. Used when you drag to reorder.
+export function sequence(blocks, { startMin = DAY_START, busy = [] } = {}) {
+  const fixed = busy.map((x) => ({ start: x.start, minutes: x.minutes }));
+  let cursor = startMin;
+  for (const b of blocks) {
+    const s = pushPastFixed(Math.max(cursor, startMin), b.minutes, fixed);
+    b.start = s;
+    cursor = s + b.minutes + breakAfter(b.mode, 55);
+  }
+  return blocks.sort((a, b) => a.start - b.start);
+}
+
 // Re-pack a day: pinned/done blocks and `obstacles` (commitments) keep their
 // time; floating blocks flow into the earliest free slots around them.
 export function reflow(blocks, obstacles = []) {
