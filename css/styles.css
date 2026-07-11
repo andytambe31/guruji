@@ -746,3 +746,28 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .study-banner .sb-clock { font-size: 14px; font-variant-numeric: tabular-nums; color: var(--text-dim); }
 @keyframes sbPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
 @media (prefers-reduced-motion: reduce) { .study-banner .sb-dot { animation: none; } }
+
+/* ---------- Desktop chrome: align header + nav with the wide study view ---- */
+@media (min-width: 900px) {
+  /* Top bar spans the screen so the brand sits far-left, Data far-right,
+     aligned with the study panes instead of floating in a 560px column. */
+  .topbar { max-width: none; padding-left: 28px; padding-right: 28px; }
+
+  /* Bottom nav becomes a clean solid full-width bar, not a translucent pill
+     band cutting across the content. */
+  .nav {
+    max-width: none; gap: 30px;
+    background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none;
+  }
+
+  /* The Plan/study route runs edge-to-edge; align its own header rows with the
+     panes (the study grid already full-bleeds itself). */
+  .app[data-route="plan"] .view { max-width: none; padding-left: 0; padding-right: 0; }
+  .app[data-route="plan"] .plan-top,
+  .app[data-route="plan"] .plan-reset-row { padding-left: 28px; padding-right: 28px; }
+  .app[data-route="plan"] .plan-top { margin-top: 4px; }
+  .study-nav { padding-left: 20px; }
+  /* leave room so the last rows clear the sticky bottom bar */
+  .study-nav { padding-bottom: 96px; }
+  .study-main { padding-bottom: 120px; }
+}

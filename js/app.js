@@ -56,6 +56,8 @@ async function router() {
   document.querySelectorAll('.nav-item, .topbar-action').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === name);
   });
+  // Expose the route so desktop CSS can widen the chrome for the study view.
+  document.getElementById('app').dataset.route = name;
 
   try {
     const cleanup = await render(mount, { arg, navigate });
