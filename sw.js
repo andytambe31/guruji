@@ -1,7 +1,7 @@
 /* Guruji service worker — offline app shell.
    Cache-first for the shell so the app opens with no network. Bump
    CACHE_VERSION on any shell change to force clients to refresh. */
-const CACHE_VERSION = 'guruji-v45';
+const CACHE_VERSION = 'guruji-v46';
 const SHELL = [
   './',
   './index.html',
@@ -49,25 +49,19 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return; // never touch cross-origin
 
-  // Navigation requests: cache-first on the shell, network fallback.
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      caches.match('./index.html').then((cached) => cached || fetch(request))
-    );
-    return;
-  }
-
-  // Everything else same-origin: cache-first, fall back to network and warm cache.
+  // Network-first for same-origin app code: when online, every reload gets the
+  // freshly-deployed version (no more stale-cache after a fix ships); when
+  // offline, fall back to the cached shell so the app still opens. The cache is
+  // kept warm on each successful fetch.
+  const isNav = request.mode === 'navigate';
+  const key = isNav ? './index.html' : request;
   event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((resp) => {
-        if (resp && resp.ok && resp.type === 'basic') {
-          const copy = resp.clone();
-          caches.open(CACHE_VERSION).then((cache) => cache.put(request, copy));
-        }
-        return resp;
-      }).catch(() => cached);
-    })
+    fetch(request).then((resp) => {
+      if (resp && resp.ok && resp.type === 'basic') {
+        const copy = resp.clone();
+        caches.open(CACHE_VERSION).then((cache) => cache.put(key, copy));
+      }
+      return resp;
+    }).catch(() => caches.match(key).then((c) => c || caches.match('./index.html')))
   );
 });
