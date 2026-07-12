@@ -475,13 +475,16 @@ export async function renderDay(mount, { navigate }) {
           el('input', {
             type: 'time', class: 'blk-time', value: minutesToHHMM(b.start), disabled: done,
             title: 'Start time',
-            onchange: async (e) => { const v = e.target.value; if (v) { await retimeBlock(b.id, toMinutes(v)); await paint(); } },
+            // Commit on blur (when the picker is dismissed), not on every wheel
+            // tick — iOS fires change mid-scroll, which would save + re-render
+            // before you're done. Skip when the value hasn't actually moved.
+            onblur: async (e) => { const v = e.target.value; if (!v) return; const m = toMinutes(v); if (m !== b.start) { await retimeBlock(b.id, m); await paint(); } },
           }),
           el('span', { class: 'blk-dash', text: '–' }),
           el('input', {
             type: 'time', class: 'blk-time blk-time-end', value: minutesToHHMM(b.start + b.minutes), disabled: done,
             title: 'End time',
-            onchange: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start) { await retimeBlock(b.id, b.start, endM - b.start); await paint(); } },
+            onblur: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start && endM !== b.start + b.minutes) { await retimeBlock(b.id, b.start, endM - b.start); await paint(); } },
           }),
         ]),
         acts,
@@ -495,12 +498,13 @@ export async function renderDay(mount, { navigate }) {
       el('div', { class: 'busy-times' }, [
         el('input', {
           type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start), title: 'Start time', disabled: done,
-          onchange: async (e) => { const v = e.target.value; if (v) { await retimeBusy(b.id, toMinutes(v), b.minutes); await paint(); } },
+          // Commit on blur, not mid-scroll (see the study-block time inputs).
+          onblur: async (e) => { const v = e.target.value; if (!v) return; const m = toMinutes(v); if (m !== b.start) { await retimeBusy(b.id, m, b.minutes); await paint(); } },
         }),
         el('span', { class: 'busy-dash', text: '–' }),
         el('input', {
           type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start + b.minutes), title: 'End time', disabled: done,
-          onchange: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start) { await retimeBusy(b.id, b.start, endM - b.start); await paint(); } },
+          onblur: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start && endM !== b.start + b.minutes) { await retimeBusy(b.id, b.start, endM - b.start); await paint(); } },
         }),
       ]),
       el('span', { class: 'busy-label', text: b.label }),
