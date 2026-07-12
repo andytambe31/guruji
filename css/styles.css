@@ -267,6 +267,11 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .blk-arearow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .blk-area { font-size: 17px; font-weight: 620; letter-spacing: -.02em; color: var(--text); }
 .blk-commute { font-size: 11px; font-weight: 600; color: var(--transit); background: rgba(15,157,107,.12); padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
+/* Session-intensity badge: Light for drained / low-capacity times, Deep for
+   fresh, longer sittings. Tells you what a block expects at a glance. */
+.blk-badge { font-size: 11px; font-weight: 650; padding: 2px 9px; border-radius: 999px; letter-spacing: .02em; }
+.blk-badge.b-light { color: var(--wind, #d98324); background: rgba(217,131,36,.13); }
+.blk-badge.b-deep { color: var(--desk, #3b5bd9); background: rgba(59,91,217,.12); }
 .blk-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .blk-dur.has-studied { color: var(--text-dim); }
 .blk-studied { font-weight: 700; color: var(--accent, var(--text)); }

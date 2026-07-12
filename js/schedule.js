@@ -120,7 +120,10 @@ const ITEM_CAP = 2;                  // don't schedule the same topic more than 
 // climbs, breaks between, tapering off when you're too spent to absorb more.
 // `cands` is [{ area, item }] — the next surfaceable item per area.
 export function planDay(date, cands, opts = {}) {
-  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null, itemCap = ITEM_CAP, areaCapDefault = AREA_CAP_DEFAULT, deep = false } = opts;
+  const { startMin = DAY_START, endMin = DAY_END, busy = [], context = null, maxStudyMinutes = 360, pinned = [], focusArea = null, itemCap = ITEM_CAP, areaCapDefault = AREA_CAP_DEFAULT, deep = false, loadBias = 0 } = opts;
+  // A day you've told the coach is draining reads as more loaded throughout, so
+  // sessions skew gentler (and wear a Light badge), not just fewer.
+  const loadAt = (t) => Math.min(100, Math.max(0, predictLoadAt(t, { context, placed: [...pinned, ...placed], busy }) + loadBias));
   // Fresh sessions route around both commitments and any already-pinned blocks.
   const windows = freeWindows(startMin, endMin, [...busy, ...pinned]);
   const placed = [];
@@ -141,7 +144,7 @@ export function planDay(date, cands, opts = {}) {
     while (studyTotal < maxStudyMinutes) {
       const avail = wEnd - cursor;
       if (avail < 15) break;
-      const load = predictLoadAt(cursor, { context, placed: [...pinned, ...placed], busy });
+      const load = loadAt(cursor);
 
       // Candidates still under their caps — if none, we've scheduled all we
       // should, so this window (and day) is done.
@@ -164,6 +167,9 @@ export function planDay(date, cands, opts = {}) {
       placed.push({
         itemId: pick.item.id, area: pick.area, title: pick.item.title || '', mode: pick.item.mode,
         date, start: cursor, minutes, status: 'planned', pinned: false,
+        // Predicted cognitive load when this block begins — how spent you'll be.
+        // Drives the session's intensity: high load → light goals, and a badge.
+        load: Math.round(load),
       });
       itemCount.set(pick.item.id, (itemCount.get(pick.item.id) || 0) + 1);
       areaCount.set(pick.area, (areaCount.get(pick.area) || 0) + 1);
@@ -171,7 +177,7 @@ export function planDay(date, cands, opts = {}) {
       sinceLong += minutes;
       lastArea = pick.area;
 
-      const loadAfter = predictLoadAt(cursor + minutes, { context, placed: [...pinned, ...placed], busy });
+      const loadAfter = loadAt(cursor + minutes);
       const brk = breakAfter(minutes, loadAfter, sinceLong, deep);
       // Only a genuine long recharge resets the "time since a real break" clock;
       // short breathers accumulate toward the next one.

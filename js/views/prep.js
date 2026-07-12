@@ -2,7 +2,7 @@
 // is finally revealed, along with a short ritual and how to approach it. Then
 // you pick a length and begin the timer.
 import { el, clear, fill, toMinutes, nowMinutes } from '../util.js';
-import { getItem, getPhases, getSettings, getReading } from '../store.js';
+import { getItem, getPhases, getSettings, getReading, getBlock } from '../store.js';
 import { renderPreview } from '../objectives.js';
 
 const DURATIONS = [25, 50, 90];
@@ -46,6 +46,10 @@ export async function renderPrep(mount, { arg, navigate }) {
 
   const phases = await getPhases();
   const phaseName = (phases.find((p) => p.id === item.phase) || {}).name || '';
+  // The planned block (if any) carries the predicted load, so the expectations
+  // preview is sized to how spent you'll be — light after work, deep when fresh.
+  const block = blockId ? await getBlock(blockId) : null;
+  const blockLoad = block ? block.load : null;
 
   // Reading reveals the actual book + your intent, not the generic habit title.
   const reading = item.area === 'Reading' ? await getReading() : null;
@@ -119,7 +123,7 @@ export async function renderPrep(mount, { arg, navigate }) {
 
       // What "done" looks like for this session — disclosed up front so you begin
       // with the target in mind, not just a timer.
-      renderPreview(item),
+      renderPreview(item, minutes, blockLoad),
 
       el('div', { class: 'prep-ritual' }, [
         el('p', { class: 'prep-ritual-head', text: 'Before you start' }),

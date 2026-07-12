@@ -14,7 +14,7 @@ import {
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
 import { openConceptWizard } from './concept-wizard.js';
-import { openObjectivesEditor, objectivesProgress } from '../objectives.js';
+import { openObjectivesEditor, objectivesProgress, sessionBadge } from '../objectives.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -80,10 +80,13 @@ const MEALS = [
   { key: 'lunch', label: 'Lunch', start: 13 * 60, minutes: 45 },
   { key: 'dinner', label: 'Dinner', start: 20 * 60, minutes: 60 },
 ];
+// `loadBias` lifts the predicted cognitive load across the whole day: telling the
+// coach you're already drained makes every session read lighter (gentler goals,
+// more Light badges), not just fewer minutes.
 const INTENSITY = [
-  { key: 'light', label: 'Light', max: 360 },
-  { key: 'normal', label: 'Normal', max: 300 },
-  { key: 'packed', label: 'Packed & draining', max: 150 },
+  { key: 'light', label: 'Light', max: 360, loadBias: 0 },
+  { key: 'normal', label: 'Normal', max: 300, loadBias: 0 },
+  { key: 'packed', label: 'Packed & draining', max: 150, loadBias: 26 },
 ];
 const STEPS = [
   { key: 'work', title: 'Work & commute' },
@@ -222,7 +225,8 @@ export async function renderDay(mount, { navigate }) {
       || INTENSITY.find((i) => i.key === 'normal');
     let maxStudy = intensity ? intensity.max : undefined;
     if (weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
-    await autoPlanDay(date, { focusArea: settings.lastPlanFocusArea || null, maxStudyMinutes: maxStudy, weekend });
+    const loadBias = intensity ? (intensity.loadBias || 0) : 0;
+    await autoPlanDay(date, { focusArea: settings.lastPlanFocusArea || null, maxStudyMinutes: maxStudy, weekend, loadBias });
     toast('Re-fit your study around the day');
     await paint();
   }
@@ -476,10 +480,11 @@ export async function renderDay(mount, { navigate }) {
       // several sessions per area.
       let maxStudy = intensity ? intensity.max : undefined;
       if (pl.weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
+      const loadBias = intensity ? (intensity.loadBias || 0) : 0;
       // Remember the day's inputs so "Reassess" can re-fit study around edited
       // commitments later without walking the wizard again.
       await setSettings({ lastPlanIntensity: pl.intensity, lastPlanFocusArea: pl.focusArea || null });
-      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: maxStudy, weekend: pl.weekend });
+      await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: maxStudy, weekend: pl.weekend, loadBias });
       pl = null;
       await paint();
     }
@@ -490,9 +495,11 @@ export async function renderDay(mount, { navigate }) {
     const canSwap = !done && swapOptions.length > 0;
     // Session expectations for this topic — a tap opens the editor to view, tick,
     // add or reword them. Works before the session and after it's closed.
-    const objProg = item ? objectivesProgress(item) : { total: 0, done: 0 };
+    const objProg = item ? objectivesProgress(item, b.minutes, b.load) : { total: 0, done: 0 };
+    // How demanding this session is — length + how spent you'll be at its time.
+    const badge = sessionBadge(b.minutes, b.load);
     const openGoals = () => openObjectivesEditor({
-      item,
+      item, minutes: b.minutes, load: b.load,
       onSave: async (list, doneList) => { await setObjectives(item.id, list, doneList); toast('Expectations saved'); await paint(); },
     });
 
@@ -565,6 +572,7 @@ export async function renderDay(mount, { navigate }) {
           el('div', { class: 'blk-arearow' }, [
             el('span', { class: 'blk-area', text: b.area }),
             b.onCommute ? el('span', { class: 'blk-commute', text: 'on the commute' }) : null,
+            badge ? el('span', { class: `blk-badge b-${badge.cls}`, text: badge.label }) : null,
           ]),
           durNode,
         ]),

@@ -2,7 +2,7 @@
 // into a sharp sprint; System Design is a calmer, thinking space; Reading is
 // warm and quiet. Same timer underneath, different room. Only Pause + End.
 import { el, clear, fmtClock, toast, todayISO } from '../util.js';
-import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus, toggleObjective } from '../store.js';
+import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus, toggleObjective, getBlock } from '../store.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
 import { openConceptWizard } from './concept-wizard.js';
 import { resolveObjectives, renderChecklist } from '../objectives.js';
@@ -158,15 +158,15 @@ const PLAYBOOKS = {
 // go; the coach points at the next unmet one, and progress persists on the item.
 // Below that: how to study, and the resources. A topic's own `coach`
 // (objectives/plan/resources) overrides/augments its area playbook.
-function coachPanel(item) {
+function coachPanel(item, minutes, load) {
   const pb = PLAYBOOKS[item.area] || PLAYBOOKS.default;
   const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
   const steps = (c && Array.isArray(c.plan) && c.plan.length) ? c.plan : pb.steps;
   const resources = [...(pb.resources || []), ...((c && Array.isArray(c.resources)) ? c.resources : [])];
   const kids = [];
 
-  if (resolveObjectives(item).length) {
-    kids.push(renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o) }));
+  if (resolveObjectives(item, minutes, load).length) {
+    kids.push(renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o), minutes, load }));
   }
 
   kids.push(el('div', { class: 'fc-head fc-head-sub', text: 'How to study this' }));
@@ -206,6 +206,10 @@ export async function renderFocus(mount, { arg, navigate }) {
   // On resume the route often lacks the blockId — recover it from the session so
   // the minutes still attach to the block that launched it.
   if (resuming && !blockId && existing.blockId) blockId = existing.blockId;
+  // The launching block's predicted load sizes the session's expectations —
+  // light when you're spent, deep when fresh — matching its Day-view badge.
+  const launchBlock = blockId ? await getBlock(blockId) : null;
+  const blockLoad = launchBlock ? launchBlock.load : null;
   const started = resuming ? new Date(existing.startedAt) : new Date();
   const total = minutes * 60;
   let pausedAccum = resuming ? (existing.pausedAccum || 0) : 0; // seconds spent paused
@@ -257,7 +261,7 @@ export async function renderFocus(mount, { arg, navigate }) {
   // Timer hero fills the first screen (calm); the coach panel sits just under it,
   // scroll to read the play + resources while the clock runs.
   const hero = el('div', { class: 'focus-hero' }, [phaseLabel, title, center, ritual, controls]);
-  const screen = el('div', { class: `focus has-coach ${theme.cls}` }, [hero, coachPanel(item)]);
+  const screen = el('div', { class: `focus has-coach ${theme.cls}` }, [hero, coachPanel(item, minutes, blockLoad)]);
   mount.append(screen);
 
   requestWakeLock();
@@ -357,9 +361,9 @@ export async function renderFocus(mount, { arg, navigate }) {
     // Confirm what you actually met before closing out — the same checklist you
     // ticked under the timer, so ending a session is an honest self-assessment,
     // not just "done / not done."
-    const confirm = resolveObjectives(item).length
+    const confirm = resolveObjectives(item, minutes, blockLoad).length
       ? el('div', { class: 'focus-coach resolve-confirm' }, [
-          renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o), doneLabel: '✓ Every expectation met — nice. Mark it done.' }),
+          renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o), doneLabel: '✓ Every expectation met — nice. Mark it done.', minutes, load: blockLoad }),
         ])
       : null;
     const box = el('div', { class: `focus ${theme.cls}` }, [

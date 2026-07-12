@@ -1,63 +1,187 @@
 // Session expectations — the coach's concrete "definition of done" for a topic.
-// One shared model behind three surfaces: disclosed on the prep screen before you
+// One shared model behind four surfaces: disclosed on the prep screen before you
 // start, checked off live under the timer, confirmed on the wrap-up screen, and
-// editable from the Day view. Kept here so all four stay in lock-step.
+// editable from the Day view. Kept here so they all stay in lock-step.
+//
+// Expectations scale to the session length. A 30-minute block shouldn't demand a
+// 90-minute workload, so each area defines three tiers — a short session leans on
+// revision and one small rep; a long one goes deep. Every tier still ladders up
+// to the same FAANG-readiness goal; it just right-sizes the ask.
 import { el, clear } from './util.js';
 
-// Per-area defaults, used when a topic has no authored or user-set expectations.
-// Generic but concrete and checkable — every session gets a real definition of
-// done the moment you start it.
+// Per-area defaults by session length: { short, medium, long }. Used when a topic
+// has no authored or user-set expectations — every session gets a real, correctly
+// sized definition of done the moment you start it.
 export const AREA_OBJECTIVES = {
-  'DSA': [
-    'Name the pattern this topic drills, and when it applies.',
-    'Solve at least 2 problems — code that passes on LeetCode.',
-    'Re-solve one from a blank editor, no peeking, under time.',
-    'Write the one-line insight for each (pattern + why it works).',
-    'Log the problems in the tracker with pattern + outcome.',
-  ],
-  'System Design': [
-    'State the functional + non-functional requirements.',
-    'Do the napkin math out loud: QPS and storage.',
-    'Draw the component diagram end to end.',
-    'For every choice, name the tradeoff and the alternative.',
-    'Name the likely bottleneck and how you’d scale past it.',
-  ],
-  'CS Fundamentals': [
-    'Read the topic guide actively, end to end (not a skim).',
-    'Explain each key concept back in your own words, closed-book.',
-    'Do the guide’s exercises hands-on — type them, don’t just read.',
-    'Answer the guide’s self-check questions from memory.',
-    'Rate your confidence on each concept before you end.',
-  ],
-  'Reading': [
-    'Read the section you set out to — for what you carry out, not page count.',
-    'Mark the one line that stops you.',
-    'Write the single thought in your own words (Reading → reflect).',
-  ],
-  'Behavioral': [
-    'Structure one story: Situation, Task, Action, Result.',
-    'Put a number on the impact.',
-    'Say it out loud, timed to about two minutes.',
-  ],
-  'default': [
-    'Work through the topic’s guide actively.',
-    'Explain the main idea back in your own words.',
-    'Write a one-line note on what you carried out.',
-  ],
+  'DSA': {
+    short: [
+      'Recall this topic’s pattern and template from memory — no notes.',
+      'Solve one easy problem in it (or re-do one you’ve seen before).',
+      'Log it with pattern + outcome.',
+    ],
+    medium: [
+      'Name the pattern this topic drills, and when it applies.',
+      'Solve 2 problems — code that passes on LeetCode.',
+      'For each, jot the one-line insight (pattern + why it works).',
+      'Log the problems with pattern + outcome.',
+    ],
+    long: [
+      'Name the pattern and write its template cold.',
+      'Solve 3 problems, laddering easy → medium → hard.',
+      'Re-solve one from a blank editor, no peeking, under time.',
+      'Write the one-line insight for each.',
+      'Log them all; flag any to re-solve in a few days.',
+    ],
+  },
+  'System Design': {
+    short: [
+      'Re-read one section and restate its key tradeoff out loud.',
+      'Redraw one component of the design from memory.',
+      'Note the one thing to dig into next session.',
+    ],
+    medium: [
+      'State the functional + non-functional requirements.',
+      'Do the napkin math out loud: QPS and storage.',
+      'Draw the core component diagram.',
+      'For the main choices, name the tradeoff and the alternative.',
+    ],
+    long: [
+      'State the functional + non-functional requirements.',
+      'Do the napkin math: QPS, storage, bandwidth.',
+      'Draw the component diagram end to end.',
+      'For every choice, name the tradeoff and the alternative out loud.',
+      'Name the bottleneck and how you’d scale past it.',
+      'Walk the whole design top-to-bottom as if in the interview.',
+    ],
+  },
+  'CS Fundamentals': {
+    short: [
+      'Re-read one section and explain it back closed-book.',
+      'Rate your confidence on that concept.',
+      'Note the one thing to revisit next.',
+    ],
+    medium: [
+      'Read the planned section actively (not a skim).',
+      'Explain each key concept back in your own words, closed-book.',
+      'Do a couple of the guide’s exercises hands-on.',
+      'Rate your confidence on the concepts you covered.',
+    ],
+    long: [
+      'Read the topic guide actively, end to end.',
+      'Explain each key concept back closed-book.',
+      'Do the guide’s exercises hands-on — type them, don’t just read.',
+      'Answer the guide’s self-check questions from memory.',
+      'Rate your confidence on each concept before you end.',
+    ],
+  },
+  'Reading': {
+    short: [
+      'Read a few pages — for what you carry out, not page count.',
+      'Mark the one line that stops you.',
+    ],
+    medium: [
+      'Read the section you set out to.',
+      'Mark the one line that stops you.',
+      'Write the single thought in your own words (Reading → reflect).',
+    ],
+    long: [
+      'Read a full chapter or your target section.',
+      'Mark the lines that stop you.',
+      'Write a short reflection in your own words (Reading → reflect).',
+    ],
+  },
+  'Behavioral': {
+    short: [
+      'Refine one STAR story’s opening line and its number.',
+      'Say it out loud once, timed.',
+    ],
+    medium: [
+      'Structure one story: Situation, Task, Action, Result.',
+      'Put a number on the impact.',
+      'Say it out loud, timed to about two minutes.',
+    ],
+    long: [
+      'Structure two stories: Situation, Task, Action, Result.',
+      'Lead each with the decision; put numbers on the impact.',
+      'Say each out loud, timed to about two minutes.',
+    ],
+  },
+  'default': {
+    short: [
+      'Work through a focused chunk of the guide.',
+      'Explain the main idea back in your own words.',
+    ],
+    medium: [
+      'Work through the topic’s guide actively.',
+      'Explain the main idea back in your own words.',
+      'Write a one-line note on what you carried out.',
+    ],
+    long: [
+      'Work through the guide thoroughly.',
+      'Explain each idea back in your own words.',
+      'Do any exercises hands-on.',
+      'Write a note on what you carried out.',
+    ],
+  },
 };
 
-// The effective expectations for a topic, in precedence order:
-// what you set yourself → authored coach content → the area default.
-export function resolveObjectives(item) {
-  if (!item) return [];
-  if (Array.isArray(item.objectives)) return item.objectives; // user-set (may be empty = "none")
-  const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
-  if (c && Array.isArray(c.objectives) && c.objectives.length) return c.objectives;
-  return AREA_OBJECTIVES[item.area] || AREA_OBJECTIVES.default;
+// Which tier a session length falls into. Durations offered are 10/25/50/90, so
+// short covers a quick 25, medium a standard 50, long a deep 90.
+export function sessionBand(minutes) {
+  const m = Number(minutes) || 50;
+  return m <= 35 ? 'short' : m <= 70 ? 'medium' : 'long';
 }
 
-export function objectivesProgress(item) {
-  const list = resolveObjectives(item);
+// The real intensity of a session = its length AND how spent you'll be. A long
+// block on a fresh weekend morning is a deep session; the same length after a
+// draining workday should be light. `load` is the predicted cognitive load at the
+// block's start (0–100, stored by the planner); omit it to size by length alone.
+export function sessionTier(minutes, load) {
+  const d = sessionBand(minutes);
+  if (load == null || Number.isNaN(Number(load))) return d;
+  const L = Number(load);
+  if (L >= 66) return 'short';                     // spent → light, whatever the length
+  if (L >= 45) return d === 'long' ? 'medium' : d; // moderate → cap the ask at standard
+  return d;                                         // fresh → the full length tier
+}
+
+// The badge a block wears so the plan reads at a glance: Light for drained /
+// low-capacity times, Deep for fresh, longer sittings. Standard wears none.
+export function sessionBadge(minutes, load) {
+  const t = sessionTier(minutes, load);
+  if (t === 'short') return { label: 'Light', cls: 'light' };
+  if (t === 'long') return { label: 'Deep', cls: 'deep' };
+  return null;
+}
+
+function tierNote(minutes, load) {
+  return { short: 'A light session — keep it gentle; small reps still move the needle.',
+           medium: 'A solid session — get real work done.',
+           long: 'A deep session — go for depth and reps.' }[sessionTier(minutes, load)];
+}
+// Pick a tier from a tiered object; a plain array (legacy / flat authored) is
+// returned unchanged so it applies at every intensity.
+function pickTier(set, minutes, load) {
+  if (Array.isArray(set)) return set;
+  if (!set || typeof set !== 'object') return [];
+  const t = sessionTier(minutes, load);
+  return set[t] || set.medium || set.long || set.short || [];
+}
+
+// The effective expectations for a topic at a given session intensity, in
+// precedence order: what you set yourself → authored coach content → area default.
+// A user-set list is literal (no scaling); authored/area sets scale to intensity.
+export function resolveObjectives(item, minutes, load) {
+  if (!item) return [];
+  if (Array.isArray(item.objectives)) return item.objectives; // user override — literal
+  const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
+  const co = c ? c.objectives : null;
+  if (co && (Array.isArray(co) ? co.length : typeof co === 'object')) return pickTier(co, minutes, load);
+  return pickTier(AREA_OBJECTIVES[item.area] || AREA_OBJECTIVES.default, minutes, load);
+}
+
+export function objectivesProgress(item, minutes, load) {
+  const list = resolveObjectives(item, minutes, load);
   const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
   return { total: list.length, done: list.filter((o) => met.has(o)).length };
 }
@@ -66,8 +190,8 @@ export function objectivesProgress(item) {
 // current focus, met items struck through, an all-met nudge. `onToggle(text)`
 // persists and returns the new met-list. Shared by the timer's coach panel and
 // the wrap-up confirm. Returns the box node; it repaints itself on each tap.
-export function renderChecklist(item, { onToggle, doneLabel } = {}) {
-  const objectives = resolveObjectives(item);
+export function renderChecklist(item, { onToggle, doneLabel, minutes, load } = {}) {
+  const objectives = resolveObjectives(item, minutes, load);
   const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
   const box = el('div', { class: 'fc-obj-box' });
   const paint = () => {
@@ -98,16 +222,16 @@ export function renderChecklist(item, { onToggle, doneLabel } = {}) {
     });
     box.append(allMet
       ? el('div', { class: 'fc-obj-note done', text: doneLabel || '✓ Every expectation met — mark this topic done when you end.' })
-      : el('div', { class: 'fc-obj-note', text: 'Tick each as you meet it. Honest ticks only — this is how the coach knows to move on.' }));
+      : el('div', { class: 'fc-obj-note', text: tierNote(minutes, load) + ' Tick each honestly as you meet it.' }));
   };
   paint();
   return box;
 }
 
-// A read-only preview for the prep screen: what you're about to take on. No
-// checkboxes — just the list and where you stand if you've been here before.
-export function renderPreview(item) {
-  const objectives = resolveObjectives(item);
+// A read-only preview for the prep screen: what you're about to take on, sized to
+// the length you picked. No checkboxes — just the list and where you stand.
+export function renderPreview(item, minutes, load) {
+  const objectives = resolveObjectives(item, minutes, load);
   if (!objectives.length) return null;
   const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
   const done = objectives.filter((o) => met.has(o)).length;
@@ -126,9 +250,10 @@ export function renderPreview(item) {
 
 // The Day-view editor: add, reword, remove, and tick expectations for a topic —
 // so you can shape what "done" means after the fact. `onSave(list, done)` gets
-// the final expectation texts (in order) and which of them are ticked.
-export function openObjectivesEditor({ item, onSave } = {}) {
-  const objectives = resolveObjectives(item);
+// the final expectation texts (in order) and which of them are ticked. Seeds from
+// the set sized to this block's length.
+export function openObjectivesEditor({ item, minutes, load, onSave } = {}) {
+  const objectives = resolveObjectives(item, minutes, load);
   const metSet = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
   // Working rows carry their own met flag, so editing an item's text keeps its tick.
   const rows = objectives.map((text) => ({ text, met: metSet.has(text) }));

@@ -318,6 +318,12 @@ export async function getBlocks() {
 export async function getBlocksForDate(date) {
   return (await getBlocks()).filter((b) => b.date === date);
 }
+// A single planned block by id — used to recover its predicted load (and thus
+// its session intensity) on the prep / focus screens.
+export async function getBlock(id) {
+  const b = await get(STORES.schedule, id);
+  return b && b.kind === 'block' ? b : null;
+}
 export async function deleteBlock(id) {
   return del(STORES.schedule, id);
 }
@@ -405,7 +411,7 @@ export async function reflowDate(date) {
 
 // Auto-plan a date: lay the next surfaceable item per area into the free
 // windows around commitments, load-aware, capped at bedtime. Keeps pinned/done.
-export async function autoPlanDay(date, { now = new Date(), focusArea = null, maxStudyMinutes, weekend = false } = {}) {
+export async function autoPlanDay(date, { now = new Date(), focusArea = null, maxStudyMinutes, weekend = false, loadBias = 0 } = {}) {
   const items = await getItems();
   const statusById = new Map(items.map((i) => [i.id, i.status]));
 
@@ -491,7 +497,7 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   // a few big sittings plus lighter work, spread across the day — not a dozen
   // little sessions.
   const planOpts = {
-    startMin, endMin, busy: activeBusy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes,
+    startMin, endMin, busy: activeBusy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes, loadBias,
     ...(weekend ? { itemCap: 2, areaCapDefault: 4, deep: true } : {}),
   };
   // If it's too late for anything to fit today, still propose from the day start.
