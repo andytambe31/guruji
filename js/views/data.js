@@ -1,6 +1,6 @@
 // Data view: iCloud sync (canonical file), import (file + paste, plan or
 // migration patch), dated backup, and a wipe.
-import { el, clear, toast } from '../util.js';
+import { el, clear, toast, todayISO } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch } from '../importexport.js';
 import { wipeAll, hasPlan } from '../store.js';
 import { SCHEMA_VERSION } from '../migrations.js';
@@ -209,6 +209,35 @@ export async function renderData(mount, { navigate }) {
     el('h2', { text: 'Danger zone' }),
     el('p', { class: 'muted', text: 'Removes everything stored in this browser. Cannot be undone.' }),
     wipeBtn,
+  );
+
+  // Diagnostics — so "is the latest build actually running, and does the app
+  // agree with my phone about what day it is?" is answerable at a glance.
+  const diag = el('div', { class: 'diag' });
+  mount.append(el('hr', { class: 'sep' }), diag);
+  renderDiagnostics(diag);
+}
+
+async function renderDiagnostics(mount) {
+  let build = 'unknown';
+  try {
+    const keys = (await caches.keys()) || [];
+    const v = keys.find((k) => /^guruji-v\d+/.test(k));
+    if (v) build = v;
+  } catch { /* caches unavailable */ }
+  const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '—'; } catch { return '—'; } })();
+  const now = new Date();
+  const line = (k, v) => el('div', { class: 'diag-row' }, [
+    el('span', { class: 'diag-k', text: k }),
+    el('span', { class: 'diag-v', text: v }),
+  ]);
+  clear(mount).append(
+    el('p', { class: 'eyebrow', text: 'Diagnostics' }),
+    line('App build', build),
+    line('App’s “today”', todayISO(now)),
+    line('Device time', now.toLocaleString()),
+    line('Timezone', tz),
+    el('p', { class: 'muted', style: 'margin-top:8px;font-size:12px', text: 'If “App build” isn’t the latest, close the app fully and reopen while online to update. If “App’s today” doesn’t match your phone’s date, tell me — but it should now use your device’s local day.' }),
   );
 }
 
