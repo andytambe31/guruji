@@ -8,7 +8,7 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
-  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock,
+  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -429,6 +429,7 @@ export async function renderDay(mount, { navigate }) {
     const acts = el('div', { class: 'blk-acts' });
     const normalActs = () => [
       done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}/${b.id}`) }),
+      el('button', { class: 'blk-act', text: 'Log', title: 'Studied without the timer? Log the time you put in', onclick: () => fill(clear(acts), logActs()) }),
       canSwap ? el('button', { class: 'blk-act', text: 'Swap', title: 'Not feeling it? Replace with another eligible focus, same time slot', onclick: () => fill(clear(acts), swapActs()) }) : null,
       done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
       el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
@@ -440,6 +441,25 @@ export async function renderDay(mount, { navigate }) {
       ...[10, 15, 30].map((n) => el('button', { class: 'blk-act blk-delay', text: `${n}m`, onclick: async () => { await pushBlock(b.id, n); await paint(); } })),
       el('button', { class: 'blk-act', text: 'Cancel', onclick: () => fill(clear(acts), normalActs()) }),
     ];
+    // Manually log off-timer study time against this block. Defaults to what's
+    // still unstudied of the reserved time; adds to any minutes already logged.
+    const logActs = () => {
+      const remain = b.minutes - studied;
+      const minInput = el('input', { type: 'number', class: 'blk-log-min', min: '1', step: '5', inputmode: 'numeric', value: String(remain > 0 ? remain : b.minutes) });
+      const save = async () => {
+        const m = parseInt(minInput.value, 10);
+        if (m > 0) { await logManualSession(b, m); toast(`Logged ${m} min`); }
+        await paint();
+      };
+      minInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') save(); });
+      return [
+        el('span', { class: 'blk-delay-k', text: 'Studied' }),
+        minInput,
+        el('span', { class: 'blk-log-unit', text: 'min' }),
+        el('button', { class: 'blk-act blk-delay', text: 'Save', onclick: save }),
+        el('button', { class: 'blk-act', text: 'Cancel', onclick: () => fill(clear(acts), normalActs()) }),
+      ];
+    };
     // Replace this slot with another eligible focus (keeps the time; just changes
     // what it's for). Each option is the next unlocked topic in that area.
     const swapActs = () => [

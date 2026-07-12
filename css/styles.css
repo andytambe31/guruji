@@ -281,6 +281,9 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .blk-delay-k { font-size: 12.5px; color: var(--text-faint); align-self: center; padding-right: 2px; }
 .blk-delay { font-weight: 600; color: var(--text-dim); }
 .blk-swap { font-weight: 600; color: var(--accent, var(--text-dim)); }
+.blk-log-min { width: 52px; font: inherit; font-size: 13.5px; text-align: center; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 5px 6px; font-variant-numeric: tabular-nums; }
+.blk-log-min:focus { outline: none; border-color: var(--text-dim); }
+.blk-log-unit { font-size: 12.5px; color: var(--text-faint); align-self: center; }
 
 .day-actions { display: flex; flex-direction: column; gap: 12px; }
 .day-sub { display: flex; gap: 18px; justify-content: center; }

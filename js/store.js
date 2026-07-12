@@ -652,6 +652,30 @@ export async function addLogEntry(entry) {
   return rec;
 }
 
+// Log time you studied *without* the timer — you forgot to start focus mode but
+// still put in the work. Creates a real session entry against the block, so its
+// minutes count everywhere a timed session would (the block's "X / reserved",
+// Progress, the streak) and the block survives a re-plan.
+export async function logManualSession(block, minutes, problems = []) {
+  const mins = Math.max(1, Math.round(minutes || 0));
+  const now = new Date();
+  return addLogEntry({
+    itemId: block.itemId,
+    itemTitle: block.title || '',
+    mode: block.mode,
+    area: block.area || null,
+    blockId: block.id,
+    date: block.date, // the day the block is on
+    startedAt: now.toISOString(),
+    endedAt: now.toISOString(),
+    plannedMinutes: block.minutes,
+    focusMinutes: mins,
+    problems: Array.isArray(problems) ? problems : [],
+    manual: true, // logged by hand, not the timer
+    result: 'done',
+  });
+}
+
 // Actual focused minutes per planned block, summed from the session log. Lets
 // the Day view show what you *really* studied against what a block reserved —
 // so a 150-min block you only sat with for 25 reads honestly, not as "done =
