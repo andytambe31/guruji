@@ -248,58 +248,97 @@ export function renderPreview(item, minutes, load) {
   ]);
 }
 
-// The Day-view editor: add, reword, remove, and tick expectations for a topic —
-// so you can shape what "done" means after the fact. `onSave(list, done)` gets
-// the final expectation texts (in order) and which of them are ticked. Seeds from
-// the set sized to this block's length.
-export function openObjectivesEditor({ item, minutes, load, onSave } = {}) {
-  const objectives = resolveObjectives(item, minutes, load);
-  const metSet = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
-  // Working rows carry their own met flag, so editing an item's text keeps its tick.
-  const rows = objectives.map((text) => ({ text, met: metSet.has(text) }));
+// The Day-view expectations panel. It opens in CHECK mode: big, tappable rows to
+// mark which expectations you met in that session — retroactively, off-timer,
+// whenever — persisting immediately via onToggle. Editing the wording (add /
+// reword / remove) lives behind a secondary "Edit" toggle, so the common case
+// (logging what you accomplished) is the obvious one, not an afterthought.
+// onToggle(text) → new met-list; onSave(list, done) saves an edited list;
+// onClose fires after the sheet closes so the caller can repaint.
+export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, onClose } = {}) {
+  let mode = 'check';
+  const body = el('div', { class: 'oe-body' });
+  const controls = el('div', { class: 'oe-controls' });
 
-  const list = el('div', { class: 'oe-list' });
-  const rowNode = (row) => {
-    const check = el('button', {
-      class: 'oe-check' + (row.met ? ' on' : ''), type: 'button', title: 'Met?',
-      text: row.met ? '✓' : '', onclick: () => { row.met = !row.met; check.classList.toggle('on', row.met); check.textContent = row.met ? '✓' : ''; },
-    });
-    const input = el('input', {
-      class: 'oe-input', type: 'text', value: row.text, placeholder: 'An expectation…',
-      oninput: (e) => { row.text = e.target.value; },
-    });
-    const del = el('button', { class: 'oe-del', type: 'button', title: 'Remove', text: '✕', onclick: () => { node.remove(); row.removed = true; } });
-    const node = el('div', { class: 'oe-row' }, [check, input, del]);
-    return node;
-  };
-  rows.forEach((r) => list.append(rowNode(r)));
+  // CHECK mode — the tick-off checklist (same component as the timer), so marking
+  // met here works exactly like it does live, and persists on tap.
+  function checkView() {
+    return el('div', { class: 'focus-coach oe-check-wrap' }, [
+      renderChecklist(item, {
+        minutes, load,
+        onToggle: onToggle ? (o) => onToggle(o) : undefined,
+        doneLabel: '✓ Every expectation met — nice work.',
+      }),
+    ]);
+  }
 
-  const addBtn = el('button', { class: 'oe-add', type: 'button', text: '＋ Add an expectation', onclick: () => {
-    const r = { text: '', met: false }; rows.push(r); const n = rowNode(r); list.append(n); n.querySelector('.oe-input').focus();
-  } });
+  // EDIT mode — add, reword, remove; Save writes the list (and its ticks) back.
+  function editView() {
+    const objectives = resolveObjectives(item, minutes, load);
+    const metSet = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
+    const rows = objectives.map((text) => ({ text, met: metSet.has(text) }));
+    const list = el('div', { class: 'oe-list' });
+    const rowNode = (row) => {
+      const check = el('button', {
+        class: 'oe-check' + (row.met ? ' on' : ''), type: 'button', title: 'Met?',
+        text: row.met ? '✓' : '', onclick: () => { row.met = !row.met; check.classList.toggle('on', row.met); check.textContent = row.met ? '✓' : ''; },
+      });
+      const input = el('input', {
+        class: 'oe-input', type: 'text', value: row.text, placeholder: 'An expectation…',
+        oninput: (e) => { row.text = e.target.value; },
+      });
+      const del = el('button', { class: 'oe-del', type: 'button', title: 'Remove', text: '✕', onclick: () => { node.remove(); row.removed = true; } });
+      const node = el('div', { class: 'oe-row' }, [check, input, del]);
+      return node;
+    };
+    rows.forEach((r) => list.append(rowNode(r)));
+    const addBtn = el('button', { class: 'oe-add', type: 'button', text: '＋ Add an expectation', onclick: () => {
+      const r = { text: '', met: false }; rows.push(r); const n = rowNode(r); list.append(n); n.querySelector('.oe-input').focus();
+    } });
+    // stash for the Save handler in controls
+    editView._collect = () => {
+      const kept = rows.filter((r) => !r.removed && r.text.trim());
+      return { list: kept.map((r) => r.text.trim()), done: kept.filter((r) => r.met).map((r) => r.text.trim()) };
+    };
+    return el('div', {}, [list, addBtn]);
+  }
 
-  const save = () => {
-    const kept = rows.filter((r) => !r.removed && r.text.trim());
-    const finalList = kept.map((r) => r.text.trim());
-    const done = kept.filter((r) => r.met).map((r) => r.text.trim());
-    close();
-    if (onSave) onSave(finalList, done);
-  };
+  function render() {
+    clear(body); clear(controls);
+    if (mode === 'check') {
+      body.append(checkView());
+      controls.append(
+        el('button', { class: 'btn btn-primary btn-block', type: 'button', text: 'Done', onclick: () => close() }),
+        el('button', { class: 'oe-mode', type: 'button', text: '✎ Edit the expectations', onclick: () => { mode = 'edit'; render(); } }),
+      );
+    } else {
+      body.append(editView());
+      controls.append(
+        el('button', { class: 'btn btn-primary btn-block oe-save', type: 'button', text: 'Save', onclick: () => {
+          const { list, done } = editView._collect();
+          item.objectives = list; item.doneObjectives = done; // reflect locally so check mode is fresh
+          if (onSave) onSave(list, done);
+          mode = 'check'; render();
+        } }),
+        el('button', { class: 'oe-mode', type: 'button', text: '‹ Back to the checklist', onclick: () => { mode = 'check'; render(); } }),
+      );
+    }
+  }
 
   const card = el('div', { class: 'lc-card oe-card' }, [
     el('div', { class: 'lc-head' }, [
-      el('div', { class: 'lc-title', text: 'Session expectations' }),
+      el('div', { class: 'lc-title', text: 'What you met' }),
       el('button', { class: 'lc-close', type: 'button', 'aria-label': 'Close', text: '✕', onclick: () => close() }),
     ]),
     el('p', { class: 'oe-sub', text: item.title }),
-    list,
-    addBtn,
-    el('button', { class: 'btn btn-primary btn-block oe-save', type: 'button', text: 'Save expectations', onclick: save }),
+    body,
+    controls,
   ]);
+  render();
   const overlay = el('div', { class: 'lc-overlay' }, [card]);
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
   document.body.appendChild(overlay);
   requestAnimationFrame(() => overlay.classList.add('show'));
 
-  function close() { overlay.classList.remove('show'); setTimeout(() => overlay.remove(), 200); }
+  function close() { overlay.classList.remove('show'); setTimeout(() => { overlay.remove(); if (onClose) onClose(); }, 200); }
 }

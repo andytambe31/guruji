@@ -9,7 +9,7 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
-  getItem, setObjectives,
+  getItem, setObjectives, toggleObjective,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
@@ -500,7 +500,10 @@ export async function renderDay(mount, { navigate }) {
     const badge = sessionBadge(b.minutes, b.load);
     const openGoals = () => openObjectivesEditor({
       item, minutes: b.minutes, load: b.load,
-      onSave: async (list, doneList) => { await setObjectives(item.id, list, doneList); toast('Expectations saved'); await paint(); },
+      // Tapping a row logs that you met it (retroactive, off-timer) — persists now.
+      onToggle: (text) => toggleObjective(item.id, text),
+      onSave: async (list, doneList) => { await setObjectives(item.id, list, doneList); toast('Expectations saved'); },
+      onClose: async () => { await paint(); },
     });
 
     // The action row swaps to a "push by" preset picker when you tap Delay, or a

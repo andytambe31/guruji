@@ -547,6 +547,14 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .oe-del:hover { color: #c2483d; background: rgba(194,72,61,.08); }
 .oe-add { width: 100%; text-align: left; background: none; border: 1px dashed var(--line); border-radius: 10px; color: var(--text-dim); font: inherit; font-size: 13.5px; padding: 10px 12px; cursor: pointer; margin-bottom: 16px; transition: border-color .15s, color .15s; }
 .oe-add:hover { border-color: var(--text-faint); color: var(--text); }
+/* Check-off mode: the live checklist reused inside the Day sheet. */
+.oe-check-wrap { max-width: none; margin: 0; padding-bottom: 0; }
+.oe-check-wrap .fc-obj-box { margin-bottom: 4px; }
+.oe-check-wrap .fc-obj-top .fc-head { color: var(--text-faint); }
+.oe-body { min-height: 44px; }
+.oe-controls { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; }
+.oe-mode { background: none; border: none; color: var(--text-dim); font: inherit; font-size: 13px; padding: 11px; cursor: pointer; text-align: center; }
+.oe-mode:hover { color: var(--text); }
 
 /* ---------- Focus environments (one room per area) ---------- */
 /* DSA — a sharp sprint: cool, crisp, a depleting bar. */
