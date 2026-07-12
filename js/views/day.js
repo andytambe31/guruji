@@ -9,10 +9,12 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
+  getItem, setObjectives,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
 import { openConceptWizard } from './concept-wizard.js';
+import { openObjectivesEditor, objectivesProgress } from '../objectives.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -124,6 +126,8 @@ export async function renderDay(mount, { navigate }) {
     const swapOptions = surfaceable.filter((o) => !bookedIds.has(o.item.id));
     // A topic's key concepts (for the CS Fundamentals confidence wizard).
     const conceptsByItem = new Map(items.map((i) => [i.id, (i.coach && Array.isArray(i.coach.concepts)) ? i.coach.concepts : []]));
+    // Full item behind each block — for its session expectations (view/edit/tick).
+    const itemsById = new Map(items.map((i) => [i.id, i]));
 
     const head = el('div', { class: 'day-head' }, [
       el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint(); } }),
@@ -141,7 +145,7 @@ export async function renderDay(mount, { navigate }) {
     const covered = (bb) => bb.transit && blocks.some((bl) => bl.onCommute && bl.start < bb.start + bb.minutes && bl.start + bl.minutes > bb.start);
     const busyShown = busy.filter((bb) => !covered(bb));
     const entries = [
-      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions, conceptsByItem.get(b.itemId) || []) })),
+      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions, conceptsByItem.get(b.itemId) || [], itemsById.get(b.itemId) || null) })),
       ...busyShown.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
     ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
     if (!entries.length) {
@@ -424,9 +428,16 @@ export async function renderDay(mount, { navigate }) {
     }
   }
 
-  function blockCard(b, studied = 0, swapOptions = [], concepts = []) {
+  function blockCard(b, studied = 0, swapOptions = [], concepts = [], item = null) {
     const done = b.status === 'done';
     const canSwap = !done && swapOptions.length > 0;
+    // Session expectations for this topic — a tap opens the editor to view, tick,
+    // add or reword them. Works before the session and after it's closed.
+    const objProg = item ? objectivesProgress(item) : { total: 0, done: 0 };
+    const openGoals = () => openObjectivesEditor({
+      item,
+      onSave: async (list, doneList) => { await setObjectives(item.id, list, doneList); toast('Expectations saved'); await paint(); },
+    });
 
     // The action row swaps to a "push by" preset picker when you tap Delay, or a
     // "swap for" eligible-focus picker when you tap Swap.
@@ -439,6 +450,9 @@ export async function renderDay(mount, { navigate }) {
       canSwap ? el('button', { class: 'blk-act', text: 'Swap', title: 'Not feeling it? Replace with another eligible focus, same time slot', onclick: () => fill(clear(acts), swapActs()) }) : null,
       done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
       el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
+      item ? el('button', { class: 'blk-act blk-goals', title: 'View, tick, add or reword this session’s expectations', onclick: openGoals }, [
+        'Goals', objProg.total ? el('span', { class: 'blk-goals-n', text: ` ${objProg.done}/${objProg.total}` }) : null,
+      ]) : null,
       done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
       el('button', { class: 'blk-act blk-x', text: 'Remove', onclick: async () => { await deleteBlock(b.id); await paint(); } }),
     ];

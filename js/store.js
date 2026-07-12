@@ -173,6 +173,20 @@ export async function toggleObjective(id, text) {
   return done;
 }
 
+// Set a topic's expectations yourself (from the Day view). Stores a user override
+// that wins over authored/area-default expectations, and re-syncs which are met
+// to the surviving texts. Passing an empty list means "no expectations here."
+export async function setObjectives(id, list, done = []) {
+  const item = await get(STORES.items, id);
+  if (!item) return null;
+  const clean = (Array.isArray(list) ? list : []).map((s) => String(s).trim()).filter(Boolean);
+  item.objectives = clean;
+  const keep = new Set(clean);
+  item.doneObjectives = (Array.isArray(done) ? done : []).map((s) => String(s).trim()).filter((s) => keep.has(s));
+  await put(STORES.items, item);
+  return item;
+}
+
 // Study content for a topic (authored on desktop). Stored on the item so it
 // round-trips through export/import and survives phone syncs (see ingestPlan).
 export async function setItemNotes(id, notes) {
@@ -887,6 +901,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   const prevNotes = new Map(existing.map((i) => [i.id, i.notes]));
   const prevCoach = new Map(existing.map((i) => [i.id, i.coach]));
   const prevObjectives = new Map(existing.map((i) => [i.id, i.doneObjectives]));
+  const prevObjList = new Map(existing.map((i) => [i.id, i.objectives]));
 
   const planRecords = [];
   const phaseRecords = [];
@@ -936,6 +951,9 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
           coach,
           // Which session expectations you've met — progress, always preserved.
           doneObjectives: Array.isArray(it.doneObjectives) ? it.doneObjectives : (prevObjectives.get(it.id) || []),
+          // A user-set expectation list (from the Day view) is progress-like: keep
+          // it unless the incoming file explicitly carries one.
+          objectives: Array.isArray(it.objectives) ? it.objectives : prevObjList.get(it.id),
           order: order++,
         });
       });

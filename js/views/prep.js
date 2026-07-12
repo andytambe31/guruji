@@ -3,6 +3,7 @@
 // you pick a length and begin the timer.
 import { el, clear, fill, toMinutes, nowMinutes } from '../util.js';
 import { getItem, getPhases, getSettings, getReading } from '../store.js';
+import { renderPreview } from '../objectives.js';
 
 const DURATIONS = [25, 50, 90];
 
@@ -115,6 +116,10 @@ export async function renderPrep(mount, { arg, navigate }) {
 
       !book && howBits.length ? el('p', { class: 'prep-how-meta', text: howBits.join('  ·  ') }) : null,
       !book && item.mode && HOW[item.mode] ? el('p', { class: 'prep-how', text: HOW[item.mode] }) : null,
+
+      // What "done" looks like for this session — disclosed up front so you begin
+      // with the target in mind, not just a timer.
+      renderPreview(item),
 
       el('div', { class: 'prep-ritual' }, [
         el('p', { class: 'prep-ritual-head', text: 'Before you start' }),

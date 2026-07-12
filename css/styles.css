@@ -508,6 +508,35 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .focus-coach .fc-obj-note { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; margin: 8px 2px 0; }
 .focus-coach .fc-obj-note.done { color: var(--ok, #0f9d6b); font-weight: 600; }
 .focus-coach .fc-head-sub { margin-top: 4px; }
+/* End-of-session confirm: the checklist, centred on the wrap-up screen. */
+.resolve-confirm { max-width: 340px; margin: 0 auto 20px; }
+.resolve-confirm .fc-obj-box { margin-bottom: 0; }
+
+/* Day block: the "Goals N/M" progress badge on the expectations action. */
+.blk-goals-n { color: var(--text-faint); font-variant-numeric: tabular-nums; }
+
+/* Prep screen: expectations disclosed before you begin. */
+.prep-obj { margin: 6px 0 18px; padding: 14px 16px; border-radius: 14px; background: var(--bg-soft); }
+.prep-obj-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 10px; }
+.prep-obj-count { letter-spacing: 0; text-transform: none; font-weight: 650; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.prep-obj-list { list-style: none; margin: 0; padding: 0; }
+.prep-obj-list li { display: flex; gap: 9px; align-items: flex-start; font-size: 14px; line-height: 1.5; color: var(--text-dim); margin-bottom: 7px; }
+.prep-obj-list li.met { color: var(--text-faint); }
+.prep-obj-mark { flex: 0 0 auto; color: var(--text-faint); font-weight: 700; }
+.prep-obj-list li.met .prep-obj-mark { color: var(--ok, #0f9d6b); }
+
+/* Objectives editor (Day view) — a bottom-sheet reusing the wizard shell. */
+.oe-card .oe-sub { font-size: 13px; color: var(--text-dim); margin: -4px 0 14px; }
+.oe-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.oe-row { display: flex; align-items: center; gap: 9px; }
+.oe-check { flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; border: 1.5px solid var(--line); background: var(--bg); color: var(--ok, #0f9d6b); font-size: 14px; font-weight: 800; line-height: 1; cursor: pointer; transition: border-color .15s, background .15s; }
+.oe-check.on { border-color: var(--ok, #0f9d6b); background: rgba(15,157,107,.10); }
+.oe-input { flex: 1; min-width: 0; font: inherit; font-size: 14.5px; color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.oe-input:focus { outline: none; border-color: var(--text-dim); }
+.oe-del { flex: 0 0 auto; width: 30px; height: 30px; border: none; background: none; color: var(--text-faint); font-size: 14px; cursor: pointer; border-radius: 8px; }
+.oe-del:hover { color: #c2483d; background: rgba(194,72,61,.08); }
+.oe-add { width: 100%; text-align: left; background: none; border: 1px dashed var(--line); border-radius: 10px; color: var(--text-dim); font: inherit; font-size: 13.5px; padding: 10px 12px; cursor: pointer; margin-bottom: 16px; transition: border-color .15s, color .15s; }
+.oe-add:hover { border-color: var(--text-faint); color: var(--text); }
 
 /* ---------- Focus environments (one room per area) ---------- */
 /* DSA — a sharp sprint: cool, crisp, a depleting bar. */

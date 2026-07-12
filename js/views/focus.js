@@ -5,6 +5,7 @@ import { el, clear, fmtClock, toast, todayISO } from '../util.js';
 import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus, toggleObjective } from '../store.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
 import { openConceptWizard } from './concept-wizard.js';
+import { resolveObjectives, renderChecklist } from '../objectives.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
 // | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
@@ -86,13 +87,6 @@ const THEMES = {
 // now and what do I look at" the timer alone can't give you.
 const PLAYBOOKS = {
   'DSA': {
-    objectives: [
-      'Name the pattern this topic drills, and when it applies.',
-      'Solve at least 2 problems — code that passes on LeetCode.',
-      'Re-solve one from a blank editor, no peeking, under time.',
-      'Write the one-line insight for each (pattern + why it works).',
-      'Log the problems in the tracker with pattern + outcome.',
-    ],
     steps: [
       'On your desktop, open this topic’s guide (Plan) and NeetCode side by side.',
       'Learn the pattern first — read the guide, watch NeetCode’s video for it.',
@@ -108,13 +102,6 @@ const PLAYBOOKS = {
     ],
   },
   'System Design': {
-    objectives: [
-      'State the functional + non-functional requirements.',
-      'Do the napkin math out loud: QPS and storage.',
-      'Draw the component diagram end to end.',
-      'For every choice, name the tradeoff and the alternative.',
-      'Name the likely bottleneck and how you’d scale past it.',
-    ],
     steps: [
       'On your desktop, open this topic’s guide (Plan) and read it actively.',
       'Take notes on the tradeoffs — for every choice, say the other side out loud.',
@@ -128,13 +115,6 @@ const PLAYBOOKS = {
     ],
   },
   'CS Fundamentals': {
-    objectives: [
-      'Read the topic guide actively, end to end (not a skim).',
-      'Explain each key concept back in your own words, closed-book.',
-      'Do the guide’s exercises hands-on — type them, don’t just read.',
-      'Answer the guide’s self-check questions from memory.',
-      'Rate your confidence on each concept before you end.',
-    ],
     steps: [
       'On your desktop, open the topic guide; read for the concept, not the syntax.',
       'After each section, close it and explain it back in your own words.',
@@ -147,11 +127,6 @@ const PLAYBOOKS = {
     ],
   },
   'Reading': {
-    objectives: [
-      'Read the section you set out to — for what you carry out, not page count.',
-      'Mark the one line that stops you.',
-      'Write the single thought in your own words (Reading → reflect).',
-    ],
     steps: [
       'Pick up where you left off — read for what you carry out, not the page count.',
       'Mark the one line that stops you.',
@@ -160,11 +135,6 @@ const PLAYBOOKS = {
     resources: ['Your current book.', 'Your reflections — the Reading tab.'],
   },
   'Behavioral': {
-    objectives: [
-      'Structure one story: Situation, Task, Action, Result.',
-      'Put a number on the impact.',
-      'Say it out loud, timed to about two minutes.',
-    ],
     steps: [
       'Pick one story and structure it: Situation, Task, Action, Result.',
       'Lead with your decision, not the backstory; put numbers on the impact.',
@@ -173,11 +143,6 @@ const PLAYBOOKS = {
     resources: ['Your STAR stories — Plan → Behavioral (on desktop).'],
   },
   'default': {
-    objectives: [
-      'Work through the topic’s guide actively.',
-      'Explain the main idea back in your own words.',
-      'Write a one-line note on what you carried out.',
-    ],
     steps: [
       'On your desktop, open the topic’s guide and work through it actively.',
       'Keep one thing on screen; narrate what you’re doing.',
@@ -196,47 +161,12 @@ const PLAYBOOKS = {
 function coachPanel(item) {
   const pb = PLAYBOOKS[item.area] || PLAYBOOKS.default;
   const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
-  const objectives = (c && Array.isArray(c.objectives) && c.objectives.length) ? c.objectives : (pb.objectives || []);
   const steps = (c && Array.isArray(c.plan) && c.plan.length) ? c.plan : pb.steps;
   const resources = [...(pb.resources || []), ...((c && Array.isArray(c.resources)) ? c.resources : [])];
   const kids = [];
 
-  if (objectives.length) {
-    const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
-    const box = el('div', { class: 'fc-obj-box' });
-    const paint = () => {
-      clear(box);
-      const done = objectives.filter((o) => met.has(o)).length;
-      const allMet = done === objectives.length;
-      // The first not-yet-met expectation is the one the coach points you at now.
-      const currentIdx = objectives.findIndex((o) => !met.has(o));
-      box.append(el('div', { class: 'fc-obj-top' }, [
-        el('div', { class: 'fc-head', text: 'This session — meet these' }),
-        el('div', { class: 'fc-obj-count' + (allMet ? ' all' : ''), text: `${done}/${objectives.length}` }),
-      ]));
-      objectives.forEach((o, i) => {
-        const on = met.has(o);
-        const isCurrent = !allMet && i === currentIdx;
-        box.append(el('button', {
-          class: 'fc-obj' + (on ? ' met' : '') + (isCurrent ? ' current' : ''),
-          type: 'button', title: on ? 'Met — tap to undo' : 'Tap when you’ve met this',
-          onclick: async () => {
-            const list = await toggleObjective(item.id, o);
-            met.clear(); (list || []).forEach((x) => met.add(x));
-            item.doneObjectives = list || [];
-            paint();
-          },
-        }, [
-          el('span', { class: 'fc-obj-mark', text: on ? '✓' : (isCurrent ? '›' : '') }),
-          el('span', { class: 'fc-obj-text', text: o }),
-        ]));
-      });
-      box.append(allMet
-        ? el('div', { class: 'fc-obj-note done', text: '✓ Every expectation met — mark this topic done when you end.' })
-        : el('div', { class: 'fc-obj-note', text: 'Tick each as you meet it. Honest ticks only — this is how the coach knows to move on.' }));
-    };
-    paint();
-    kids.push(box);
+  if (resolveObjectives(item).length) {
+    kids.push(renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o) }));
   }
 
   kids.push(el('div', { class: 'fc-head fc-head-sub', text: 'How to study this' }));
@@ -424,10 +354,19 @@ export async function renderFocus(mount, { arg, navigate }) {
       text: cwLabel(),
       onclick: () => openConceptWizard({ concepts: cwConcepts, initial: conceptRatings, onSave: (r) => { conceptRatings = r; cwBtn.textContent = cwLabel(); } }),
     }) : null;
+    // Confirm what you actually met before closing out — the same checklist you
+    // ticked under the timer, so ending a session is an honest self-assessment,
+    // not just "done / not done."
+    const confirm = resolveObjectives(item).length
+      ? el('div', { class: 'focus-coach resolve-confirm' }, [
+          renderChecklist(item, { onToggle: (o) => toggleObjective(item.id, o), doneLabel: '✓ Every expectation met — nice. Mark it done.' }),
+        ])
+      : null;
     const box = el('div', { class: `focus ${theme.cls}` }, [
       el('div', { class: 'phase-label', text: timedOut ? "Time's up" : 'Session ended' }),
       el('div', { class: 'focus-title', text: item.title }),
       el('div', { class: 'muted', style: 'margin-bottom:22px', text: summary }),
+      confirm,
       lcBtn,
       cwBtn,
       el('div', { class: 'stack', style: 'width:100%;max-width:320px;margin-top:18px' }, [
