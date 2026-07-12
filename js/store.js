@@ -386,12 +386,15 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     surfaceable.push(it);
   }
 
-  const [existing, busy, settings, context] = await Promise.all([
-    getBlocksForDate(date), getBusyForDate(date), getSettings(), getContext(),
+  const [existing, busy, settings, context, studiedByBlock] = await Promise.all([
+    getBlocksForDate(date), getBusyForDate(date), getSettings(), getContext(), studiedMinutesByBlock(),
   ]);
-  // Keep manually-pinned and completed work; regenerate the auto commute-study
-  // (onCommute) so re-planning doesn't leave a stale duplicate behind.
-  const keep = existing.filter((b) => b.status === 'done' || (b.pinned && !b.onCommute));
+  // Keep manually-pinned and completed work — and any block you've already logged
+  // real focus time against, so re-planning never throws away a session you sat
+  // (e.g. "25 / 60 min" survives a Reassess). Auto commute-study (onCommute) is
+  // still regenerated so re-planning doesn't leave a stale duplicate behind.
+  const keep = existing.filter((b) =>
+    b.status === 'done' || (b.pinned && !b.onCommute) || (studiedByBlock.get(b.id) || 0) > 0);
   const keepSet = new Set(keep);
   for (const b of existing) {
     if (!keepSet.has(b)) await del(STORES.schedule, b.id);
