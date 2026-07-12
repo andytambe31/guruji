@@ -476,6 +476,23 @@ export async function blockItem(itemId, date, startMin) {
   return rec;
 }
 
+// Replace what a scheduled block is *for* while keeping its exact time slot —
+// "I'm booked to study DSA at 11, but I'd rather read." Repoints the block at a
+// new item (area/title/mode follow); start, length and date are untouched, so
+// nothing else on the day shifts. Pinned, since it's now an explicit choice.
+export async function swapBlockItem(blockId, newItemId) {
+  const [b, it] = await Promise.all([get(STORES.schedule, blockId), get(STORES.items, newItemId)]);
+  if (!b || b.kind !== 'block' || !it) return null;
+  b.itemId = newItemId;
+  b.area = it.area || 'Study';
+  b.title = it.title || '';
+  b.mode = it.mode;
+  b.onCommute = false; // a hand-picked swap isn't tied to the old commute slot
+  b.pinned = true;
+  await put(STORES.schedule, b);
+  return b;
+}
+
 // Reorder the day: lay the planned blocks out in the given id order, from the
 // day's start, around commitments and any completed sessions. Dragging makes
 // the sequence the intent, so individual pins are cleared.
