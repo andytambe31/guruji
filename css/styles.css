@@ -1015,3 +1015,76 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .sess-right { display: flex; align-items: baseline; gap: 10px; flex: none; }
 .sess-min { font-size: 13.5px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
 .sess-date { font-size: 12px; color: var(--text-faint); min-width: 58px; text-align: right; }
+
+/* ---------- Roadmap ("Path") — the strategic view to the goal ---------- */
+.road-wrap { padding-top: 6px; animation: viewIn .3s ease both; }
+.road-head { margin-bottom: 26px; }
+.road-count { display: flex; align-items: baseline; gap: 10px; margin: 2px 0 4px; }
+.road-days { font-size: 46px; font-weight: 680; letter-spacing: -.03em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.road-days-lbl { font-size: 15px; color: var(--text-dim); font-weight: 550; }
+.road-target { font-size: 13.5px; color: var(--text-faint); margin: 0 0 16px; line-height: 1.5; }
+.road-timebar { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.road-timefill { height: 100%; background: var(--text); border-radius: 999px; transition: width .5s ease; }
+.road-timemeta { display: flex; justify-content: space-between; gap: 8px; margin-top: 7px; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.road-verdict { display: inline-flex; align-items: center; gap: 9px; margin-top: 16px; padding: 9px 15px; border-radius: 999px; font-size: 13.5px; font-weight: 600; }
+.road-verdict.ok { color: var(--ok, #0f9d6b); background: rgba(15,157,107,.10); }
+.road-verdict.behind { color: var(--wind, #d98324); background: rgba(217,131,36,.12); }
+.road-verdict-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+
+.road-section { margin-bottom: 30px; }
+.road-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
+
+.road-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.road-tile { padding: 15px 16px; border-radius: 14px; background: var(--bg-soft); position: relative; }
+.road-tile::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; background: var(--line); }
+.road-tile.t-ok::before { background: var(--ok, #0f9d6b); }
+.road-tile.t-warn::before { background: var(--wind, #d98324); }
+.road-tile-lbl { font-size: 12px; color: var(--text-faint); letter-spacing: .04em; text-transform: uppercase; margin-bottom: 8px; }
+.road-tile-big { font-size: 24px; font-weight: 680; letter-spacing: -.02em; color: var(--text); font-variant-numeric: tabular-nums; }
+.road-tile-sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; line-height: 1.4; }
+
+.road-hzs { display: flex; flex-direction: column; gap: 10px; }
+.road-hz { padding: 15px 16px; border: 1px solid var(--line); border-radius: 14px; }
+.road-hz-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.road-hz-title { font-size: 15px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
+.road-hz-window { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.road-hz-goal { font-size: 13px; color: var(--text-dim); margin: 6px 0 10px; }
+.road-hz-targets { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.road-hz-t { font-size: 13px; color: var(--text-dim); }
+.road-hz-t b { color: var(--text); font-weight: 680; font-variant-numeric: tabular-nums; }
+
+.road-arc { display: flex; flex-direction: column; }
+.road-phase { display: flex; gap: 14px; }
+.road-phase-rail { position: relative; flex: 0 0 auto; width: 12px; display: flex; justify-content: center; }
+.road-phase-rail::before { content: ''; position: absolute; top: 0; bottom: 0; width: 2px; background: var(--line-soft); }
+.road-phase:first-child .road-phase-rail::before { top: 9px; }
+.road-phase:last-child .road-phase-rail::before { bottom: calc(100% - 9px); }
+.road-phase-node { position: relative; z-index: 1; width: 11px; height: 11px; border-radius: 50%; margin-top: 4px; background: var(--bg); border: 2px solid var(--line); }
+.road-phase.s-done .road-phase-node { background: var(--ok, #0f9d6b); border-color: var(--ok, #0f9d6b); }
+.road-phase.s-current .road-phase-node { background: var(--text); border-color: var(--text); box-shadow: 0 0 0 4px rgba(0,0,0,.06); }
+.road-phase.s-behind .road-phase-node { background: var(--wind, #d98324); border-color: var(--wind, #d98324); }
+.road-phase-body { flex: 1; min-width: 0; padding-bottom: 20px; }
+.road-phase-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.road-phase-name { font-size: 15.5px; font-weight: 620; letter-spacing: -.01em; color: var(--text); }
+.road-phase.s-upcoming .road-phase-name { color: var(--text-dim); }
+.road-phase-tag { font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; color: var(--text-faint); }
+.road-phase-tag.st-done { color: var(--ok, #0f9d6b); background: rgba(15,157,107,.12); }
+.road-phase-tag.st-current { color: #fff; background: var(--text); }
+.road-phase-tag.st-behind { color: var(--wind, #d98324); background: rgba(217,131,36,.14); }
+.road-phase-tag.st-upcoming { display: none; }
+.road-phase-meta { font-size: 12px; color: var(--text-faint); margin: 4px 0 9px; font-variant-numeric: tabular-nums; }
+.road-phase-track { height: 5px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; max-width: 260px; }
+.road-phase-fill { height: 100%; border-radius: 999px; background: var(--text-faint); transition: width .5s ease; }
+.road-phase.s-done .road-phase-fill { background: var(--ok, #0f9d6b); }
+.road-phase.s-current .road-phase-fill { background: var(--text); }
+.road-phase.s-behind .road-phase-fill { background: var(--wind, #d98324); }
+
+.road-next { display: flex; flex-direction: column; }
+.road-next-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--line-soft); padding: 13px 2px; cursor: pointer; font: inherit; transition: background .15s; }
+.road-next-row:hover { background: var(--bg-soft); }
+.road-next-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; }
+.road-next-t { flex: 1; min-width: 0; font-size: 14.5px; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.road-next-meta { flex: 0 0 auto; font-size: 12px; color: var(--text-faint); }
+
+.road-links { display: flex; gap: 22px; justify-content: center; margin-top: 6px; }
+.road-links .btn-link { display: inline; width: auto; }

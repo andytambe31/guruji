@@ -1,6 +1,6 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
-import { uid, todayISO, addDaysISO, nowMinutes, toMinutes } from './util.js';
+import { uid, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes } from './util.js';
 import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
@@ -894,6 +894,124 @@ export async function computeStats(now = new Date()) {
   };
 }
 const LC_DIFF_ORDER = ['Easy', 'Medium', 'Hard'];
+
+// ---------- Roadmap: the strategic view of the whole run to the goal ----------
+// Ties the plan's phase/week trajectory, the countdown, and everything captured
+// (LeetCode solves, concepts, topics, effort) into one "are we on track, and what
+// does each week/month/quarter demand?" model. Pure derivation — no new tracking.
+export async function computeRoadmap() {
+  const [meta, settings, plans, phases, items, stats] = await Promise.all([
+    getMeta(), getSettings(), getPlans(), getPhases(), getItems(), computeStats(),
+  ]);
+  const today = todayISO();
+  const goalDate = settings.goalDate || (meta && meta.goalDate) || null;
+  const goalLabel = settings.goalLabel || (meta && meta.goalLabel) || 'the goal';
+  const target = (meta && meta.target) || '';
+  const startDate = (meta && meta.startWeekOf) || today;
+
+  const daysLeft = goalDate ? Math.max(0, daysBetween(today, goalDate)) : null;
+  const daysTotal = goalDate ? Math.max(1, daysBetween(startDate, goalDate)) : null;
+  const daysElapsed = daysTotal != null ? Math.max(0, Math.min(daysTotal, daysBetween(startDate, today))) : null;
+  const pctTime = daysTotal ? Math.min(100, Math.round((daysElapsed / daysTotal) * 100)) : null;
+  const weeksLeft = daysLeft != null ? Math.max(0.5, daysLeft / 7) : null;
+  const currentWeek = Math.max(1, Math.floor(daysBetween(startDate, today) / 7) + 1);
+
+  // The FAANG plan (has the offer goal); Reading/side plans don't drive the arc.
+  const primary = plans.find((p) => /offer|job|fang|faang/i.test(`${p.goal || ''} ${p.id}`)) || plans[0];
+  const primaryId = primary ? primary.id : null;
+
+  const weekStartDate = (n) => addDaysISO(startDate, (n - 1) * 7);
+  const parseWeeks = (w) => {
+    const s = Array.isArray(w) ? (w[0] || '') : String(w || '');
+    let m;
+    if ((m = s.match(/^(\d+)\s*-\s*(\d+)$/))) return [+m[1], +m[2]];
+    if ((m = s.match(/^(\d+)\s*\+$/))) return [+m[1], null];
+    if ((m = s.match(/^(\d+)$/))) return [+m[1], +m[1]];
+    return [null, null];
+  };
+  const itemsByPhase = new Map();
+  for (const it of items) {
+    if (!itemsByPhase.has(it.phase)) itemsByPhase.set(it.phase, []);
+    itemsByPhase.get(it.phase).push(it);
+  }
+
+  const roadPhases = phases
+    .filter((ph) => !primaryId || ph.track === primaryId)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    .map((ph) => {
+      const [wStart, wEnd] = parseWeeks(ph.weeks);
+      const its = itemsByPhase.get(ph.id) || [];
+      const total = its.length;
+      const done = its.filter((i) => i.status === 'done').length;
+      const skipped = its.filter((i) => i.status === 'skipped').length;
+      const pct = total ? Math.round(((done + skipped) / total) * 100) : 0;
+      let status = 'upcoming';
+      if (total && done + skipped >= total) status = 'done';
+      else if (wStart && currentWeek >= wStart && (wEnd == null || currentWeek <= wEnd)) status = 'current';
+      else if (wEnd != null && currentWeek > wEnd) status = 'behind';
+      return {
+        id: ph.id, name: ph.name, weekStart: wStart, weekEnd: wEnd,
+        startDate: wStart ? weekStartDate(wStart) : startDate,
+        endDate: wEnd ? addDaysISO(startDate, wEnd * 7 - 1) : goalDate,
+        total, done, skipped, pct, status,
+        areas: [...new Set(its.map((i) => i.area).filter(Boolean))],
+      };
+    });
+  const currentPhase = roadPhases.find((p) => p.status === 'current')
+    || roadPhases.find((p) => p.status === 'behind')
+    || roadPhases.find((p) => p.status !== 'done') || null;
+
+  // Pacing — what the remaining work demands per week to land by the deadline.
+  const statusById = new Map(items.map((i) => [i.id, i.status]));
+  const primaryItems = items.filter((i) => !primaryId || i.track === primaryId);
+  const topicsTotal = primaryItems.length;
+  const topicsDone = primaryItems.filter((i) => i.status === 'done').length;
+  const todo = primaryItems.filter((i) => i.status === 'todo');
+  const topicsRemaining = todo.length;
+  const remainTopicMin = todo.reduce((s, i) => s + (i.estMinutes || 45), 0);
+  const lcRemaining = Math.max(0, stats.lcGoal - stats.lcUnique);
+  const remainLCMin = lcRemaining * 18; // ~18 min per problem, ballpark
+  const hoursNeeded = weeksLeft ? Math.round(((remainTopicMin + remainLCMin) / weeksLeft / 60) * 10) / 10 : null;
+  const hoursActual = Math.round((stats.weekMinutes / 60) * 10) / 10;
+  const lcPerWeek = weeksLeft ? Math.ceil(lcRemaining / weeksLeft) : null;
+  const topicsPerWeek = weeksLeft ? Math.ceil(topicsRemaining / weeksLeft) : null;
+
+  // On track = progress keeping up with elapsed time (small grace).
+  const lcPct = stats.lcGoal ? Math.round((stats.lcUnique / stats.lcGoal) * 100) : 0;
+  const topicPct = topicsTotal ? Math.round((topicsDone / topicsTotal) * 100) : 0;
+  const expected = pctTime != null ? pctTime : 0;
+  const onTrackLC = lcPct >= expected - 8;
+  const onTrackTopics = topicPct >= expected - 8;
+
+  const nextTopics = todo
+    .filter((i) => depsSatisfied(i, statusById))
+    .slice(0, 5)
+    .map((i) => ({ id: i.id, title: i.title, area: i.area, group: i.group, est: i.estMinutes }));
+
+  const horizon = (weeks) => ({
+    weeks,
+    lc: Math.min(lcRemaining, Math.ceil((lcPerWeek || 0) * weeks)),
+    topics: Math.min(topicsRemaining, Math.ceil((topicsPerWeek || 0) * weeks)),
+    hours: hoursNeeded != null ? Math.round(hoursNeeded * weeks) : null,
+    endDate: addDaysISO(today, Math.round(weeks * 7)),
+  });
+
+  return {
+    goalDate, goalLabel, target, startDate,
+    daysLeft, daysTotal, daysElapsed, pctTime,
+    weeksLeft: weeksLeft != null ? Math.round(weeksLeft) : null, currentWeek,
+    phases: roadPhases, currentPhase,
+    onTrack: onTrackLC && onTrackTopics,
+    pacing: {
+      lc: { done: stats.lcUnique, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek, pct: lcPct, onTrack: onTrackLC },
+      topics: { done: topicsDone, total: topicsTotal, remaining: topicsRemaining, perWeek: topicsPerWeek, pct: topicPct, onTrack: onTrackTopics },
+      concepts: { solid: stats.conceptConfidence.solid, shaky: stats.conceptConfidence.shaky, noyet: stats.conceptConfidence.noyet, total: stats.conceptsTotal },
+      hours: { needed: hoursNeeded, actual: hoursActual },
+    },
+    nextTopics, byArea: stats.byArea, lcByPattern: stats.lcByPattern,
+    horizons: { week: horizon(1), month: horizon(4.33), quarter: horizon(13) },
+  };
+}
 
 // ---------- Plan ingest (import) ----------
 // Accepts a parsed plan object matching PLAN_SCHEMA and writes it into the DB,
