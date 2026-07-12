@@ -169,6 +169,14 @@ export async function renderDay(mount, { navigate }) {
     const surfaceableAreas = surfaceable;
     const footer = el('div', { class: 'day-actions' }, [
       el('button', { class: 'btn btn-primary btn-block', text: blocks.length ? 'Re-plan the day' : 'Plan my day', onclick: async () => { pl = freshPlan(settings); adding = false; await paint(); } }),
+      // Changed a commitment (dropped an event, added the gym)? Re-fit the study
+      // around it using the day's existing inputs — no wizard to walk again.
+      blocks.length ? el('button', {
+        class: 'btn btn-ghost btn-block', style: 'margin-top:9px',
+        text: 'Reassess around my commitments',
+        title: 'Re-lay your study around the current commitments using this day’s settings — skips the wizard',
+        onclick: reassess,
+      }) : null,
       el('div', { class: 'day-sub' }, [
         el('button', { class: 'btn-link day-inline', text: adding ? 'Never mind' : '+ Add a block', onclick: async () => { adding = !adding; await paint(); } }),
         (blocks.length || busy.length) ? el('button', { class: 'btn-link day-inline', text: 'Export to Calendar', onclick: () => downloadICS(blocks, `guruji-${date}.ics`, { calName: 'Guruji study' }) }) : null,
@@ -177,6 +185,24 @@ export async function renderDay(mount, { navigate }) {
     ]);
 
     fill(clear(wrap), [head, whyNode, timeline, footer]);
+  }
+
+  // Re-fit the study around the day's *current* commitments without re-opening
+  // the wizard. autoPlanDay reads the live busy blocks (so a dropped or added
+  // event is honoured) and keeps done + manually pinned/swapped work; we just
+  // replay the day's remembered intensity / focus lean. Weekend is re-derived
+  // from the date so reassessing a Saturday still aims high.
+  async function reassess() {
+    const settings = await getSettings();
+    const dow = new Date(date + 'T00:00:00').getDay();
+    const weekend = dow === 0 || dow === 6;
+    const intensity = INTENSITY.find((i) => i.key === (settings.lastPlanIntensity || 'normal'))
+      || INTENSITY.find((i) => i.key === 'normal');
+    let maxStudy = intensity ? intensity.max : undefined;
+    if (weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
+    await autoPlanDay(date, { focusArea: settings.lastPlanFocusArea || null, maxStudyMinutes: maxStudy, weekend });
+    toast('Re-fit your study around the day');
+    await paint();
   }
 
   function freshPlan(settings) {
@@ -385,6 +411,9 @@ export async function renderDay(mount, { navigate }) {
       // several sessions per area.
       let maxStudy = intensity ? intensity.max : undefined;
       if (pl.weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
+      // Remember the day's inputs so "Reassess" can re-fit study around edited
+      // commitments later without walking the wizard again.
+      await setSettings({ lastPlanIntensity: pl.intensity, lastPlanFocusArea: pl.focusArea || null });
       await autoPlanDay(date, { focusArea: pl.focusArea, maxStudyMinutes: maxStudy, weekend: pl.weekend });
       pl = null;
       await paint();
