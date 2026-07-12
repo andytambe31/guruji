@@ -740,6 +740,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   const existing = await getItems();
   const prevStatus = new Map(existing.map((i) => [i.id, i.status]));
   const prevNotes = new Map(existing.map((i) => [i.id, i.notes]));
+  const prevCoach = new Map(existing.map((i) => [i.id, i.coach]));
 
   const planRecords = [];
   const phaseRecords = [];
@@ -767,6 +768,11 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
         // phone import never wipes desktop-authored content.
         const incomingNotes = typeof it.notes === 'string' && it.notes.trim() ? it.notes : '';
         const notes = incomingNotes || prevNotes.get(it.id) || '';
+        // Per-topic focus-mode coaching (session plan + resources). Like notes,
+        // it's content: incoming wins, else keep what's here so a phone sync
+        // never wipes it.
+        const incomingCoach = it.coach && typeof it.coach === 'object' ? it.coach : null;
+        const coach = incomingCoach || prevCoach.get(it.id) || null;
         itemRecords.push({
           id: it.id,
           title: it.title || '(untitled)',
@@ -781,6 +787,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
           dependsOn: Array.isArray(it.dependsOn) ? it.dependsOn : [],
           status,
           notes,
+          coach,
           order: order++,
         });
       });
@@ -874,6 +881,7 @@ export async function buildExport() {
       dependsOn: it.dependsOn || [],
       status: it.status || 'todo',
       notes: it.notes || undefined, // desktop-authored study content
+      coach: it.coach || undefined, // per-topic focus-mode coaching
     });
   }
 

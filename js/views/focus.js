@@ -77,6 +77,96 @@ const THEMES = {
   },
 };
 
+// Per-area coaching: how to actually run this session, and which resources to
+// open (on the desktop, where the study content lives). A topic can override the
+// steps and add its own resources via its `coach` field; otherwise the whole
+// area shares this playbook. This is the coach in the room — the "what do I do
+// now and what do I look at" the timer alone can't give you.
+const PLAYBOOKS = {
+  'DSA': {
+    steps: [
+      'On your desktop, open this topic’s guide (Plan) and NeetCode side by side.',
+      'Learn the pattern first — read the guide, watch NeetCode’s video for it.',
+      'Pen first, per problem: restate it, note constraints, brute force + its Big-O, then the pattern.',
+      'Code it on LeetCode. Stuck ~30 min? Read the editorial fully, then re-code from scratch.',
+      'End each: a one-line note (pattern + key insight); mark it to re-solve in a few days.',
+    ],
+    resources: [
+      'NeetCode (neetcode.io) — pattern videos and clean solutions.',
+      'LeetCode — solve here; near interviews, filter by company + frequency.',
+      'Pattern catalog — Plan → DSA → Method (on desktop).',
+      'Grind 75 (techinterviewhandbook.org) — what to solve next, in order.',
+    ],
+  },
+  'System Design': {
+    steps: [
+      'On your desktop, open this topic’s guide (Plan) and read it actively.',
+      'Take notes on the tradeoffs — for every choice, say the other side out loud.',
+      'Draw the boxes and do the napkin math (QPS, storage) as you go.',
+      'If it’s a design question, walk all six steps out loud, drawing the diagram.',
+    ],
+    resources: [
+      'This topic’s guide + the storage-internals / design walkthroughs (Plan, desktop).',
+      'System Design Primer (github.com/donnemartin/system-design-primer) — reference.',
+      'ByteByteGo — diagrams and clear explanations.',
+    ],
+  },
+  'CS Fundamentals': {
+    steps: [
+      'On your desktop, open the topic guide; read for the concept, not the syntax.',
+      'After each section, close it and explain it back in your own words.',
+      'Tie it to something you’ve built — or seen break — in real code.',
+      'Check yourself: could you explain this to an interviewer in two minutes?',
+    ],
+    resources: [
+      'This topic’s guide — Plan → CS Fundamentals (on desktop).',
+      'Official docs for the tech (Postgres, MDN for HTTP, and so on).',
+    ],
+  },
+  'Reading': {
+    steps: [
+      'Pick up where you left off — read for what you carry out, not the page count.',
+      'Mark the one line that stops you.',
+      'After the timer, write the single thought in your own words (Reading → reflect).',
+    ],
+    resources: ['Your current book.', 'Your reflections — the Reading tab.'],
+  },
+  'Behavioral': {
+    steps: [
+      'Pick one story and structure it: Situation, Task, Action, Result.',
+      'Lead with your decision, not the backstory; put numbers on the impact.',
+      'Say it out loud, timed to about two minutes.',
+    ],
+    resources: ['Your STAR stories — Plan → Behavioral (on desktop).'],
+  },
+  'default': {
+    steps: [
+      'On your desktop, open the topic’s guide and work through it actively.',
+      'Keep one thing on screen; narrate what you’re doing.',
+      'End with a one-line note on what you learned.',
+    ],
+    resources: [],
+  },
+};
+
+// The coach panel that sits under the timer: the session's play + resources.
+// A topic's own `coach` (plan/resources) overrides/augments its area playbook.
+function coachPanel(item) {
+  const pb = PLAYBOOKS[item.area] || PLAYBOOKS.default;
+  const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
+  const steps = (c && Array.isArray(c.plan) && c.plan.length) ? c.plan : pb.steps;
+  const resources = [...(pb.resources || []), ...((c && Array.isArray(c.resources)) ? c.resources : [])];
+  const kids = [
+    el('div', { class: 'fc-head', text: 'How to study this' }),
+    el('ol', { class: 'fc-steps' }, steps.map((s) => el('li', { text: s }))),
+  ];
+  if (resources.length) {
+    kids.push(el('div', { class: 'fc-sub', text: 'Resources · open on your desktop' }));
+    kids.push(el('ul', { class: 'fc-res' }, resources.map((r) => el('li', { text: r }))));
+  }
+  return el('div', { class: 'focus-coach' }, kids);
+}
+
 export async function renderFocus(mount, { arg, navigate }) {
   // arg is "itemId/minutes" or, when launched from a planned block on the Day,
   // "itemId/minutes/blockId" so the session's real minutes attach back to the
@@ -151,7 +241,10 @@ export async function renderFocus(mount, { arg, navigate }) {
     center = el('div', { class: 'env-barwrap' }, [clock, el('div', { class: 'env-bar' }, [barFill])]);
   }
 
-  const screen = el('div', { class: `focus ${theme.cls}` }, [phaseLabel, title, center, ritual, controls]);
+  // Timer hero fills the first screen (calm); the coach panel sits just under it,
+  // scroll to read the play + resources while the clock runs.
+  const hero = el('div', { class: 'focus-hero' }, [phaseLabel, title, center, ritual, controls]);
+  const screen = el('div', { class: `focus has-coach ${theme.cls}` }, [hero, coachPanel(item)]);
   mount.append(screen);
 
   requestWakeLock();
