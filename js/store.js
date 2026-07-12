@@ -10,7 +10,7 @@ const DEFAULT_SETTINGS = {
   // Recurring routine: which weekdays (0=Sun … 6=Sat) are office days by default,
   // and your usual office timing. The wizard pre-fills from these; a per-day
   // override in the wizard doesn't change the routine.
-  officeDays: [2, 3, 4], officeLeave: 510, officeCommute: 60, officeBack: 1080, getReady: 30,
+  officeDays: [1, 2, 3, 4, 5], officeLeave: 510, officeCommute: 60, officeBack: 1080, getReady: 30,
 };
 export async function getSettings() {
   const rec = await get(STORES.kv, 'settings');
@@ -789,13 +789,25 @@ export async function computeStats(now = new Date()) {
   const last14 = [];
   for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); last14.push({ date: d, minutes: minutesOn(d) }); }
 
-  // ---- LeetCode roll-ups (total, by pattern, by difficulty, per day, recent) ----
-  const lcPattern = new Map(); const lcDiff = new Map(); const lcDay = new Map();
-  for (const p of lc) {
+  // ---- LeetCode roll-ups ----
+  // A revisited problem stays in the log (history + daily activity), but counts
+  // once toward how many *distinct* problems you've solved — re-grinding Two Sum
+  // must never inflate the solved total or the coverage bars. Dedup by slug,
+  // keeping the latest entry per problem (lc is oldest→newest) so a re-tag wins.
+  const lcKey = (p) => (p.slug || p.url || p.title || '').toString().toLowerCase().trim();
+  const lcUniqueMap = new Map();
+  for (const p of lc) { const k = lcKey(p); if (k) lcUniqueMap.set(k, p); }
+  const lcUniqueList = [...lcUniqueMap.values()];
+
+  // Coverage (by pattern / difficulty) reflects distinct problems, not attempts.
+  const lcPattern = new Map(); const lcDiff = new Map();
+  for (const p of lcUniqueList) {
     if (p.pattern) lcPattern.set(p.pattern, (lcPattern.get(p.pattern) || 0) + 1);
     if (p.difficulty) lcDiff.set(p.difficulty, (lcDiff.get(p.difficulty) || 0) + 1);
-    lcDay.set(p.date, (lcDay.get(p.date) || 0) + 1);
   }
+  // Daily activity counts every logged problem — a revisit is still work done.
+  const lcDay = new Map();
+  for (const p of lc) lcDay.set(p.date, (lcDay.get(p.date) || 0) + 1);
   const lcLast14 = [];
   for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); lcLast14.push({ date: d, count: lcDay.get(d) || 0 }); }
   const lcToday = lcDay.get(today) || 0;
@@ -819,7 +831,9 @@ export async function computeStats(now = new Date()) {
     byArea: [...byArea.entries()].map(([area, minutes]) => ({ area, minutes })).sort((a, b) => b.minutes - a.minutes),
     topicsDone: items.filter((i) => i.status === 'done').length,
     topicsTotal: items.length,
-    lcTotal: lc.length,
+    lcTotal: lc.length,          // every logged attempt (activity — revisits count)
+    lcUnique: lcUniqueMap.size,  // distinct problems solved (revisits don't double-count)
+    lcGoal: 500,                 // the aggressive FAANG-ready bar; only new problems move it
     lcToday, lcWeek,
     lcByDifficulty: LC_DIFF_ORDER.map((d) => ({ difficulty: d, count: lcDiff.get(d) || 0 })).filter((x) => x.count),
     lcByPattern: [...lcPattern.entries()].map(([pattern, count]) => ({ pattern, count })).sort((a, b) => b.count - a.count),

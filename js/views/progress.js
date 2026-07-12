@@ -65,10 +65,32 @@ export async function renderProgress(mount, { navigate }) {
     lc.append(el('div', { class: 'prog-top' }, [
       el('p', { class: 'eyebrow', text: 'LeetCode' }),
       el('div', { class: 'prog-total' }, [
-        el('span', { class: 'prog-total-num', text: `${s.lcTotal}` }),
-        el('span', { class: 'prog-total-lbl', text: `problems logged · ${s.lcWeek} this week` }),
+        el('span', { class: 'prog-total-num', text: `${s.lcUnique}` }),
+        el('span', { class: 'prog-total-lbl', text: `distinct solved · ${s.lcWeek} this week` }),
       ]),
     ]));
+    // The goal — an aggressive, FAANG-ready bar. A revisited problem stays in the
+    // log but doesn't move this; only a new distinct problem does, so it's an
+    // honest read on how much of the interview surface you've actually covered.
+    {
+      const pct = Math.min(100, Math.round((s.lcUnique / s.lcGoal) * 100));
+      const left = Math.max(0, s.lcGoal - s.lcUnique);
+      lc.append(el('div', { class: 'lc-goal' }, [
+        el('div', { class: 'lc-goal-top' }, [
+          el('span', { class: 'lc-goal-lbl', text: `Goal · ${s.lcGoal}` }),
+          el('span', { class: 'lc-goal-num', text: `${s.lcUnique} / ${s.lcGoal} · ${pct}%` }),
+        ]),
+        el('div', { class: 'adhere-track' }, [el('div', { class: 'adhere-fill', style: `width:${pct}%` })]),
+        el('div', { class: 'lc-goal-note', text: left
+          ? `${left} to go — the aggressive bar: enough to have seen every pattern several times over.`
+          : `500 done. You've out-prepped the room.` }),
+      ]));
+    }
+    // Revisits are welcome (they're spaced repetition) — surface them so the gap
+    // between attempts logged and distinct solved is visible, not hidden.
+    if (s.lcTotal > s.lcUnique) {
+      lc.append(el('div', { class: 'lc-goal-sub', text: `${s.lcTotal} attempts logged · ${s.lcTotal - s.lcUnique} ${s.lcTotal - s.lcUnique === 1 ? 'revisit' : 'revisits'} (counted once)` }));
+    }
     // by difficulty
     if (s.lcByDifficulty.length) {
       lc.append(el('div', { class: 'lc-diff-row' }, s.lcByDifficulty.map((d) =>

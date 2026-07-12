@@ -214,7 +214,7 @@ export async function renderDay(mount, { navigate }) {
     // your usual timing. You can still flip it either way in the wizard.
     const dow = new Date(date + 'T00:00:00').getDay();
     const weekend = dow === 0 || dow === 6; // no work question on Sat / Sun
-    const isOffice = !weekend && (settings.officeDays || [2, 3, 4]).includes(dow);
+    const isOffice = !weekend && (settings.officeDays || [1, 2, 3, 4, 5]).includes(dow);
     const office = { on: isOffice, leave: settings.officeLeave ?? 510, commute: settings.officeCommute ?? 60, back: settings.officeBack ?? 1080 };
     return {
       step: 0,
