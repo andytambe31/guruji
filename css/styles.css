@@ -894,6 +894,25 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
   background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .lc-note:focus, .lc-select:focus { outline: none; border-color: var(--text-dim); background: var(--bg); }
 .lc-add { margin-top: 14px; }
+
+/* Concept-confidence wizard (CS Fundamentals). Reuses the overlay/card/chips. */
+.cw-hint { font-size: 13px; color: var(--text-faint); margin: 0 0 14px; line-height: 1.5; }
+.cw-list { display: flex; flex-direction: column; }
+.cw-row { padding: 12px 0; border-bottom: 1px solid var(--line-soft); }
+.cw-concept { font-size: 14px; color: var(--text); margin-bottom: 8px; line-height: 1.4; }
+.cw-chips { gap: 6px; }
+.cw-chip.on.cw-solid { border-color: #0f9d6b; color: #0f9d6b; background: rgba(15,157,107,.1); }
+.cw-chip.on.cw-shaky { border-color: #c98a2e; color: #c98a2e; background: rgba(201,138,46,.12); }
+.cw-chip.on.cw-noyet { border-color: #c2483d; color: #c2483d; background: rgba(194,72,61,.1); }
+/* Confidence tags + review dots on Progress. */
+.cw-diff-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.cw-tag { font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 4px 12px; font-variant-numeric: tabular-nums; }
+.cw-tag.c-solid { color: #0f9d6b; background: rgba(15,157,107,.12); }
+.cw-tag.c-shaky { color: #c98a2e; background: rgba(201,138,46,.14); }
+.cw-tag.c-noyet { color: #c2483d; background: rgba(194,72,61,.12); }
+.lc-dot.c-solid { background: #0f9d6b; }
+.lc-dot.c-shaky { background: #c98a2e; }
+.lc-dot.c-noyet { background: #c2483d; }
 .prog-h { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
 .prog-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }

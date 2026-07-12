@@ -4,6 +4,7 @@
 import { el, clear, fmtClock, toast, todayISO } from '../util.js';
 import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus } from '../store.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
+import { openConceptWizard } from './concept-wizard.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
 // | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
@@ -208,6 +209,7 @@ export async function renderFocus(mount, { arg, navigate }) {
   let mIdx = 0;
   let wakeLock = null;
   let lcEntries = []; // LeetCode problems logged on the resolve screen (DSA only)
+  let conceptRatings = []; // concept-confidence ratings (CS Fundamentals only)
 
   const persist = () => setActiveSession({
     itemId, minutes, blockId, startedAt: started.toISOString(),
@@ -335,11 +337,20 @@ export async function renderFocus(mount, { arg, navigate }) {
       text: lcLabel(),
       onclick: () => openLeetcodeWizard({ initial: lcEntries, onSave: (e) => { lcEntries = e; lcBtn.textContent = lcLabel(); } }),
     }) : null;
+    // CS Fundamentals: rate your confidence on the topic's key concepts.
+    const cwConcepts = (item.coach && Array.isArray(item.coach.concepts)) ? item.coach.concepts : [];
+    const cwLabel = () => (conceptRatings.length ? `Concepts rated · ${conceptRatings.length}` : '＋ Rate the concepts you covered');
+    const cwBtn = (item.area === 'CS Fundamentals' && cwConcepts.length) ? el('button', {
+      class: 'btn btn-ghost btn-block', style: 'max-width:320px',
+      text: cwLabel(),
+      onclick: () => openConceptWizard({ concepts: cwConcepts, initial: conceptRatings, onSave: (r) => { conceptRatings = r; cwBtn.textContent = cwLabel(); } }),
+    }) : null;
     const box = el('div', { class: `focus ${theme.cls}` }, [
       el('div', { class: 'phase-label', text: timedOut ? "Time's up" : 'Session ended' }),
       el('div', { class: 'focus-title', text: item.title }),
       el('div', { class: 'muted', style: 'margin-bottom:22px', text: summary }),
       lcBtn,
+      cwBtn,
       el('div', { class: 'stack', style: 'width:100%;max-width:320px;margin-top:18px' }, [
         el('button', { class: 'btn btn-primary btn-lg btn-block', text: 'Mark done', onclick: () => resolve('done') }),
         el('button', { class: 'btn btn-ghost btn-block', text: 'Not finished — keep it', onclick: () => resolve('todo') }),
@@ -372,6 +383,7 @@ export async function renderFocus(mount, { arg, navigate }) {
       plannedMinutes: minutes,
       focusMinutes: elapsedMin(),
       leetcode: lcEntries.length ? lcEntries : undefined, // the coach's raw data
+      concepts: conceptRatings.length ? conceptRatings : undefined,
       result,
     });
     releaseWakeLock();

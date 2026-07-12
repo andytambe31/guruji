@@ -698,6 +698,29 @@ export async function logLeetcodeForBlock(block, entries) {
   });
 }
 
+// Attach concept-confidence ratings to a topic (CS Fundamentals) — from the
+// post-session wizard or retroactively from the Day. Stored as a ratings-only
+// log entry (no minutes) so it feeds the confidence dashboard without counting
+// as a study session.
+export async function logConceptsForBlock(block, ratings) {
+  if (!Array.isArray(ratings) || !ratings.length) return null;
+  const now = new Date();
+  return addLogEntry({
+    itemId: block.itemId,
+    itemTitle: block.title || '',
+    mode: block.mode,
+    area: block.area || 'CS Fundamentals',
+    blockId: block.id,
+    date: block.date,
+    startedAt: now.toISOString(),
+    endedAt: now.toISOString(),
+    focusMinutes: 0,
+    concepts: ratings,
+    manual: true,
+    result: 'logged',
+  });
+}
+
 // Actual focused minutes per planned block, summed from the session log. Lets
 // the Day view show what you *really* studied against what a block reserved —
 // so a 150-min block you only sat with for 25 reads honestly, not as "done =
@@ -723,11 +746,12 @@ export async function computeStats(now = new Date()) {
   const byDate = new Map();   // date -> minutes actually studied
   const byArea = new Map();   // area -> minutes
   const lc = [];              // LeetCode problems: {title, pattern, difficulty, outcome, note, date}
+  const conceptLatest = new Map(); // concept -> {confidence, date, topic} (latest rating wins)
   let totalMinutes = 0;
   let sessions = 0;
   for (const e of log) {
     const m = Math.max(0, Math.round(e.focusMinutes || 0));
-    // A problems-only entry (retroactive LeetCode log) has no minutes — it's not
+    // A problems/ratings-only entry (retroactive log) has no minutes — it's not
     // a study session, so it mustn't inflate the session count or the day.
     if (m > 0) {
       totalMinutes += m; sessions += 1;
@@ -736,6 +760,11 @@ export async function computeStats(now = new Date()) {
     }
     if (Array.isArray(e.leetcode)) {
       for (const p of e.leetcode) lc.push({ ...p, date: e.date });
+    }
+    // log is sorted oldest→newest, so later ratings overwrite earlier ones — the
+    // dashboard reflects your *current* standing on each concept.
+    if (Array.isArray(e.concepts)) {
+      for (const r of e.concepts) if (r && r.concept) conceptLatest.set(r.concept, { confidence: r.confidence, date: e.date, topic: e.itemTitle || '' });
     }
   }
   const minutesOn = (d) => byDate.get(d) || 0;
@@ -796,6 +825,17 @@ export async function computeStats(now = new Date()) {
     lcByPattern: [...lcPattern.entries()].map(([pattern, count]) => ({ pattern, count })).sort((a, b) => b.count - a.count),
     lcLast14,
     lcRecent: [...lc].reverse().slice(0, 25),
+    conceptsTotal: conceptLatest.size,
+    conceptConfidence: (() => {
+      const c = { solid: 0, shaky: 0, noyet: 0 };
+      for (const v of conceptLatest.values()) if (c[v.confidence] != null) c[v.confidence] += 1;
+      return c;
+    })(),
+    // What to review: everything not yet solid, weakest first.
+    conceptsReview: [...conceptLatest.entries()]
+      .filter(([, v]) => v.confidence && v.confidence !== 'solid')
+      .map(([concept, v]) => ({ concept, confidence: v.confidence, topic: v.topic, date: v.date }))
+      .sort((a, b) => (a.confidence === 'noyet' ? 0 : 1) - (b.confidence === 'noyet' ? 0 : 1)),
   };
 }
 const LC_DIFF_ORDER = ['Easy', 'Medium', 'Hard'];

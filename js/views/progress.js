@@ -116,6 +116,44 @@ export async function renderProgress(mount, { navigate }) {
     wrap.append(lc);
   }
 
+  // CS Fundamentals — concept confidence: where you're solid vs need review.
+  if (s.conceptsTotal) {
+    const rel = (iso) => {
+      const t = todayISO();
+      if (iso === t) return 'Today';
+      if (iso === addDaysISO(t, -1)) return 'Yesterday';
+      return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+    const cc = s.conceptConfidence;
+    const CLABEL = { solid: 'Solid', shaky: 'Shaky', noyet: 'Not yet' };
+    const cs = el('div', { class: 'prog-section' });
+    cs.append(el('div', { class: 'prog-top' }, [
+      el('p', { class: 'eyebrow', text: 'CS Fundamentals' }),
+      el('div', { class: 'prog-total' }, [
+        el('span', { class: 'prog-total-num', text: `${cc.solid}/${s.conceptsTotal}` }),
+        el('span', { class: 'prog-total-lbl', text: 'concepts solid' }),
+      ]),
+    ]));
+    cs.append(el('div', { class: 'cw-diff-row' }, [
+      cc.solid ? el('span', { class: 'cw-tag c-solid', text: `Solid · ${cc.solid}` }) : null,
+      cc.shaky ? el('span', { class: 'cw-tag c-shaky', text: `Shaky · ${cc.shaky}` }) : null,
+      cc.noyet ? el('span', { class: 'cw-tag c-noyet', text: `Not yet · ${cc.noyet}` }) : null,
+    ]));
+    if (s.conceptsReview.length) {
+      cs.append(el('div', { class: 'prog-sub' }, [
+        el('div', { class: 'prog-subh', text: 'To review' }),
+        el('div', { class: 'lc-plist' }, s.conceptsReview.map((c) => el('div', { class: 'lc-prow' }, [
+          el('div', { class: 'lc-pmain' }, [
+            el('span', { class: `lc-dot c-${c.confidence}` }),
+            el('span', { class: 'lc-pname', text: c.concept }),
+          ]),
+          el('span', { class: 'lc-pmeta', text: [CLABEL[c.confidence], rel(c.date)].filter(Boolean).join(' · ') }),
+        ]))),
+      ]));
+    }
+    wrap.append(cs);
+  }
+
   // Plan adherence — did planned days actually happen?
   if (s.adherencePct != null) {
     wrap.append(el('div', { class: 'prog-section' }, [

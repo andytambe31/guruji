@@ -8,10 +8,11 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
-  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock,
+  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
+import { openConceptWizard } from './concept-wizard.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -121,6 +122,8 @@ export async function renderDay(mount, { navigate }) {
     const surfaceable = surfaceAreas(items);
     const bookedIds = new Set(blocks.map((b) => b.itemId));
     const swapOptions = surfaceable.filter((o) => !bookedIds.has(o.item.id));
+    // A topic's key concepts (for the CS Fundamentals confidence wizard).
+    const conceptsByItem = new Map(items.map((i) => [i.id, (i.coach && Array.isArray(i.coach.concepts)) ? i.coach.concepts : []]));
 
     const head = el('div', { class: 'day-head' }, [
       el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint(); } }),
@@ -138,7 +141,7 @@ export async function renderDay(mount, { navigate }) {
     const covered = (bb) => bb.transit && blocks.some((bl) => bl.onCommute && bl.start < bb.start + bb.minutes && bl.start + bl.minutes > bb.start);
     const busyShown = busy.filter((bb) => !covered(bb));
     const entries = [
-      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions) })),
+      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions, conceptsByItem.get(b.itemId) || []) })),
       ...busyShown.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
     ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
     if (!entries.length) {
@@ -421,7 +424,7 @@ export async function renderDay(mount, { navigate }) {
     }
   }
 
-  function blockCard(b, studied = 0, swapOptions = []) {
+  function blockCard(b, studied = 0, swapOptions = [], concepts = []) {
     const done = b.status === 'done';
     const canSwap = !done && swapOptions.length > 0;
 
@@ -432,6 +435,7 @@ export async function renderDay(mount, { navigate }) {
       done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}/${b.id}`) }),
       el('button', { class: 'blk-act', text: 'Log', title: 'Studied without the timer? Log the time you put in', onclick: () => fill(clear(acts), logActs()) }),
       b.area === 'DSA' ? el('button', { class: 'blk-act', text: 'Problems', title: 'Log the LeetCode problems you did in this session', onclick: () => openLeetcodeWizard({ onSave: async (e) => { if (e.length) { await logLeetcodeForBlock(b, e); toast(`Logged ${e.length} problem${e.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,
+      (b.area === 'CS Fundamentals' && concepts.length) ? el('button', { class: 'blk-act', text: 'Concepts', title: 'Rate your confidence on this topic’s key concepts', onclick: () => openConceptWizard({ concepts, onSave: async (r) => { if (r.length) { await logConceptsForBlock(b, r); toast(`Rated ${r.length} concept${r.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,
       canSwap ? el('button', { class: 'blk-act', text: 'Swap', title: 'Not feeling it? Replace with another eligible focus, same time slot', onclick: () => fill(clear(acts), swapActs()) }) : null,
       done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
       el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
