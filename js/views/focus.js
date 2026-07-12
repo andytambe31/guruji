@@ -1,7 +1,7 @@
 // Focus session — a distinct *environment* per area. Start DSA and you drop
 // into a sharp sprint; System Design is a calmer, thinking space; Reading is
 // warm and quiet. Same timer underneath, different room. Only Pause + End.
-import { el, clear, fmtClock, toast } from '../util.js';
+import { el, clear, fmtClock, toast, todayISO } from '../util.js';
 import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus } from '../store.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
@@ -251,7 +251,7 @@ export async function renderFocus(mount, { arg, navigate }) {
       phase: item.phase,
       week: item.week,
       blockId: blockId || null,
-      date: started.toISOString().slice(0, 10),
+      date: todayISO(started), // the local calendar day the session started
       startedAt: started.toISOString(),
       endedAt: new Date().toISOString(),
       plannedMinutes: minutes,

@@ -1,7 +1,7 @@
 // Progress — the feedback loop. Everything here is derived from what the app
 // already records: the session log (real focus time), the schedule (what was
 // planned), and item statuses. No new tracking, just a mirror of your effort.
-import { el, clear, fmtDur } from '../util.js';
+import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
 import { computeStats } from '../store.js';
 
 export async function renderProgress(mount, { navigate }) {
@@ -78,12 +78,10 @@ export async function renderProgress(mount, { navigate }) {
 
   // Recent sessions — every logged focus block, so the total is auditable.
   if (s.recentSessions.length) {
+    const today = todayISO();
     const rel = (iso) => {
-      const t = new Date();
-      const todayISO = t.toISOString().slice(0, 10);
-      const y = new Date(t.getTime() - 864e5).toISOString().slice(0, 10);
-      if (iso === todayISO) return 'Today';
-      if (iso === y) return 'Yesterday';
+      if (iso === today) return 'Today';
+      if (iso === addDaysISO(today, -1)) return 'Yesterday';
       const d = new Date(iso + 'T00:00:00');
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };

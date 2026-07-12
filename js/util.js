@@ -95,19 +95,27 @@ export function fmtDur(minutes) {
 }
 
 // ---- date helpers for habit streaks (work on "YYYY-MM-DD" strings) ----
+// These are *calendar-day* helpers, so they must read the LOCAL date, never
+// toISOString() (which is UTC). Using UTC makes the app's "today" flip to the
+// next/previous day near midnight for anyone not on UTC — e.g. an evening in the
+// Americas would show tomorrow as today, or an early morning in India yesterday.
 export function todayISO(date = new Date()) {
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 export function daysBetween(a, b) {
-  // whole days from a to b (b - a), both "YYYY-MM-DD"
+  // whole days from a to b (b - a), both "YYYY-MM-DD". Parsed at local midnight;
+  // rounding absorbs any DST hour so the day count stays whole.
   const da = new Date(a + 'T00:00:00');
   const db = new Date(b + 'T00:00:00');
   return Math.round((db - da) / 86400000);
 }
 export function addDaysISO(iso, n) {
-  const d = new Date(iso + 'T00:00:00');
+  const d = new Date(iso + 'T00:00:00'); // local midnight of the given day
   d.setDate(d.getDate() + n);
-  return d.toISOString().slice(0, 10);
+  return todayISO(d);                    // re-read local parts, not UTC
 }
 
 // ---- cognitive load (a deliberately rough gauge, not a measurement) ----
