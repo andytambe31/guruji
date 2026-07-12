@@ -612,7 +612,10 @@ export async function pushBlock(id, delta) {
 // Reorder the whole day — study sessions AND movable commitments (gym, walk,
 // errands) as one sequence — laid out from the day's start around the things
 // that are genuinely fixed: office hours, the commute, meals, and done work.
-const FIXED_LABELS = new Set(['Breakfast', 'Lunch', 'Dinner', 'Office']);
+// Work (in-office or from-home) is immovable — it anchors the day and study
+// routes around it. Without 'Work' here, a from-home block was treated as
+// movable and slid past the meal anchors into the evening, leaving the 9–5 open.
+const FIXED_LABELS = new Set(['Breakfast', 'Lunch', 'Dinner', 'Office', 'Work']);
 export function isMovableBusy(b) { return !(b.transit || FIXED_LABELS.has(b.label)); }
 
 export async function resequenceMixed(date, orderedIds) {
