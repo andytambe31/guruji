@@ -60,6 +60,17 @@ const THEMES = {
       'Momentum compounds. Send it.',
     ],
   },
+  'CS Fundamentals': {
+    cls: 'env-default', label: 'Fundamentals', viz: 'bar', rotate: 13,
+    mantras: [
+      'Learn the concept, not the syntax — syntax you can look up.',
+      'Draw the schema before you write the query.',
+      'Ask “what does this actually do under the hood?”',
+      'Name the tradeoff — every choice has one.',
+      'Could you explain this to an interviewer in two minutes?',
+      'Tie it to something you’ve built or seen break.',
+    ],
+  },
   'default': {
     cls: 'env-default', label: 'Focus', viz: 'bar', rotate: 12,
     mantras: ['Stay with it. One thing.', 'You only owe it this block.', 'Depth, not speed.'],

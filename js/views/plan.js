@@ -7,7 +7,8 @@ import { getPlans, getPhases, getItems, setItemStatus, setItemNotes, resetAllSta
 
 const AREA_COLOR = {
   'DSA': '#3b5bd9', 'System Design': '#0f9d6b', 'Reading': '#c98a2e',
-  'Behavioral': '#b5527e', 'Applications': '#2f8f8a', 'Study': '#9aa0a8',
+  'Behavioral': '#b5527e', 'Applications': '#2f8f8a',
+  'CS Fundamentals': '#7d5bd6', 'Study': '#9aa0a8',
 };
 const areaColor = (a) => AREA_COLOR[a] || AREA_COLOR.Study;
 
