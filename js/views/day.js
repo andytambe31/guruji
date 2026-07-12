@@ -7,7 +7,7 @@
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS, toast } from '../util.js';
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
-  retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, getSettings, setSettings,
+  retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
@@ -490,21 +490,31 @@ export async function renderDay(mount, { navigate }) {
   }
 
   function busyCard(b) {
-    return el('div', { class: 'busy', dataset: { id: b.id } }, [
+    const done = b.status === 'done';
+    return el('div', { class: 'busy' + (done ? ' done' : ''), dataset: { id: b.id } }, [
       el('div', { class: 'busy-times' }, [
         el('input', {
-          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start), title: 'Start time',
+          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start), title: 'Start time', disabled: done,
           onchange: async (e) => { const v = e.target.value; if (v) { await retimeBusy(b.id, toMinutes(v), b.minutes); await paint(); } },
         }),
         el('span', { class: 'busy-dash', text: '–' }),
         el('input', {
-          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start + b.minutes), title: 'End time',
+          type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start + b.minutes), title: 'End time', disabled: done,
           onchange: async (e) => { const v = e.target.value; if (!v) return; const endM = toMinutes(v); if (endM > b.start) { await retimeBusy(b.id, b.start, endM - b.start); await paint(); } },
         }),
       ]),
       el('span', { class: 'busy-label', text: b.label }),
       b.drain && b.drain !== 'none' ? el('span', { class: 'busy-drain', text: 'draining' }) : null,
-      el('button', { class: 'blk-act blk-x busy-x', text: 'Remove', onclick: async () => { await deleteBusy(b.id); await paint(); } }),
+      el('div', { class: 'busy-acts' }, [
+        // Tick off a done commitment — reassessing then reclaims its time.
+        el('button', {
+          class: 'blk-act busy-done' + (done ? ' on' : ''),
+          text: done ? 'Undo' : 'Done',
+          title: done ? 'Not done after all' : 'Mark done — frees this time for study when you reassess',
+          onclick: async () => { await setBusyStatus(b.id, done ? 'planned' : 'done'); await paint(); },
+        }),
+        el('button', { class: 'blk-act blk-x busy-x', text: 'Remove', onclick: async () => { await deleteBusy(b.id); await paint(); } }),
+      ]),
     ]);
   }
 

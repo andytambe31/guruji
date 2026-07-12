@@ -298,7 +298,10 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .busy-time-in::-webkit-date-and-time-value { text-align: left; margin: 0; padding: 0; }
 .busy-dash { font-size: 13px; color: var(--text-faint); }
 .busy-label { font-size: 14px; font-weight: 550; color: var(--text-dim); }
-.busy-x { margin-left: auto; }
+.busy-acts { margin-left: auto; display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.busy-done.on { color: var(--ok, #0f9d6b); font-weight: 650; }
+.busy.done { opacity: .5; }
+.busy.done .busy-label { text-decoration: line-through; }
 
 /* a breather between study sessions */
 .break-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .1em; padding: 4px 0; opacity: .8; }

@@ -315,6 +315,17 @@ export async function deleteBusy(id) {
   if (b) await reflowDate(b.date);
   return b;
 }
+// Tick a commitment off (or un-tick it). A done commitment stops counting as an
+// obstacle, so reassessing plans study into the time it used to hold.
+export async function setBusyStatus(id, status) {
+  const b = await get(STORES.schedule, id);
+  if (!b || b.kind !== 'busy') return null;
+  b.status = status;
+  await put(STORES.schedule, b);
+  // No reflow here — ticking a commitment off is just a state change; you drive
+  // the re-fit explicitly with Reassess, so nothing shuffles under you.
+  return b;
+}
 // Re-planning fully re-specifies the day's commitments, so clear the old ones
 // first — otherwise each re-plan stacks another gym/walk/office.
 export async function clearBusyForDate(date) {
@@ -354,7 +365,8 @@ export async function deconflictBusy(date) {
 export async function reflowDate(date) {
   const [blocks, busy] = await Promise.all([getBlocksForDate(date), getBusyForDate(date)]);
   if (!blocks.length) return [];
-  const packed = reflow(blocks, busy);
+  // Done commitments are no longer obstacles — study may flow through their time.
+  const packed = reflow(blocks, busy.filter((b) => b.status !== 'done'));
   await bulkPut(STORES.schedule, packed.map((b) => ({ ...b, kind: 'block' })));
   return packed;
 }
@@ -395,7 +407,10 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
 
   // Commute windows (transit commitments) become transit-study sessions — that
   // dead hour on the train is exactly when concept-level work fits.
-  const commuteWindows = busy.filter((b) => b.transit).sort((a, b) => a.start - b.start);
+  // Commitments you've ticked off (had lunch, did the walk) are behind you —
+  // drop them as obstacles so reassessing reclaims that time for study.
+  const activeBusy = busy.filter((b) => b.status !== 'done');
+  const commuteWindows = activeBusy.filter((b) => b.transit).sort((a, b) => a.start - b.start);
   // Reading is low-effort — you're absorbing, not grinding — so on office days
   // it rides the commute first, freeing your desk hours for DSA / system design.
   // Concept-level TRANSIT work fills any remaining commute windows.
@@ -441,7 +456,7 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   // a few big sittings plus lighter work, spread across the day — not a dozen
   // little sessions.
   const planOpts = {
-    startMin, endMin, busy: busy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes,
+    startMin, endMin, busy: activeBusy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes,
     ...(weekend ? { itemCap: 2, areaCapDefault: 4, deep: true } : {}),
   };
   // If it's too late for anything to fit today, still propose from the day start.
