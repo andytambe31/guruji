@@ -3,6 +3,7 @@
 // warm and quiet. Same timer underneath, different room. Only Pause + End.
 import { el, clear, fmtClock, toast, todayISO } from '../util.js';
 import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus } from '../store.js';
+import { openLeetcodeWizard } from './leetcode-wizard.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
 // | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
@@ -206,7 +207,7 @@ export async function renderFocus(mount, { arg, navigate }) {
   let rotator = null;
   let mIdx = 0;
   let wakeLock = null;
-  let solvesInput = null; // the "problems you did" field on the resolve screen
+  let lcEntries = []; // LeetCode problems logged on the resolve screen (DSA only)
 
   const persist = () => setActiveSession({
     itemId, minutes, blockId, startedAt: started.toISOString(),
@@ -326,35 +327,26 @@ export async function renderFocus(mount, { arg, navigate }) {
     stopTicker();
     stopRotator();
     const summary = timedOut ? `${minutes} min complete` : `${elapsedMin()} of ${minutes} min`;
-    // Feed the coach real data: the problems/things you actually did this
-    // session. One per line. Optional, but it's what "where do I stand" is built
-    // from — it lands in the log and surfaces on Progress.
-    const isCoding = item.area === 'DSA' || item.area === 'CS Fundamentals';
-    solvesInput = el('textarea', {
-      class: 'focus-solves', rows: 3, spellcheck: false,
-      placeholder: isCoding ? 'e.g.\nTwo Sum — solved\n3Sum — needed a hint' : 'one per line (optional)',
-    });
+    // After a DSA session, offer the LeetCode wizard — feed the coach the exact
+    // problems you did (difficulty, pattern, outcome). LeetCode only, by design.
+    const lcLabel = () => (lcEntries.length ? `LeetCode problems · ${lcEntries.length} added` : '＋ Log the LeetCode problems you did');
+    const lcBtn = item.area === 'DSA' ? el('button', {
+      class: 'btn btn-ghost btn-block', style: 'max-width:320px',
+      text: lcLabel(),
+      onclick: () => openLeetcodeWizard({ initial: lcEntries, onSave: (e) => { lcEntries = e; lcBtn.textContent = lcLabel(); } }),
+    }) : null;
     const box = el('div', { class: `focus ${theme.cls}` }, [
       el('div', { class: 'phase-label', text: timedOut ? "Time's up" : 'Session ended' }),
       el('div', { class: 'focus-title', text: item.title }),
       el('div', { class: 'muted', style: 'margin-bottom:22px', text: summary }),
-      el('div', { class: 'focus-solves-wrap' }, [
-        el('div', { class: 'focus-solves-label', text: item.area === 'DSA' ? 'Problems you did' : 'What did you work on?' }),
-        solvesInput,
-      ]),
-      el('div', { class: 'stack', style: 'width:100%;max-width:320px;margin-top:20px' }, [
+      lcBtn,
+      el('div', { class: 'stack', style: 'width:100%;max-width:320px;margin-top:18px' }, [
         el('button', { class: 'btn btn-primary btn-lg btn-block', text: 'Mark done', onclick: () => resolve('done') }),
         el('button', { class: 'btn btn-ghost btn-block', text: 'Not finished — keep it', onclick: () => resolve('todo') }),
         el('button', { class: 'btn btn-danger btn-block', text: 'Skip this', onclick: () => resolve('skipped') }),
       ]),
     ]);
     clear(mount).append(box);
-  }
-
-  // Parse the "problems you did" field into a clean list (one per line).
-  function collectSolves() {
-    if (!solvesInput) return [];
-    return solvesInput.value.split('\n').map((s) => s.trim()).filter(Boolean).slice(0, 60);
   }
 
   async function resolve(result) {
@@ -379,7 +371,7 @@ export async function renderFocus(mount, { arg, navigate }) {
       endedAt: new Date().toISOString(),
       plannedMinutes: minutes,
       focusMinutes: elapsedMin(),
-      problems: collectSolves(), // what you actually did — the coach's raw data
+      leetcode: lcEntries.length ? lcEntries : undefined, // the coach's raw data
       result,
     });
     releaseWakeLock();

@@ -676,6 +676,28 @@ export async function logManualSession(block, minutes, problems = []) {
   });
 }
 
+// Attach LeetCode problems to a block's session — from the post-session wizard,
+// or retroactively from the Day. Stored as a problems-only log entry (no minutes)
+// so it feeds the LeetCode dashboard without counting as a study session.
+export async function logLeetcodeForBlock(block, entries) {
+  if (!Array.isArray(entries) || !entries.length) return null;
+  const now = new Date();
+  return addLogEntry({
+    itemId: block.itemId,
+    itemTitle: block.title || '',
+    mode: block.mode,
+    area: block.area || 'DSA',
+    blockId: block.id,
+    date: block.date,
+    startedAt: now.toISOString(),
+    endedAt: now.toISOString(),
+    focusMinutes: 0,     // problems-only — not a timed session
+    leetcode: entries,
+    manual: true,
+    result: 'logged',
+  });
+}
+
 // Actual focused minutes per planned block, summed from the session log. Lets
 // the Day view show what you *really* studied against what a block reserved —
 // so a 150-min block you only sat with for 25 reads honestly, not as "done =
@@ -700,22 +722,20 @@ export async function computeStats(now = new Date()) {
 
   const byDate = new Map();   // date -> minutes actually studied
   const byArea = new Map();   // area -> minutes
-  const problems = [];        // {name, area, date} — what you actually did
-  const problemsByArea = new Map();
+  const lc = [];              // LeetCode problems: {title, pattern, difficulty, outcome, note, date}
   let totalMinutes = 0;
   let sessions = 0;
   for (const e of log) {
     const m = Math.max(0, Math.round(e.focusMinutes || 0));
-    totalMinutes += m; sessions += 1;
-    byDate.set(e.date, (byDate.get(e.date) || 0) + m);
-    const a = e.area || 'Study';
-    byArea.set(a, (byArea.get(a) || 0) + m);
-    if (Array.isArray(e.problems)) {
-      for (const name of e.problems) {
-        if (!name) continue;
-        problems.push({ name: String(name), area: a, date: e.date });
-        problemsByArea.set(a, (problemsByArea.get(a) || 0) + 1);
-      }
+    // A problems-only entry (retroactive LeetCode log) has no minutes — it's not
+    // a study session, so it mustn't inflate the session count or the day.
+    if (m > 0) {
+      totalMinutes += m; sessions += 1;
+      byDate.set(e.date, (byDate.get(e.date) || 0) + m);
+      byArea.set(e.area || 'Study', (byArea.get(e.area || 'Study') || 0) + m);
+    }
+    if (Array.isArray(e.leetcode)) {
+      for (const p of e.leetcode) lc.push({ ...p, date: e.date });
     }
   }
   const minutesOn = (d) => byDate.get(d) || 0;
@@ -740,8 +760,21 @@ export async function computeStats(now = new Date()) {
   const last14 = [];
   for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); last14.push({ date: d, minutes: minutesOn(d) }); }
 
-  // Most recent sessions first, so the effort total is auditable.
-  const recentSessions = [...log].reverse().slice(0, 15).map((e) => ({
+  // ---- LeetCode roll-ups (total, by pattern, by difficulty, per day, recent) ----
+  const lcPattern = new Map(); const lcDiff = new Map(); const lcDay = new Map();
+  for (const p of lc) {
+    if (p.pattern) lcPattern.set(p.pattern, (lcPattern.get(p.pattern) || 0) + 1);
+    if (p.difficulty) lcDiff.set(p.difficulty, (lcDiff.get(p.difficulty) || 0) + 1);
+    lcDay.set(p.date, (lcDay.get(p.date) || 0) + 1);
+  }
+  const lcLast14 = [];
+  for (let k = 13; k >= 0; k--) { const d = addDaysISO(today, -k); lcLast14.push({ date: d, count: lcDay.get(d) || 0 }); }
+  const lcToday = lcDay.get(today) || 0;
+  let lcWeek = 0; for (let k = 0; k < 7; k++) lcWeek += lcDay.get(addDaysISO(today, -k)) || 0;
+
+  // Most recent sessions first, so the effort total is auditable. Only real
+  // timed/manual sessions (with minutes) — not problems-only entries.
+  const recentSessions = [...log].filter((e) => (e.focusMinutes || 0) > 0).reverse().slice(0, 15).map((e) => ({
     date: e.date,
     area: e.area || 'Study',
     title: e.itemTitle || '',
@@ -757,11 +790,15 @@ export async function computeStats(now = new Date()) {
     byArea: [...byArea.entries()].map(([area, minutes]) => ({ area, minutes })).sort((a, b) => b.minutes - a.minutes),
     topicsDone: items.filter((i) => i.status === 'done').length,
     topicsTotal: items.length,
-    problemsLogged: problems.length,
-    recentProblems: [...problems].reverse().slice(0, 25),
-    problemsByArea: [...problemsByArea.entries()].map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count),
+    lcTotal: lc.length,
+    lcToday, lcWeek,
+    lcByDifficulty: LC_DIFF_ORDER.map((d) => ({ difficulty: d, count: lcDiff.get(d) || 0 })).filter((x) => x.count),
+    lcByPattern: [...lcPattern.entries()].map(([pattern, count]) => ({ pattern, count })).sort((a, b) => b.count - a.count),
+    lcLast14,
+    lcRecent: [...lc].reverse().slice(0, 25),
   };
 }
+const LC_DIFF_ORDER = ['Easy', 'Medium', 'Hard'];
 
 // ---------- Plan ingest (import) ----------
 // Accepts a parsed plan object matching PLAN_SCHEMA and writes it into the DB,

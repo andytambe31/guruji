@@ -52,23 +52,68 @@ export async function renderProgress(mount, { navigate }) {
     })),
   ]));
 
-  // Problems logged — the raw record you feed the coach at the end of a session.
-  if (s.problemsLogged) {
+  // LeetCode — the problems you logged, and where you stand across them.
+  if (s.lcTotal) {
     const rel = (iso) => {
       const t = todayISO();
       if (iso === t) return 'Today';
       if (iso === addDaysISO(t, -1)) return 'Yesterday';
       return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };
-    wrap.append(el('div', { class: 'prog-section' }, [
-      el('div', { class: 'prog-h', text: `Problems logged · ${s.problemsLogged}` }),
-      s.problemsByArea.length ? el('div', { class: 'prob-areas' }, s.problemsByArea.map((a) =>
-        el('span', { class: 'prob-chip', text: `${a.area} · ${a.count}` }))) : null,
-      el('div', { class: 'prob-list' }, s.recentProblems.map((p) => el('div', { class: 'prob-row' }, [
-        el('span', { class: 'prob-name', text: p.name }),
-        el('span', { class: 'prob-meta', text: `${p.area} · ${rel(p.date)}` }),
+    const OUT = { solved: 'solved', hint: 'hint', stuck: 'stuck' };
+    const lc = el('div', { class: 'prog-section' });
+    lc.append(el('div', { class: 'prog-top' }, [
+      el('p', { class: 'eyebrow', text: 'LeetCode' }),
+      el('div', { class: 'prog-total' }, [
+        el('span', { class: 'prog-total-num', text: `${s.lcTotal}` }),
+        el('span', { class: 'prog-total-lbl', text: `problems logged · ${s.lcWeek} this week` }),
+      ]),
+    ]));
+    // by difficulty
+    if (s.lcByDifficulty.length) {
+      lc.append(el('div', { class: 'lc-diff-row' }, s.lcByDifficulty.map((d) =>
+        el('span', { class: `lc-diff d-${d.difficulty.toLowerCase()}`, text: `${d.difficulty} · ${d.count}` }))));
+    }
+    // problems per day (last 14) — how many on which day
+    const max = Math.max(1, ...s.lcLast14.map((d) => d.count));
+    lc.append(el('div', { class: 'prog-sub' }, [
+      el('div', { class: 'prog-subh', text: 'Per day' }),
+      el('div', { class: 'prog-chart' }, s.lcLast14.map((d) => {
+        const h = d.count ? Math.max(6, Math.round((d.count / max) * 70)) : 2;
+        const dow = new Date(d.date + 'T00:00:00').toLocaleDateString(undefined, { weekday: 'narrow' });
+        return el('div', { class: 'bar-col', title: `${d.date} · ${d.count}` }, [
+          d.count ? el('span', { class: 'bar-val', text: `${d.count}` }) : null,
+          el('div', { class: 'bar' + (d.count ? '' : ' empty'), style: `height:${h}px` }),
+          el('span', { class: 'bar-lbl', text: dow }),
+        ]);
+      })),
+    ]));
+    // by pattern
+    if (s.lcByPattern.length) {
+      const pmax = Math.max(1, ...s.lcByPattern.map((p) => p.count));
+      lc.append(el('div', { class: 'prog-sub' }, [
+        el('div', { class: 'prog-subh', text: 'By pattern' }),
+        el('div', { class: 'area-bars' }, s.lcByPattern.map((p) => el('div', { class: 'area-bar' }, [
+          el('div', { class: 'area-bar-top' }, [
+            el('span', { class: 'area-name', text: p.pattern }),
+            el('span', { class: 'area-min', text: `${p.count}` }),
+          ]),
+          el('div', { class: 'area-track' }, [el('div', { class: 'area-fill', style: `width:${Math.round((p.count / pmax) * 100)}%` })]),
+        ]))),
+      ]));
+    }
+    // recent problems
+    lc.append(el('div', { class: 'prog-sub' }, [
+      el('div', { class: 'prog-subh', text: 'Recent' }),
+      el('div', { class: 'lc-plist' }, s.lcRecent.map((p) => el('div', { class: 'lc-prow' }, [
+        el('div', { class: 'lc-pmain' }, [
+          el('span', { class: `lc-dot ${p.outcome ? 'o-' + OUT[p.outcome] : ''}` }),
+          el('span', { class: 'lc-pname', text: p.title || p.slug || '(problem)' }),
+        ]),
+        el('span', { class: 'lc-pmeta', text: [p.difficulty, p.pattern, rel(p.date)].filter(Boolean).join(' · ') }),
       ]))),
     ]));
+    wrap.append(lc);
   }
 
   // Plan adherence — did planned days actually happen?

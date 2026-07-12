@@ -839,23 +839,61 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .stat-num { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
 .stat-lbl { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
 .prog-section { margin-bottom: 30px; }
-/* Problems logged — the record fed to the coach at session end. */
-.prob-areas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-.prob-chip { font-size: 12px; color: var(--text-dim); background: var(--bg-soft); border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; }
-.prob-list { display: flex; flex-direction: column; }
-.prob-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
-.prob-name { color: var(--text); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.prob-meta { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
+/* LeetCode dashboard blocks on Progress. */
+.prog-sub { margin-top: 20px; }
+.prog-subh { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 10px; }
+.lc-diff-row { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 4px; }
+.lc-diff { font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 4px 12px; font-variant-numeric: tabular-nums; }
+.lc-diff.d-easy { color: #0f9d6b; background: rgba(15,157,107,.12); }
+.lc-diff.d-medium { color: #c98a2e; background: rgba(201,138,46,.14); }
+.lc-diff.d-hard { color: #c2483d; background: rgba(194,72,61,.12); }
+.bar-val { font-size: 10px; color: var(--text-faint); font-variant-numeric: tabular-nums; margin-bottom: 2px; }
+.lc-plist { display: flex; flex-direction: column; }
+.lc-prow { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.lc-pmain { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.lc-dot { width: 7px; height: 7px; border-radius: 50%; flex: 0 0 auto; background: var(--text-faint); }
+.lc-dot.o-solved { background: #0f9d6b; }
+.lc-dot.o-hint { background: #c98a2e; }
+.lc-dot.o-stuck { background: #c2483d; }
+.lc-pname { color: var(--text); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-pmeta { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
 
-/* "Problems you did" capture on the session-end (resolve) screen. */
-.focus-solves-wrap { width: 100%; max-width: 320px; text-align: left; }
-.focus-solves-label { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
-.focus-solves {
-  width: 100%; box-sizing: border-box; resize: vertical; min-height: 76px;
-  font: inherit; font-size: 14px; line-height: 1.5; color: var(--text);
-  background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
-}
-.focus-solves:focus { outline: none; border-color: var(--text-dim); background: #fff; }
+/* LeetCode wizard overlay. */
+.lc-overlay { position: fixed; inset: 0; z-index: 400; display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(16,17,20,.42); opacity: 0; transition: opacity .2s ease; padding: 0; }
+.lc-overlay.show { opacity: 1; }
+.lc-card { width: 100%; max-width: 520px; max-height: 92vh; overflow-y: auto; background: var(--bg);
+  border-radius: 20px 20px 0 0; padding: 18px 20px calc(20px + var(--safe-bottom));
+  transform: translateY(12px); transition: transform .2s ease; }
+.lc-overlay.show .lc-card { transform: translateY(0); }
+@media (min-width: 600px) { .lc-overlay { align-items: center; } .lc-card { border-radius: 18px; } }
+.lc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.lc-title { font-size: 17px; font-weight: 650; }
+.lc-close { appearance: none; background: none; border: none; font-size: 18px; color: var(--text-faint); cursor: pointer; padding: 4px 8px; }
+.lc-list { display: flex; flex-direction: column; margin-bottom: 12px; }
+.lc-empty { color: var(--text-faint); font-size: 13px; padding: 4px 0 10px; }
+.lc-row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.lc-row-main { flex: 1; min-width: 0; }
+.lc-row-title { display: block; color: var(--text); font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lc-row-meta { display: block; color: var(--text-faint); font-size: 12px; margin-top: 2px; }
+.lc-row-x { appearance: none; background: none; border: none; color: var(--text-faint); font-size: 18px; cursor: pointer; padding: 2px 6px; }
+.lc-form { border-top: 1px solid var(--line); padding-top: 14px; }
+.lc-field { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.lc-url { flex: 1; min-width: 180px; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--text);
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.lc-url:focus { outline: none; border-color: var(--text-dim); background: var(--bg); }
+.lc-preview { font-size: 13px; color: var(--accent, var(--text-dim)); font-weight: 550; }
+.lc-flabel { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-faint); margin: 12px 0 6px; }
+.lc-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.lc-chip { appearance: none; cursor: pointer; background: transparent; border: 1px solid var(--line); color: var(--text-dim);
+  font: inherit; font-size: 13px; padding: 6px 13px; border-radius: 999px; transition: border-color .12s, color .12s, background .12s; }
+.lc-chip.on { border-color: var(--text); color: var(--text); background: var(--bg-soft); font-weight: 600; }
+.lc-select { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--text);
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.lc-note { width: 100%; box-sizing: border-box; font: inherit; font-size: 14px; color: var(--text); margin-top: 12px;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.lc-note:focus, .lc-select:focus { outline: none; border-color: var(--text-dim); background: var(--bg); }
+.lc-add { margin-top: 14px; }
 .prog-h { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
 .prog-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
