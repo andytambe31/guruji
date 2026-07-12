@@ -2,12 +2,13 @@
 // grouped steps, Next / Back) covering your rhythm, work + commute, life +
 // meals, and focus. The coach then lays study into the free time around it —
 // deep work when it predicts you're fresh, gentler work after a draining task,
-// the commute turned into transit study. Retime / drag / push any block.
+// the commute turned into transit study. Retime any block by editing its start
+// or end time; push the day when you're running late.
 import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addDaysISO, DAYS } from '../util.js';
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, putBusy, deleteBusy, retimeBusy, getSettings, setSettings,
-  resequenceBlocks, resequenceMixed, isMovableBusy, clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied,
+  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 
@@ -109,8 +110,8 @@ export async function renderDay(mount, { navigate }) {
   }
 
   async function paint() {
-    const [blocks, busy, items, settings] = await Promise.all([
-      getBlocksForDate(date), getBusyForDate(date), getItems(), getSettings(),
+    const [blocks, busy, items, settings, studied] = await Promise.all([
+      getBlocksForDate(date), getBusyForDate(date), getItems(), getSettings(), studiedMinutesByBlock(),
     ]);
     planAreas = [...new Set(items.map((i) => i.area).filter(Boolean).filter((a) => a !== 'Reading'))];
 
@@ -130,7 +131,7 @@ export async function renderDay(mount, { navigate }) {
     const covered = (bb) => bb.transit && blocks.some((bl) => bl.onCommute && bl.start < bb.start + bb.minutes && bl.start + bl.minutes > bb.start);
     const busyShown = busy.filter((bb) => !covered(bb));
     const entries = [
-      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b) })),
+      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0) })),
       ...busyShown.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
     ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
     if (!entries.length) {
@@ -384,13 +385,13 @@ export async function renderDay(mount, { navigate }) {
     }
   }
 
-  function blockCard(b) {
+  function blockCard(b, studied = 0) {
     const done = b.status === 'done';
 
     // The action row swaps to a "push by" preset picker when you tap Delay.
     const acts = el('div', { class: 'blk-acts' });
     const normalActs = () => [
-      done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}`) }),
+      done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}/${b.id}`) }),
       done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
       el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
       done ? null : el('button', { class: 'blk-act', text: 'Move', onclick: async () => { await moveBlockToDate(b.id, addDaysISO(b.date, 1)); await paint(); } }),
@@ -403,15 +404,24 @@ export async function renderDay(mount, { navigate }) {
     ];
     fill(acts, normalActs());
 
-    return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1', drag: done ? '0' : '1' } }, [
-      done ? null : el('button', { class: 'blk-grip', 'aria-label': 'Drag to reorder', title: 'Drag to reorder', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']),
+    // Reserved vs actually studied. Once any focus time is attributed to this
+    // block, show "25 / 150 min" so a block you only sat with briefly reads
+    // honestly instead of implying the whole reservation was studied.
+    const durNode = studied > 0
+      ? el('div', { class: 'blk-dur has-studied', title: `${studied} min studied of ${b.minutes} reserved` }, [
+          el('span', { class: 'blk-studied', text: `${studied}` }),
+          ` / ${b.minutes} min`,
+        ])
+      : el('div', { class: 'blk-dur', text: `${b.minutes} min` });
+
+    return el('div', { class: `blk m-${b.mode || ''}` + (done ? ' done' : ''), dataset: { id: b.id, planned: done ? '0' : '1' } }, [
       el('div', { class: 'blk-body' }, [
         el('div', { class: 'blk-head' }, [
           el('div', { class: 'blk-arearow' }, [
             el('span', { class: 'blk-area', text: b.area }),
             b.onCommute ? el('span', { class: 'blk-commute', text: 'on the commute' }) : null,
           ]),
-          el('div', { class: 'blk-dur', text: `${b.minutes} min` }),
+          durNode,
         ]),
         el('div', { class: 'blk-when' }, [
           el('input', {
@@ -431,53 +441,8 @@ export async function renderDay(mount, { navigate }) {
     ]);
   }
 
-  // Pointer-based drag to reorder planned sessions; on drop, the day resequences.
-  function startDrag(e, id) {
-    if (e.button && e.button !== 0) return;
-    const timeline = wrap.querySelector('.timeline');
-    if (!timeline) return;
-    const cards = [...timeline.querySelectorAll('[data-drag="1"]')];
-    const dragCard = cards.find((c) => c.dataset.id === id);
-    if (!dragCard || cards.length < 2) return;
-    e.preventDefault();
-    const startY = e.clientY;
-    const mids = cards.map((c) => { const r = c.getBoundingClientRect(); return { id: c.dataset.id, mid: r.top + r.height / 2 }; });
-    const others = mids.filter((m) => m.id !== id);
-    const otherEls = cards.filter((c) => c.dataset.id !== id);
-    let targetIndex = mids.findIndex((m) => m.id === id);
-    const placeholder = el('div', { class: 'drop-line' });
-    dragCard.classList.add('dragging');
-    place(targetIndex);
-
-    function place(idx) {
-      if (!otherEls.length) return;
-      if (idx >= otherEls.length) otherEls[otherEls.length - 1].after(placeholder);
-      else otherEls[idx].before(placeholder);
-    }
-    function move(ev) {
-      dragCard.style.transform = `translateY(${ev.clientY - startY}px)`;
-      targetIndex = others.filter((m) => m.mid < ev.clientY).length;
-      place(targetIndex);
-    }
-    async function up() {
-      document.removeEventListener('pointermove', move);
-      document.removeEventListener('pointerup', up);
-      placeholder.remove();
-      dragCard.classList.remove('dragging');
-      dragCard.style.transform = '';
-      const order = mids.map((m) => m.id).filter((x) => x !== id);
-      order.splice(targetIndex, 0, id);
-      await resequenceMixed(date, order);
-      await paint();
-    }
-    document.addEventListener('pointermove', move);
-    document.addEventListener('pointerup', up);
-  }
-
   function busyCard(b) {
-    const movable = isMovableBusy(b);
-    return el('div', { class: 'busy' + (movable ? ' movable' : ''), dataset: movable ? { id: b.id, drag: '1' } : {} }, [
-      movable ? el('button', { class: 'busy-grip', 'aria-label': 'Drag to move', onpointerdown: (e) => startDrag(e, b.id) }, ['⠿']) : null,
+    return el('div', { class: 'busy', dataset: { id: b.id } }, [
       el('div', { class: 'busy-times' }, [
         el('input', {
           type: 'time', class: 'busy-time-in', value: minutesToHHMM(b.start), title: 'Start time',

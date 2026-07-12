@@ -257,17 +257,14 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .blk.m-WIND_DOWN { --accent: var(--wind); }
 .blk.done { opacity: .48; }
 .blk-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.blk-grip { appearance: none; background: none; border: none; cursor: grab; color: var(--text-faint); opacity: .45; font-size: 14px; line-height: 1; padding: 4px 2px; margin-top: 1px; touch-action: none; user-select: none; transition: opacity .15s; }
-.blk-grip:hover { opacity: .9; }
-.blk-grip:active { cursor: grabbing; }
-.blk.dragging { opacity: .97; background: var(--bg); box-shadow: 0 12px 30px rgba(0,0,0,.16); z-index: 6; }
-.drop-line { height: 2px; background: var(--accent, var(--text)); border-radius: 2px; margin: 6px 0; opacity: .7; }
 
 .blk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
 .blk-arearow { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
 .blk-area { font-size: 17px; font-weight: 620; letter-spacing: -.02em; color: var(--text); }
 .blk-commute { font-size: 11px; font-weight: 600; color: var(--transit); background: rgba(15,157,107,.12); padding: 2px 8px; border-radius: 999px; letter-spacing: .02em; }
 .blk-dur { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.blk-dur.has-studied { color: var(--text-dim); }
+.blk-studied { font-weight: 700; color: var(--accent, var(--text)); }
 .blk-when { display: flex; align-items: center; gap: 6px; margin: 2px 0 11px; }
 .blk-time { appearance: none; background: none; border: none; padding: 0; color: var(--text-dim); font: inherit; font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .blk-time:disabled { color: var(--text-faint); opacity: 1; }
@@ -294,10 +291,6 @@ p  { color: var(--text-dim); line-height: 1.55; }
 
 /* commitments (gym, walk…) — a quiet outline so study cards stand out */
 .busy { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px dashed var(--line); border-radius: 16px; background: transparent; }
-.busy.dragging { background: var(--bg); box-shadow: 0 12px 30px rgba(0,0,0,.14); z-index: 6; }
-.busy-grip { appearance: none; background: none; border: none; cursor: grab; color: var(--text-faint); opacity: .45; font-size: 13px; line-height: 1; padding: 2px; touch-action: none; user-select: none; transition: opacity .15s; }
-.busy-grip:hover { opacity: .9; }
-.busy-grip:active { cursor: grabbing; }
 .busy-times { display: flex; align-items: center; gap: 4px; }
 .busy-time-in { appearance: none; background: none; border: none; padding: 0; color: var(--text-faint); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; width: auto; }
 .busy-time-in::-webkit-calendar-picker-indicator { display: none; }

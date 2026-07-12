@@ -29,7 +29,12 @@ const RITUAL = [
 ];
 
 export async function renderPrep(mount, { arg, navigate }) {
-  const item = await getItem(arg);
+  // arg is "itemId" or "itemId/blockId" when started from a planned block, so
+  // the block travels through to the focus session.
+  const parts = String(arg).split('/');
+  const itemId = parts[0];
+  const blockId = parts[1] || null;
+  const item = await getItem(itemId);
   if (!item) {
     mount.append(el('div', { class: 'center-state' }, [
       el('h2', { text: 'That item is gone.' }),
@@ -92,7 +97,7 @@ export async function renderPrep(mount, { arg, navigate }) {
         el('button', {
           class: 'btn btn-primary btn-lg btn-block',
           text: `Begin — ${minutes} min`,
-          onclick: () => navigate(`/focus/${item.id}/${minutes}`),
+          onclick: () => navigate(`/focus/${item.id}/${minutes}${blockId ? `/${blockId}` : ''}`),
         }),
       ]);
     }

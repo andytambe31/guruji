@@ -617,6 +617,20 @@ export async function addLogEntry(entry) {
   return rec;
 }
 
+// Actual focused minutes per planned block, summed from the session log. Lets
+// the Day view show what you *really* studied against what a block reserved —
+// so a 150-min block you only sat with for 25 reads honestly, not as "done =
+// 150 studied". Keyed by blockId, which is unique per block.
+export async function studiedMinutesByBlock() {
+  const log = await getLog();
+  const m = new Map();
+  for (const e of log) {
+    if (!e.blockId) continue;
+    m.set(e.blockId, (m.get(e.blockId) || 0) + Math.max(0, Math.round(e.focusMinutes || 0)));
+  }
+  return m;
+}
+
 // ---------- Effort metrics (the feedback loop) ----------
 // Derived entirely from what the app already records: the session log (actual
 // focus time), the schedule (what was planned), and item statuses (progress).

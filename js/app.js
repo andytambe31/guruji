@@ -107,7 +107,7 @@ async function maybeResumeSession() {
     if (!s || !s.itemId) return;
     const ageMs = Date.now() - new Date(s.startedAt).getTime();
     if (!(ageMs >= 0) || ageMs > 12 * 3600 * 1000) { await clearActiveSession(); return; }
-    const focusHash = `#/focus/${s.itemId}/${s.minutes || 25}`;
+    const focusHash = `#/focus/${s.itemId}/${s.minutes || 25}${s.blockId ? `/${s.blockId}` : ''}`;
     if (location.hash !== focusHash) location.hash = focusHash;
   } catch { /* non-fatal */ }
 }

@@ -2,7 +2,7 @@
 // into a sharp sprint; System Design is a calmer, thinking space; Reading is
 // warm and quiet. Same timer underneath, different room. Only Pause + End.
 import { el, clear, fmtClock, toast } from '../util.js';
-import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession } from '../store.js';
+import { getItem, setItemStatus, addLogEntry, getActiveSession, setActiveSession, clearActiveSession, setBlockStatus } from '../store.js';
 
 // Per-area environments. viz: 'bar' (depleting sprint) | 'ring' (breathing)
 // | 'calm' (warm, minimal). `mantras` is a slideshow of principles that slowly
@@ -67,9 +67,13 @@ const THEMES = {
 };
 
 export async function renderFocus(mount, { arg, navigate }) {
-  const slash = arg.lastIndexOf('/');
-  const itemId = slash >= 0 ? arg.slice(0, slash) : arg;
-  const minutes = Math.max(1, parseInt(slash >= 0 ? arg.slice(slash + 1) : '25', 10) || 25);
+  // arg is "itemId/minutes" or, when launched from a planned block on the Day,
+  // "itemId/minutes/blockId" so the session's real minutes attach back to the
+  // block. itemIds carry no slash, so a plain split is unambiguous.
+  const parts = String(arg).split('/');
+  const itemId = parts[0];
+  const minutes = Math.max(1, parseInt(parts[1] || '25', 10) || 25);
+  let blockId = parts[2] || null;
 
   const item = await getItem(itemId);
   if (!item) {
@@ -87,6 +91,9 @@ export async function renderFocus(mount, { arg, navigate }) {
   // accumulated pause), so it stays accurate across closes and background throttling.
   const existing = await getActiveSession();
   const resuming = !!(existing && existing.itemId === itemId);
+  // On resume the route often lacks the blockId — recover it from the session so
+  // the minutes still attach to the block that launched it.
+  if (resuming && !blockId && existing.blockId) blockId = existing.blockId;
   const started = resuming ? new Date(existing.startedAt) : new Date();
   const total = minutes * 60;
   let pausedAccum = resuming ? (existing.pausedAccum || 0) : 0; // seconds spent paused
@@ -100,7 +107,7 @@ export async function renderFocus(mount, { arg, navigate }) {
   let wakeLock = null;
 
   const persist = () => setActiveSession({
-    itemId, minutes, startedAt: started.toISOString(),
+    itemId, minutes, blockId, startedAt: started.toISOString(),
     paused, pausedAt: pausedAt ? pausedAt.toISOString() : null, pausedAccum,
   });
   // Seconds of active (non-paused) work elapsed, from the wall clock.
@@ -232,6 +239,10 @@ export async function renderFocus(mount, { arg, navigate }) {
     // A recurring habit (e.g. reading) is never consumed — it just gets logged
     // and stays available so the coach can keep pushing the streak.
     if (result !== 'todo' && !item.recurring) await setItemStatus(item.id, result);
+    // Attribute the real minutes to the planned block that launched this session
+    // (if any), and close the loop: finishing the session marks the block done —
+    // carrying the *actual* time studied, not the reserved time.
+    if (blockId && result === 'done') await setBlockStatus(blockId, 'done');
     await addLogEntry({
       itemId: item.id,
       itemTitle: item.title,
@@ -239,6 +250,7 @@ export async function renderFocus(mount, { arg, navigate }) {
       area: item.area || null,
       phase: item.phase,
       week: item.week,
+      blockId: blockId || null,
       date: started.toISOString().slice(0, 10),
       startedAt: started.toISOString(),
       endedAt: new Date().toISOString(),
