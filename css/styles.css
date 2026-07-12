@@ -836,6 +836,23 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .stat-num { font-size: 19px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
 .stat-lbl { font-size: 11px; color: var(--text-faint); margin-top: 3px; }
 .prog-section { margin-bottom: 30px; }
+/* Problems logged — the record fed to the coach at session end. */
+.prob-areas { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.prob-chip { font-size: 12px; color: var(--text-dim); background: var(--bg-soft); border-radius: 999px; padding: 4px 11px; font-variant-numeric: tabular-nums; }
+.prob-list { display: flex; flex-direction: column; }
+.prob-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.prob-name { color: var(--text); font-size: 14px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prob-meta { color: var(--text-faint); font-size: 12px; flex-shrink: 0; }
+
+/* "Problems you did" capture on the session-end (resolve) screen. */
+.focus-solves-wrap { width: 100%; max-width: 320px; text-align: left; }
+.focus-solves-label { font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 8px; }
+.focus-solves {
+  width: 100%; box-sizing: border-box; resize: vertical; min-height: 76px;
+  font: inherit; font-size: 14px; line-height: 1.5; color: var(--text);
+  background: rgba(255,255,255,.7); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+}
+.focus-solves:focus { outline: none; border-color: var(--text-dim); background: #fff; }
 .prog-h { font-size: 12px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
 .prog-chart { display: flex; align-items: flex-end; gap: 6px; height: 100px; }
 .bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }

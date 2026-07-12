@@ -676,6 +676,8 @@ export async function computeStats(now = new Date()) {
 
   const byDate = new Map();   // date -> minutes actually studied
   const byArea = new Map();   // area -> minutes
+  const problems = [];        // {name, area, date} — what you actually did
+  const problemsByArea = new Map();
   let totalMinutes = 0;
   let sessions = 0;
   for (const e of log) {
@@ -684,6 +686,13 @@ export async function computeStats(now = new Date()) {
     byDate.set(e.date, (byDate.get(e.date) || 0) + m);
     const a = e.area || 'Study';
     byArea.set(a, (byArea.get(a) || 0) + m);
+    if (Array.isArray(e.problems)) {
+      for (const name of e.problems) {
+        if (!name) continue;
+        problems.push({ name: String(name), area: a, date: e.date });
+        problemsByArea.set(a, (problemsByArea.get(a) || 0) + 1);
+      }
+    }
   }
   const minutesOn = (d) => byDate.get(d) || 0;
 
@@ -724,6 +733,9 @@ export async function computeStats(now = new Date()) {
     byArea: [...byArea.entries()].map(([area, minutes]) => ({ area, minutes })).sort((a, b) => b.minutes - a.minutes),
     topicsDone: items.filter((i) => i.status === 'done').length,
     topicsTotal: items.length,
+    problemsLogged: problems.length,
+    recentProblems: [...problems].reverse().slice(0, 25),
+    problemsByArea: [...problemsByArea.entries()].map(([area, count]) => ({ area, count })).sort((a, b) => b.count - a.count),
   };
 }
 

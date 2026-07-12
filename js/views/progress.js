@@ -52,6 +52,25 @@ export async function renderProgress(mount, { navigate }) {
     })),
   ]));
 
+  // Problems logged — the raw record you feed the coach at the end of a session.
+  if (s.problemsLogged) {
+    const rel = (iso) => {
+      const t = todayISO();
+      if (iso === t) return 'Today';
+      if (iso === addDaysISO(t, -1)) return 'Yesterday';
+      return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    };
+    wrap.append(el('div', { class: 'prog-section' }, [
+      el('div', { class: 'prog-h', text: `Problems logged · ${s.problemsLogged}` }),
+      s.problemsByArea.length ? el('div', { class: 'prob-areas' }, s.problemsByArea.map((a) =>
+        el('span', { class: 'prob-chip', text: `${a.area} · ${a.count}` }))) : null,
+      el('div', { class: 'prob-list' }, s.recentProblems.map((p) => el('div', { class: 'prob-row' }, [
+        el('span', { class: 'prob-name', text: p.name }),
+        el('span', { class: 'prob-meta', text: `${p.area} · ${rel(p.date)}` }),
+      ]))),
+    ]));
+  }
+
   // Plan adherence — did planned days actually happen?
   if (s.adherencePct != null) {
     wrap.append(el('div', { class: 'prog-section' }, [
