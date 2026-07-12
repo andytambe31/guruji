@@ -11,6 +11,9 @@ const DEFAULT_SETTINGS = {
   // and your usual office timing. The wizard pre-fills from these; a per-day
   // override in the wizard doesn't change the routine.
   officeDays: [1, 2, 3, 4, 5], officeLeave: 510, officeCommute: 60, officeBack: 1080, getReady: 30,
+  // Working assumed on weekdays; place defaults to home (flip per-day in the
+  // wizard). Home work hours are blocked just like office hours, minus commute.
+  workPlace: 'home', workStart: 540, workEnd: 1020,
 };
 export async function getSettings() {
   const rec = await get(STORES.kv, 'settings');

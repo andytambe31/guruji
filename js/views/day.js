@@ -61,6 +61,20 @@ const OFFICE_BACK = [
   { label: 'Around 7pm', val: 19 * 60 },
   { label: 'Around 8pm', val: 20 * 60 },
 ];
+// Work-from-home hours — no commute, but the workday is still blocked so study
+// never lands on top of it.
+const WORK_START = [
+  { label: '8:00', val: 8 * 60 },
+  { label: '9:00', val: 9 * 60 },
+  { label: '9:30', val: 9 * 60 + 30 },
+  { label: '10:00', val: 10 * 60 },
+];
+const WORK_END = [
+  { label: 'Around 4pm', val: 16 * 60 },
+  { label: 'Around 5pm', val: 17 * 60 },
+  { label: 'Around 6pm', val: 18 * 60 },
+  { label: 'Around 7pm', val: 19 * 60 },
+];
 const MEALS = [
   { key: 'breakfast', label: 'Breakfast', minutes: 20 },
   { key: 'lunch', label: 'Lunch', start: 13 * 60, minutes: 45 },
@@ -214,16 +228,24 @@ export async function renderDay(mount, { navigate }) {
   }
 
   function freshPlan(settings) {
-    // Recurring routine: pre-fill office for your usual office weekdays, with
-    // your usual timing. You can still flip it either way in the wizard.
+    // Recurring routine: on a weekday we assume you're working — the whole point
+    // is that your 9–5 gets blocked so study never lands on it. Whether that's
+    // in-office (with a commute that becomes transit study) or from home is a
+    // toggle you can flip; it only changes the commute, never *whether* you work.
     const dow = new Date(date + 'T00:00:00').getDay();
     const weekend = dow === 0 || dow === 6; // no work question on Sat / Sun
-    const isOffice = !weekend && (settings.officeDays || [1, 2, 3, 4, 5]).includes(dow);
-    const office = { on: isOffice, leave: settings.officeLeave ?? 510, commute: settings.officeCommute ?? 60, back: settings.officeBack ?? 1080 };
+    const working = !weekend;
+    const place = settings.workPlace || 'home'; // remembered from last plan
+    const office = {
+      on: working, place,
+      leave: settings.officeLeave ?? 510, commute: settings.officeCommute ?? 60, back: settings.officeBack ?? 1080,
+      start: settings.workStart ?? 9 * 60, end: settings.workEnd ?? 17 * 60,
+    };
+    const commuting = working && place === 'office';
     return {
       step: 0,
       weekend,
-      wake: isOffice ? office.leave - (settings.getReady ?? 30) : (settings.wake ? toMinutes(settings.wake) : null),
+      wake: commuting ? office.leave - (settings.getReady ?? 30) : (settings.wake ? toMinutes(settings.wake) : null),
       bedtime: settings.bedtime || '23:30',
       getReady: settings.getReady ?? 30,
       office,
@@ -266,9 +288,13 @@ export async function renderDay(mount, { navigate }) {
       // and slot this in before the commute, with time to freshen up after.
       const preNote = el('p', { class: 'wz-note' + (state.when === 'prework' ? '' : ' hidden'), text: '' });
       const refreshPreNote = () => {
-        if (!pl.office.on || state.when !== 'prework') { preNote.classList.add('hidden'); return; }
-        const up = pl.office.leave - (pl.getReady ?? 30) - state.dur;
-        preNote.textContent = `You’re up by ${fmtTimeOfDay(up)} — ${state.dur} min out, back to freshen up, and out the door at ${fmtTimeOfDay(pl.office.leave)}.`;
+        const commuting = pl.office.on && pl.office.place === 'office';
+        const anchor = commuting ? pl.office.leave : (pl.office.on ? pl.office.start : null);
+        if (anchor == null || state.when !== 'prework') { preNote.classList.add('hidden'); return; }
+        const up = anchor - (pl.getReady ?? 30) - state.dur;
+        preNote.textContent = commuting
+          ? `You’re up by ${fmtTimeOfDay(up)} — ${state.dur} min out, back to freshen up, and out the door at ${fmtTimeOfDay(anchor)}.`
+          : `You’re up by ${fmtTimeOfDay(up)} — ${state.dur} min out, then freshen up before work at ${fmtTimeOfDay(anchor)}.`;
         preNote.classList.remove('hidden');
       };
       whenS.addEventListener('change', () => { state.when = whenS.value === 'prework' ? 'prework' : +whenS.value; refreshPreNote(); });
@@ -282,7 +308,7 @@ export async function renderDay(mount, { navigate }) {
       const bed = el('input', { type: 'time', class: 'wz-time', value: pl.bedtime || '23:30' });
       collect = () => { pl.bedtime = bed.value || pl.bedtime; };
       const nodes = [];
-      if (pl.office.on) {
+      if (pl.office.on && pl.office.place === 'office') {
         // Wake is fixed by the commute — up in time to get ready and leave.
         const up = pl.office.leave - (pl.getReady ?? 30);
         pl.wake = up;
@@ -297,13 +323,32 @@ export async function renderDay(mount, { navigate }) {
       const leave = sel(OFFICE_LEAVE, pl.office.leave);
       const commute = sel(COMMUTE, pl.office.commute);
       const back = sel(OFFICE_BACK, pl.office.back);
+      const startS = sel(WORK_START, pl.office.start);
+      const endS = sel(WORK_END, pl.office.end);
+
+      // In-office timing (commute) vs from-home timing (plain work hours).
+      const officeRows = el('div', { class: 'wz-detail' + (pl.office.place === 'office' ? '' : ' hidden') },
+        rows([['Leave', leave], ['Commute each way', commute], ['Back home', back]]));
+      const homeRows = el('div', { class: 'wz-detail' + (pl.office.place === 'home' ? '' : ' hidden') },
+        rows([['Start work', startS], ['Finish', endS]]));
+      const placeSeg = seg('In office', 'From home', pl.office.place === 'office', (isOffice) => {
+        pl.office.place = isOffice ? 'office' : 'home';
+        officeRows.classList.toggle('hidden', !isOffice);
+        homeRows.classList.toggle('hidden', isOffice);
+      });
+
       const detail = el('div', { class: 'wz-detail' + (pl.office.on ? '' : ' hidden') }, [
-        ...rows([['Leave', leave], ['Commute each way', commute], ['Back home', back]]),
-        el('p', { class: 'wz-note', text: 'Work hours get blocked; the commute becomes transit study.' }),
+        group('Where?', placeSeg),
+        officeRows,
+        homeRows,
+        el('p', { class: 'wz-note', text: 'Your work hours get blocked either way, so study routes around them. In-office, the commute becomes transit study.' }),
       ]);
-      collect = () => { pl.office.leave = +leave.value; pl.office.commute = +commute.value; pl.office.back = +back.value; };
+      collect = () => {
+        pl.office.leave = +leave.value; pl.office.commute = +commute.value; pl.office.back = +back.value;
+        pl.office.start = +startS.value; pl.office.end = +endS.value;
+      };
       return el('div', { class: 'wz-body' }, [
-        group(`Going into the office ${dayWord()}?`, seg('In-office', 'Home', pl.office.on, (on) => { pl.office.on = on; detail.classList.toggle('hidden', !on); }), detail),
+        group(`Working ${dayWord()}?`, seg('Yes', 'No', pl.office.on, (on) => { pl.office.on = on; detail.classList.toggle('hidden', !on); }), detail),
       ]);
     }
     function stepLife() {
@@ -353,10 +398,11 @@ export async function renderDay(mount, { navigate }) {
 
     async function commit() {
       const o = pl.office;
-      // Pre-work activities (a morning walk / gym before the office): the coach
-      // backward-plans them from your departure — activity, then freshen up, then
-      // out the door — and wakes you early enough. Anchor point is the commute if
-      // you're going in, else your first activity kicks off around your wake.
+      const commuting = o.on && o.place === 'office'; // work with a commute (transit study)
+      // Pre-work activities (a morning walk / gym before work): the coach
+      // backward-plans them from when work starts — activity, then freshen up,
+      // then work — and wakes you early enough. Anchor is the commute departure
+      // if you're going in, your work start if you're home, else your wake time.
       const acts = [
         pl.gym.on ? { label: 'Gym', ...pl.gym } : null,
         pl.walk.on ? { label: 'Walk', ...pl.walk } : null,
@@ -364,8 +410,8 @@ export async function renderDay(mount, { navigate }) {
       const prework = acts.filter((a) => a.when === 'prework');
       const preTotal = prework.reduce((s, a) => s + a.dur, 0);
       const getReady = pl.getReady ?? 30;
-      // Where the pre-work stretch has to begin so you're ready to leave / start.
-      const anchor = o.on ? o.leave : (pl.wake != null ? pl.wake : 8 * 60);
+      // Where the pre-work stretch has to begin so you're ready to start.
+      const anchor = commuting ? o.leave : (o.on ? o.start : (pl.wake != null ? pl.wake : 8 * 60));
       const preStart = o.on ? Math.max(0, anchor - getReady - preTotal) : anchor;
       if (prework.length && o.on) pl.wake = preStart; // up in time to actually do it
 
@@ -382,29 +428,40 @@ export async function renderDay(mount, { navigate }) {
       // time — a real block so the coach won't book study there and you can see
       // exactly what happens when: activity, freshen up, out the door. If you're
       // also eating breakfast it already fills that window, so skip the duplicate.
-      if (prework.length && o.on && !pl.meals.includes('breakfast') && o.leave - cur >= 10) {
+      if (prework.length && commuting && !pl.meals.includes('breakfast') && o.leave - cur >= 10) {
         await putBusy({ date, start: cur, minutes: o.leave - cur, label: 'Freshen up' });
       }
 
       if (o.on) {
-        // Remember this as the usual office timing for next time.
-        await setSettings({ officeLeave: o.leave, officeCommute: o.commute, officeBack: o.back });
-        await putBusy({ date, start: o.leave, minutes: o.commute, label: 'Commute', transit: true });
-        const workStart = o.leave + o.commute;
-        const workEnd = Math.max(workStart + 30, o.back - o.commute);
-        await putBusy({ date, start: workStart, minutes: workEnd - workStart, label: 'Office', drain: 'high' });
-        await putBusy({ date, start: o.back - o.commute, minutes: o.commute, label: 'Commute', transit: true });
+        // Working today — block the workday so study never lands on it. The only
+        // difference between office and home is the commute (which becomes transit
+        // study); either way the hours themselves are reserved.
+        await setSettings({ workPlace: o.place });
+        if (o.place === 'office') {
+          await setSettings({ officeLeave: o.leave, officeCommute: o.commute, officeBack: o.back });
+          await putBusy({ date, start: o.leave, minutes: o.commute, label: 'Commute', transit: true });
+          const workStart = o.leave + o.commute;
+          const workEnd = Math.max(workStart + 30, o.back - o.commute);
+          await putBusy({ date, start: workStart, minutes: workEnd - workStart, label: 'Office', drain: 'high' });
+          await putBusy({ date, start: o.back - o.commute, minutes: o.commute, label: 'Commute', transit: true });
+        } else {
+          // Work from home: no commute, but the 9–5 is still reserved and still
+          // draining, so the coach eases study to the evening.
+          await setSettings({ workStart: o.start, workEnd: o.end });
+          const wEnd = Math.max(o.start + 30, o.end);
+          await putBusy({ date, start: o.start, minutes: wEnd - o.start, label: 'Work', drain: 'high' });
+        }
       }
       const wakeMin = pl.wake != null ? pl.wake : 8 * 60;
       for (const key of pl.meals) {
         const m = MEALS.find((x) => x.key === key);
         if (!m) continue;
-        if (key === 'lunch' && o.on) continue; // eaten at the office
+        if (key === 'lunch' && commuting) continue; // eaten at the office (WFH eats at home)
         let start = m.start;
         if (key === 'breakfast') {
-          // Office day: eaten in the freshen-up window, right before leaving.
-          // Otherwise: shortly after you're up (and after any morning activity).
-          start = o.on ? o.leave - m.minutes : wakeMin + preTotal + 15;
+          // In-office day: eaten in the freshen-up window, right before leaving.
+          // Otherwise (home or off): shortly after you're up, after any activity.
+          start = commuting ? o.leave - m.minutes : wakeMin + preTotal + 15;
         }
         await putBusy({ date, start, minutes: m.minutes, label: m.label });
       }
