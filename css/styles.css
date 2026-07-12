@@ -489,6 +489,26 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .focus-coach .fc-res li { position: relative; color: var(--text-dim); font-size: 13.5px; line-height: 1.5; margin-bottom: 8px; padding-left: 16px; }
 .focus-coach .fc-res li::before { content: '›'; position: absolute; left: 0; color: var(--env, var(--text-faint)); font-weight: 700; }
 
+/* Session expectations — a checklist you tick as you meet each one. The first
+   unmet one is highlighted as "now"; met ones dim and strike through. */
+.focus-coach .fc-obj-box { margin-bottom: 24px; }
+.focus-coach .fc-obj-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.focus-coach .fc-obj-top .fc-head { margin-bottom: 0; }
+.focus-coach .fc-obj-count { font-size: 12.5px; font-weight: 700; color: var(--env, var(--text-dim)); font-variant-numeric: tabular-nums; }
+.focus-coach .fc-obj-count.all { color: var(--ok, #0f9d6b); }
+.focus-coach .fc-obj { display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-radius: 10px; padding: 11px 10px; margin: 0 0 2px; cursor: pointer; font: inherit; color: var(--text-dim); transition: background .15s, color .15s; }
+.focus-coach .fc-obj:hover { background: rgba(127,127,127,.08); }
+.focus-coach .fc-obj-mark { flex: 0 0 auto; width: 18px; text-align: center; font-weight: 800; color: var(--text-faint); }
+.focus-coach .fc-obj-text { flex: 1; font-size: 14px; line-height: 1.5; }
+.focus-coach .fc-obj.current { background: rgba(127,127,127,.10); }
+.focus-coach .fc-obj.current .fc-obj-mark { color: var(--env, var(--text)); }
+.focus-coach .fc-obj.current .fc-obj-text { color: var(--text); font-weight: 600; }
+.focus-coach .fc-obj.met .fc-obj-mark { color: var(--ok, #0f9d6b); }
+.focus-coach .fc-obj.met .fc-obj-text { color: var(--text-faint); text-decoration: line-through; }
+.focus-coach .fc-obj-note { font-size: 12.5px; color: var(--text-faint); line-height: 1.5; margin: 8px 2px 0; }
+.focus-coach .fc-obj-note.done { color: var(--ok, #0f9d6b); font-weight: 600; }
+.focus-coach .fc-head-sub { margin-top: 4px; }
+
 /* ---------- Focus environments (one room per area) ---------- */
 /* DSA — a sharp sprint: cool, crisp, a depleting bar. */
 .focus.env-dsa { background: #f6f8fc; --env: #3b5bd9; }

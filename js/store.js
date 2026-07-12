@@ -158,6 +158,21 @@ export async function setItemStatus(id, status) {
   return item;
 }
 
+// Session expectations — the coach's concrete "definition of done" for a topic.
+// Which ones you've met is progress (like status), stored on the item and keyed
+// by the objective's text so it survives content edits and re-imports. Toggling
+// returns the updated met-list so the caller can repaint.
+export async function toggleObjective(id, text) {
+  const item = await get(STORES.items, id);
+  if (!item) return null;
+  const done = Array.isArray(item.doneObjectives) ? item.doneObjectives.slice() : [];
+  const at = done.indexOf(text);
+  if (at >= 0) done.splice(at, 1); else done.push(text);
+  item.doneObjectives = done;
+  await put(STORES.items, item);
+  return done;
+}
+
 // Study content for a topic (authored on desktop). Stored on the item so it
 // round-trips through export/import and survives phone syncs (see ingestPlan).
 export async function setItemNotes(id, notes) {
@@ -871,6 +886,7 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
   const prevStatus = new Map(existing.map((i) => [i.id, i.status]));
   const prevNotes = new Map(existing.map((i) => [i.id, i.notes]));
   const prevCoach = new Map(existing.map((i) => [i.id, i.coach]));
+  const prevObjectives = new Map(existing.map((i) => [i.id, i.doneObjectives]));
 
   const planRecords = [];
   const phaseRecords = [];
@@ -918,6 +934,8 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
           status,
           notes,
           coach,
+          // Which session expectations you've met — progress, always preserved.
+          doneObjectives: Array.isArray(it.doneObjectives) ? it.doneObjectives : (prevObjectives.get(it.id) || []),
           order: order++,
         });
       });
