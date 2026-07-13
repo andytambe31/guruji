@@ -268,8 +268,11 @@ export async function renderDay(mount, { navigate }) {
       getReady: settings.getReady ?? 30,
       office,
       meals: [],
-      gym: { on: false, when: 18 * 60, dur: 60, drain: 'none' },
-      walk: { on: false, when: 17 * 60, dur: 30, drain: 'none' },
+      // Most days you do both, so they default to Yes — toggle off on the odd day
+      // you skip. Gym: an evening hour, a break (not draining). Walk: an hour
+      // before work, also a break.
+      gym: { on: true, when: 18 * 60, dur: 60, drain: 'none' },
+      walk: { on: true, when: 'prework', dur: 60, drain: 'none' },
       other: { name: '', when: 16 * 60, dur: 60, drain: 'none' },
       intensity: 'normal',
       focusArea: null,
@@ -442,12 +445,14 @@ export async function renderDay(mount, { navigate }) {
         await putBusy({ date, start: cur, minutes: a.dur, label: a.label, drain: a.drain });
         cur += a.dur;
       }
-      // On an office day, the gap from the activity to the door is freshen-up
-      // time — a real block so the coach won't book study there and you can see
-      // exactly what happens when: activity, freshen up, out the door. If you're
-      // also eating breakfast it already fills that window, so skip the duplicate.
-      if (prework.length && commuting && !pl.meals.includes('breakfast') && o.leave - cur >= 10) {
-        await putBusy({ date, start: cur, minutes: o.leave - cur, label: 'Freshen up' });
+      // The gap from a pre-work activity to when work begins is freshen-up time —
+      // a real block so the coach won't book study into that sliver, and you can
+      // see exactly what happens when: activity, freshen up, then work. Office day
+      // fills up to the door (o.leave); a work-from-home day fills up to work
+      // start (o.start). Breakfast, if chosen, already fills the window.
+      if (prework.length && o.on && !pl.meals.includes('breakfast')) {
+        const workAnchor = commuting ? o.leave : o.start;
+        if (workAnchor - cur >= 10) await putBusy({ date, start: cur, minutes: workAnchor - cur, label: 'Freshen up' });
       }
 
       if (o.on) {
