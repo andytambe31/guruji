@@ -173,17 +173,16 @@ export async function renderNow(mount, { navigate }) {
       if (hidden) areasEl.removeAttribute('hidden'); else areasEl.setAttribute('hidden', '');
       toggle.textContent = hidden ? 'Never mind' : 'Something else';
     } });
-    // Two quiet secondary actions — the schedule lives on its own tab, not here.
-    const secondary = el('div', { class: 'now-secondary' }, [
-      toggle,
-      el('span', { class: 'now-sep', text: '·' }),
-      el('button', { class: 'secondary-link', text: 'Schedule', onclick: () => navigate('/day') }),
-      el('span', { class: 'now-sep', text: '·' }),
-      el('button', { class: 'secondary-link', text: 'Nuggets', onclick: () => navigate('/nuggets') }),
-      el('span', { class: 'now-sep', text: '·' }),
-      el('button', { class: 'secondary-link', text: 'Drills', onclick: () => navigate('/drills') }),
-      el('span', { class: 'now-sep', text: '·' }),
-      el('button', { class: 'secondary-link', text: 'Progress', onclick: () => navigate('/progress') }),
+    // "Something else" is contextual to the recommendation (pick a different area),
+    // so it sits on its own just under the CTA — not jammed in with the nav.
+    const switchRow = el('div', { class: 'now-switch-row' }, [toggle]);
+    // A clean quick-access bar for the app's other surfaces — evenly spaced so it
+    // never wraps, and visually separated as its own row.
+    const quick = el('div', { class: 'now-quick' }, [
+      el('button', { class: 'secondary-link now-quick-item', text: 'Schedule', onclick: () => navigate('/day') }),
+      el('button', { class: 'secondary-link now-quick-item', text: 'Nuggets', onclick: () => navigate('/nuggets') }),
+      el('button', { class: 'secondary-link now-quick-item', text: 'Drills', onclick: () => navigate('/drills') }),
+      el('button', { class: 'secondary-link now-quick-item', text: 'Progress', onclick: () => navigate('/progress') }),
     ]);
 
     // Cognitive load: a compact gauge. The life-context picker collapses to a
@@ -250,7 +249,7 @@ export async function renderNow(mount, { navigate }) {
     }
 
     fill(clear(wrap), [
-      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, secondary, areasEl, cog, effortEl, sleepEl,
+      countdown, eyebrowEl, verdictEl, reasonEl, ctaWrap, switchRow, areasEl, quick, cog, effortEl, sleepEl,
     ]);
 
     applyArea();

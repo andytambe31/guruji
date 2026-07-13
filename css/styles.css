@@ -210,13 +210,29 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .now-foot { text-align: center; margin-top: 26px; }
 
 /* Two quiet secondary actions under the primary CTA. */
-.now-secondary { display: flex; align-items: center; gap: 12px; margin-top: 14px; }
+/* "Something else" — the contextual area switcher, right under the CTA. */
+.now-switch-row { margin-top: 15px; }
 .secondary-link { appearance: none; background: none; border: none; cursor: pointer; font: inherit; font-size: 13px; color: var(--text-faint); padding: 0; transition: color .15s; }
 .secondary-link:hover { color: var(--text-dim); }
 .now-sep { color: var(--line); font-size: 13px; }
 
+/* Quick-access bar — the app's other surfaces, evenly spread so it never wraps,
+   set off from the hero by its own hairline. */
+.now-quick {
+  display: flex; gap: 4px; margin-top: 26px; padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+.now-quick-item {
+  flex: 1 1 0; min-width: 0; appearance: none; background: none; border: none; cursor: pointer;
+  font: inherit; font-size: 12.5px; letter-spacing: .01em; color: var(--text-dim);
+  padding: 8px 2px; text-align: center; border-radius: 9px; white-space: nowrap;
+  transition: background .15s, color .15s;
+}
+.now-quick-item:hover { background: var(--bg-soft); color: var(--text); }
+.now-quick-item:active { background: var(--bg-soft); }
+
 /* Cognitive-load gauge — quiet, reinforces quality over quantity. */
-.cog { margin-top: 44px; }
+.cog { margin-top: 30px; }
 .cog-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 8px; }
 .cog-label { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); }
 .cog-pct { font-size: 13px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
