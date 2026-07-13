@@ -798,6 +798,17 @@ export async function setReviseState(v) {
   return put(STORES.kv, { k: 'reviseState', v: v || {} });
 }
 
+// ---- Drills spaced-rep memory ----
+// Per-drill record { conf: 'got'|'missed', at, seen } so missed fill-in-the-blank
+// cards resurface first next time. Keyed by drill id.
+export async function getDrillState() {
+  const rec = await get(STORES.kv, 'drillState');
+  return rec ? rec.v : {};
+}
+export async function setDrillState(v) {
+  return put(STORES.kv, { k: 'drillState', v: v || {} });
+}
+
 // ---- "How did I do?" — a single day score ----
 // Rolls a day's real activity into one number: did you put in the study time,
 // meet your session goals, do your LeetCode, read, clear your commitments, and

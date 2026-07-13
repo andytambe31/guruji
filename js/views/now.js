@@ -181,6 +181,8 @@ export async function renderNow(mount, { navigate }) {
       el('span', { class: 'now-sep', text: '·' }),
       el('button', { class: 'secondary-link', text: 'Revise', onclick: () => navigate('/revise') }),
       el('span', { class: 'now-sep', text: '·' }),
+      el('button', { class: 'secondary-link', text: 'Drills', onclick: () => navigate('/drills') }),
+      el('span', { class: 'now-sep', text: '·' }),
       el('button', { class: 'secondary-link', text: 'Progress', onclick: () => navigate('/progress') }),
     ]);
 

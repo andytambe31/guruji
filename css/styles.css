@@ -1150,6 +1150,60 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .revise-done-mark { width: 54px; height: 54px; border-radius: 50%; background: rgba(15,157,107,.12); color: var(--ok, #0f9d6b); font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
 .revise-done h2 { font-size: 21px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
 
+/* ---------- Drills — fill-in-the-blank MCQ cards ---------- */
+/* Reuses the revise card frame; the card is static (no swipe), so grab/pan and
+   the peek are dropped and it grows with its content. */
+.drills-wrap .revise-card, .drill-card {
+  cursor: default; min-height: 0; max-width: 460px; touch-action: auto;
+  transition: none; display: block;
+}
+.drill-stack { margin: 8px 0 18px; }
+.drill-card .revise-kind { color: var(--desk, #3b5bd9); }
+.drill-card.p-Two-pointers .revise-kind { color: var(--transit, #0f9d6b); }
+.drill-card.p-Frequency-map .revise-kind { color: #7d5bd6; }
+.drill-card.p-Arrays .revise-kind { color: var(--wind, #d98324); }
+.drill-title { font-size: 21px; font-weight: 660; letter-spacing: -.02em; line-height: 1.2; color: var(--text); }
+.drill-prompt { font-size: 14.5px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
+.drill-code {
+  margin: 16px 0 4px; padding: 14px 16px; border-radius: 12px;
+  background: var(--bg-soft, #f6f6f7); border: 1px solid var(--line-soft);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px; line-height: 1.65; color: var(--text);
+  white-space: pre; overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.drill-slot {
+  display: inline-block; min-width: 60px; text-align: center;
+  padding: 0 8px; border-radius: 6px; font-weight: 700;
+  background: rgba(59,91,217,.12); color: var(--desk, #3b5bd9);
+  border: 1px dashed rgba(59,91,217,.5);
+}
+.drill-slot.ok { background: rgba(15,157,107,.14); color: var(--ok, #0f9d6b); border-style: solid; border-color: rgba(15,157,107,.5); }
+.drill-slot.bad { background: rgba(194,72,61,.12); color: #c2483d; border-style: solid; border-color: rgba(194,72,61,.5); }
+.drill-choices { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+.drill-choice {
+  appearance: none; text-align: left; cursor: pointer;
+  border: 1px solid var(--line); background: var(--bg); border-radius: 12px;
+  padding: 12px 14px; font: inherit; transition: border-color .15s, background .15s;
+}
+.drill-choice code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px; color: var(--text); background: none;
+}
+.drill-choice:hover:not(:disabled) { border-color: var(--text-faint); background: var(--bg-soft); }
+.drill-choice:disabled { cursor: default; opacity: .72; }
+.drill-choice.correct { border-color: var(--ok, #0f9d6b); background: rgba(15,157,107,.08); opacity: 1; }
+.drill-choice.correct code { color: var(--ok, #0f9d6b); font-weight: 600; }
+.drill-choice.wrong { border-color: #c2483d; background: rgba(194,72,61,.06); opacity: 1; }
+.drill-choice.wrong code { color: #c2483d; }
+.drill-feedback { display: none; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--line-soft); animation: swapIn .25s ease both; }
+.drill-feedback.show { display: block; }
+.drill-verdict { font-size: 15px; font-weight: 650; margin-bottom: 12px; }
+.drill-verdict.ok { color: var(--ok, #0f9d6b); }
+.drill-verdict.bad { color: #c2483d; }
+.drill-verdict.bad code, .drill-verdict.bad { font-family: inherit; }
+.drill-why-lbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
+.drill-why { font-size: 14.5px; color: var(--text); line-height: 1.6; }
+
 /* ---------- Day score — "how did I do today?" ---------- */
 .day-score { border-radius: 16px; background: var(--bg-soft); padding: 16px 18px; margin-bottom: 22px; }
 .day-score.t-low { background: rgba(217,131,36,.07); }
