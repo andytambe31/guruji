@@ -8,7 +8,7 @@ import { el, clear, fill, minutesToHHMM, toMinutes, fmtTimeOfDay, todayISO, addD
 import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
-  clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
+  clearBusyForDate, deconflictBusy, arrangeCommitments, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
   getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore, reclaimStaleBlocks,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
@@ -494,6 +494,7 @@ export async function renderDay(mount, { navigate }) {
       }
       if (pl.other.name) await putBusy({ date, start: pl.other.when, minutes: pl.other.dur, label: pl.other.name, drain: pl.other.drain });
       await deconflictBusy(date); // no two commitments at once
+      await arrangeCommitments(date); // gym before a walk, off a full stomach, before the physical curfew
       const intensity = INTENSITY.find((i) => i.key === pl.intensity);
       // On a free weekend, aim to get much more study in — a longer total and
       // several sessions per area.

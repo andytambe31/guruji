@@ -496,6 +496,69 @@ export async function deconflictBusy(date) {
   }
 }
 
+// Earliest start in [from, to−duration] whose [start, start+duration] clears every
+// blocked zone ({start,end}); null if it can't fit before `to`.
+function earliestFreeSlot(duration, from, to, zones) {
+  let s = from;
+  let moved = true;
+  while (moved) {
+    moved = false;
+    for (const z of zones) {
+      if (s < z.end && s + duration > z.start) { s = z.end; moved = true; }
+    }
+    if (s + duration > to) return null;
+  }
+  return s + duration <= to ? s : null;
+}
+
+// Physiological ordering for the day's physical commitments — the gym and the
+// walk — around the fixed meals. Three rules the coach now respects:
+//  1. Digestion: the gym never starts within DIGEST minutes of finishing a meal
+//     (no lifting on a full stomach); it moves before the meal instead.
+//  2. Order: the gym comes before an evening walk (a walk first leaves your legs
+//     weak to lift; a walk after is a fine cooldown).
+//  3. Curfew: no physical activity runs past PHYS_CURFEW (a hard evening stop).
+// Meals and work stay put; only the gym and walk move, and only when a rule is
+// actually broken, so a sensible plan is left alone.
+const DIGEST = 90;
+const PHYS_CURFEW = 22 * 60 + 30; // 10:30pm
+export async function arrangeCommitments(date) {
+  const all = await getBusyForDate(date);
+  const gym = all.find((b) => b.label === 'Gym');
+  const walk = all.find((b) => b.label === 'Walk');
+  if (!gym && !walk) return;
+  const meals = all.filter((b) => ['Breakfast', 'Lunch', 'Dinner'].includes(b.label));
+  const others = () => all.filter((b) => b !== gym && b !== walk).map((b) => ({ start: b.start, end: b.start + b.minutes }));
+  const digestZones = meals.map((m) => ({ start: m.start + m.minutes, end: m.start + m.minutes + DIGEST }));
+  const workEnds = all.filter((b) => b.drain === 'high' || b.transit).map((b) => b.start + b.minutes);
+  const eveningStart = workEnds.length ? Math.max(...workEnds) : DAY_START;
+
+  if (gym) {
+    const gymEnd = gym.start + gym.minutes;
+    const inDigest = digestZones.some((z) => gym.start < z.end && gymEnd > z.start);
+    const pastCurfew = gymEnd > PHYS_CURFEW;
+    const afterEveningWalk = walk && walk.start >= 12 * 60 && walk.start < gym.start;
+    if (inDigest || pastCurfew || afterEveningWalk) {
+      // Search the evening first (fresh after work, before dinner), then the whole
+      // day, for a slot clear of other commitments and the post-meal digest zones.
+      let slot = earliestFreeSlot(gym.minutes, eveningStart, PHYS_CURFEW, [...others(), ...digestZones]);
+      if (slot == null) slot = earliestFreeSlot(gym.minutes, DAY_START, PHYS_CURFEW, [...others(), ...digestZones]);
+      if (slot != null && slot !== gym.start) { gym.start = slot; await put(STORES.schedule, gym); }
+    }
+  }
+  if (walk && walk.start >= 12 * 60) { // only rearrange an EVENING walk; a morning one stays
+    const gymEnd = gym ? gym.start + gym.minutes : null;
+    const beforeGym = gymEnd != null && walk.start < gymEnd; // covers "before" and "overlapping" the gym
+    const pastCurfew = walk.start + walk.minutes > PHYS_CURFEW;
+    if (beforeGym || pastCurfew) {
+      const from = gymEnd != null ? gymEnd : eveningStart;
+      const zones = [...others(), ...(gym ? [{ start: gym.start, end: gym.start + gym.minutes }] : [])];
+      const slot = earliestFreeSlot(walk.minutes, from, PHYS_CURFEW, zones);
+      if (slot != null && slot !== walk.start) { walk.start = slot; await put(STORES.schedule, walk); }
+    }
+  }
+}
+
 // Re-pack a day so nothing overlaps: pinned/done blocks and commitments keep
 // their time, the rest flow around them.
 export async function reflowDate(date) {
