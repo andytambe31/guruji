@@ -240,8 +240,13 @@ export async function renderDay(mount, { navigate }) {
     let maxStudy = intensity ? intensity.max : undefined;
     if (weekend && maxStudy != null) maxStudy = Math.round(maxStudy * 1.6);
     const loadBias = intensity ? (intensity.loadBias || 0) : 0;
+    // First tidy the commitments themselves: separate any that now overlap (e.g. a
+    // walk you dragged onto dinner) and re-apply the physiological order, then
+    // re-fit study around the corrected commitments.
+    await deconflictBusy(date);
+    await arrangeCommitments(date);
     await autoPlanDay(date, { focusArea: settings.lastPlanFocusArea || null, maxStudyMinutes: maxStudy, weekend, loadBias });
-    toast('Re-fit your study around the day');
+    toast('Re-fit your day around your commitments');
     await paint();
   }
 

@@ -486,8 +486,11 @@ function slidePast(start, minutes, intervals) {
 }
 export async function deconflictBusy(date) {
   const all = await getBusyForDate(date);
-  const anchors = all.filter((b) => !isMovableBusy(b)).map((b) => ({ start: b.start, minutes: b.minutes }));
-  const movable = all.filter(isMovableBusy).sort((a, b) => a.start - b.start);
+  // Anchors keep their time: fixed commitments (office, meals) AND anything already
+  // done — a completed commitment's time is history, so never slide it.
+  const isAnchor = (b) => !isMovableBusy(b) || b.status === 'done';
+  const anchors = all.filter(isAnchor).map((b) => ({ start: b.start, minutes: b.minutes }));
+  const movable = all.filter((b) => !isAnchor(b)).sort((a, b) => a.start - b.start);
   const placed = [...anchors];
   for (const m of movable) {
     const s = slidePast(m.start, m.minutes, placed);
@@ -524,8 +527,12 @@ const DIGEST = 90;
 const PHYS_CURFEW = 22 * 60 + 30; // 10:30pm
 export async function arrangeCommitments(date) {
   const all = await getBusyForDate(date);
-  const gym = all.find((b) => b.label === 'Gym');
-  const walk = all.find((b) => b.label === 'Walk');
+  // Only reposition gym/walk that aren't done — a completed one stays put (and
+  // still counts as an obstacle, since it's excluded from the movable pair below).
+  const gymRaw = all.find((b) => b.label === 'Gym');
+  const walkRaw = all.find((b) => b.label === 'Walk');
+  const gym = gymRaw && gymRaw.status !== 'done' ? gymRaw : null;
+  const walk = walkRaw && walkRaw.status !== 'done' ? walkRaw : null;
   if (!gym && !walk) return;
   const meals = all.filter((b) => ['Breakfast', 'Lunch', 'Dinner'].includes(b.label));
   const others = () => all.filter((b) => b !== gym && b !== walk).map((b) => ({ start: b.start, end: b.start + b.minutes }));
