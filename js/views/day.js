@@ -9,7 +9,7 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
-  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore,
+  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore, reclaimStaleBlocks,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
@@ -111,7 +111,7 @@ export async function renderDay(mount, { navigate }) {
   let planAreas = []; // study areas available (for the focus step)
   const wrap = el('div', { class: 'day-wrap' });
   mount.append(wrap);
-  await paint();
+  await paint({ reclaim: true });
 
   function relLabel(d) {
     const t = todayISO();
@@ -130,7 +130,12 @@ export async function renderDay(mount, { navigate }) {
     return date === t ? 'today' : date === addDaysISO(t, 1) ? 'tomorrow' : `on ${relLabel(date)}`;
   }
 
-  async function paint() {
+  async function paint({ reclaim = false } = {}) {
+    // On landing on the day (mount or date change), drop study blocks you couldn't
+    // have done — scheduled before you were up, or already fully past today with
+    // nothing logged. Only here, not on every internal repaint, so a reflow that
+    // momentarily slides a block earlier isn't mistaken for a stale one.
+    if (reclaim && !pl) { const reclaimed = await reclaimStaleBlocks(date); if (reclaimed) toast(reclaimed === 1 ? 'Cleared a slot you’d already slept past' : `Cleared ${reclaimed} lapsed slots`); }
     const [blocks, busy, items, settings, studied] = await Promise.all([
       getBlocksForDate(date), getBusyForDate(date), getItems(), getSettings(), studiedMinutesByBlock(),
     ]);
@@ -149,12 +154,12 @@ export async function renderDay(mount, { navigate }) {
     const goalsByBlock = new Map(await Promise.all(blocks.map(async (b) => [b.id, await ensureBlockGoals(b.id)])));
 
     const head = el('div', { class: 'day-head' }, [
-      el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint(); } }),
+      el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint({ reclaim: true }); } }),
       el('div', { class: 'day-title' }, [
         el('div', { class: 'day-rel', text: relLabel(date) }),
         el('div', { class: 'day-date', text: dateLabel(date) }),
       ]),
-      el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = false; pl = null; await paint(); } }),
+      el('button', { class: 'day-nav', text: '›', 'aria-label': 'Next day', onclick: async () => { date = addDaysISO(date, 1); adding = false; pl = null; await paint({ reclaim: true }); } }),
     ]);
 
     if (pl) { fill(clear(wrap), [wizardCard(settings)]); return; }

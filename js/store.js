@@ -346,6 +346,31 @@ export async function getBlocks() {
 export async function getBlocksForDate(date) {
   return (await getBlocks()).filter((b) => b.date === date);
 }
+// Clear study blocks you could never have done: ones scheduled before you were
+// up (a stale plan from when the coach thought you woke earlier), and — on today
+// — ones already fully in the past that you never started. A block you actually
+// logged time against, or marked done, is history and is always kept. Returns
+// how many were reclaimed so the day view can say so. This is what makes the day
+// "smart enough" to drop an 8:30 DSA slot once you've told it you woke at 9:30.
+export async function reclaimStaleBlocks(date, now = new Date()) {
+  // Only ever touches today: past days are history, and a future day's plan is
+  // freshly built from the correct wake time, so there's nothing to reclaim.
+  if (date !== todayISO(now)) return 0;
+  const [blocks, settings, studiedByBlock] = await Promise.all([
+    getBlocksForDate(date), getSettings(), studiedMinutesByBlock(),
+  ]);
+  const wakeStart = settings.wake != null ? toMinutes(settings.wake) : null;
+  const nowMin = nowMinutes(now);
+  let removed = 0;
+  for (const b of blocks) {
+    if (b.status === 'done') continue;                       // already done — keep
+    if ((studiedByBlock.get(b.id) || 0) > 0) continue;       // real time logged — keep
+    const beforeWake = wakeStart != null && b.start < wakeStart;
+    const fullyPast = (b.start + (b.minutes || 0)) <= nowMin;
+    if (beforeWake || fullyPast) { await del(STORES.schedule, b.id); removed += 1; }
+  }
+  return removed;
+}
 // A single planned block by id — used to recover its predicted load (and thus
 // its session intensity) on the prep / focus screens.
 export async function getBlock(id) {
