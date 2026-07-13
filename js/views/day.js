@@ -512,7 +512,9 @@ export async function renderDay(mount, { navigate }) {
     // "swap for" eligible-focus picker when you tap Swap.
     const acts = el('div', { class: 'blk-acts' });
     const normalActs = () => [
-      done ? null : el('button', { class: 'blk-start', text: 'Start', onclick: () => navigate(`/prep/${b.itemId}/${b.id}`) }),
+      // A commute/transit block can't do deep work on mobile — it launches the
+      // swipe revision deck (revise what you've learned) instead of the timer.
+      done ? null : el('button', { class: 'blk-start', text: b.onCommute ? 'Revise' : 'Start', onclick: () => navigate(b.onCommute ? `/revise/${encodeURIComponent(b.area || '')}` : `/prep/${b.itemId}/${b.id}`) }),
       el('button', { class: 'blk-act', text: 'Log', title: 'Studied without the timer? Log the time you put in', onclick: () => fill(clear(acts), logActs()) }),
       b.area === 'DSA' ? el('button', { class: 'blk-act', text: 'Problems', title: 'Log the LeetCode problems you did in this session', onclick: () => openLeetcodeWizard({ onSave: async (e) => { if (e.length) { await logLeetcodeForBlock(b, e); toast(`Logged ${e.length} problem${e.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,
       (b.area === 'CS Fundamentals' && concepts.length) ? el('button', { class: 'blk-act', text: 'Concepts', title: 'Rate your confidence on this topic’s key concepts', onclick: () => openConceptWizard({ concepts, onSave: async (r) => { if (r.length) { await logConceptsForBlock(b, r); toast(`Rated ${r.length} concept${r.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,

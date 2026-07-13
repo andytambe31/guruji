@@ -739,6 +739,38 @@ export async function addLogEntry(entry) {
   return rec;
 }
 
+// ---- Commute revision deck ----
+// The material to revise, drawn only from what you've already studied deeply:
+// concepts you've rated, DSA patterns you've practiced, and problems you've
+// solved (with your own notes). Never new content — that's the line we don't cross.
+export async function computeDeck() {
+  const log = await getLog();
+  const conceptLatest = new Map();
+  const lc = [];
+  for (const e of log) {
+    if (Array.isArray(e.concepts)) for (const r of e.concepts) if (r && r.concept) conceptLatest.set(r.concept, { concept: r.concept, confidence: r.confidence, topic: e.itemTitle || '', date: e.date });
+    if (Array.isArray(e.leetcode)) for (const p of e.leetcode) lc.push({ ...p, date: e.date });
+  }
+  const probMap = new Map();
+  for (const p of lc) { const k = p.slug || p.title; if (k) probMap.set(k, p); }
+  const patCount = new Map();
+  for (const p of lc) if (p.pattern) patCount.set(p.pattern, (patCount.get(p.pattern) || 0) + 1);
+  return {
+    concepts: [...conceptLatest.values()],
+    problems: [...probMap.values()],
+    patterns: [...patCount.entries()].map(([pattern, count]) => ({ pattern, count })),
+  };
+}
+// Lightweight spaced-repetition memory: per-card confidence + last-seen, so shaky
+// cards resurface first next time. Keyed by "concept:x" / "pattern:x" / "lc:slug".
+export async function getReviseState() {
+  const rec = await get(STORES.kv, 'reviseState');
+  return rec ? rec.v : {};
+}
+export async function setReviseState(v) {
+  return put(STORES.kv, { k: 'reviseState', v: v || {} });
+}
+
 // Log time you studied *without* the timer — you forgot to start focus mode but
 // still put in the work. Creates a real session entry against the block, so its
 // minutes count everywhere a timed session would (the block's "X / reserved",

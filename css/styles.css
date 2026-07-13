@@ -1096,3 +1096,56 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 
 .road-links { display: flex; gap: 22px; justify-content: center; margin-top: 6px; }
 .road-links .btn-link { display: inline; width: auto; }
+
+/* ---------- Revise — the commute card deck ---------- */
+.revise-wrap { padding-top: 6px; animation: viewIn .3s ease both; display: flex; flex-direction: column; min-height: 80vh; }
+.revise-head { margin-bottom: 14px; }
+.revise-top { display: flex; align-items: center; justify-content: space-between; }
+.revise-close { appearance: none; background: none; border: none; color: var(--text-faint); font-size: 18px; line-height: 1; cursor: pointer; padding: 4px; }
+.revise-close:hover { color: var(--text); }
+.revise-progress { height: 4px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; margin: 10px 0 6px; }
+.revise-progress-fill { height: 100%; background: var(--text); border-radius: 999px; transition: width .3s ease; }
+.revise-count { font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* the card stack — the top card sits over a faint peek of the next */
+.revise-stack { position: relative; margin: 8px 0 18px; }
+.revise-card {
+  position: relative; width: 100%; max-width: 440px; min-height: 300px; margin: 0 auto;
+  background: var(--bg-card, #fff); border: 1px solid var(--line); border-radius: 20px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.08);
+  padding: 28px 26px; box-sizing: border-box; cursor: grab; touch-action: pan-y;
+  display: flex; user-select: none; transition: transform .2s ease, box-shadow .2s ease;
+}
+.revise-card:active { cursor: grabbing; }
+/* the next card peeks from behind — absolute so it never affects layout or taps */
+.revise-card.revise-peek { position: absolute; inset: 0; transform: scale(.94) translateY(14px); opacity: .5; box-shadow: none; pointer-events: none; }
+.revise-card-inner { display: flex; flex-direction: column; width: 100%; }
+.revise-kind { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 16px; }
+.revise-card.k-concept .revise-kind { color: #7d5bd6; }
+.revise-card.k-pattern .revise-kind { color: var(--desk, #3b5bd9); }
+.revise-card.k-problem .revise-kind { color: var(--transit, #0f9d6b); }
+.revise-front { font-size: 25px; font-weight: 660; letter-spacing: -.02em; line-height: 1.2; color: var(--text); }
+.revise-sub { font-size: 13px; color: var(--text-faint); margin-top: 6px; }
+.revise-prompt { font-size: 14.5px; color: var(--text-dim); line-height: 1.5; margin-top: 16px; }
+/* the back is hidden until the card is flipped (tap) */
+.revise-back { margin-top: auto; padding-top: 18px; border-top: 1px solid var(--line-soft); display: none; }
+.revise-card.flipped .revise-back { display: block; }
+.revise-card.flipped .revise-prompt { opacity: .4; }
+.revise-back-lbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
+.revise-back-text { font-size: 15px; color: var(--text); line-height: 1.55; }
+/* swipe intent hints */
+.revise-card.hint-yes { border-color: var(--ok, #0f9d6b); box-shadow: 0 12px 40px rgba(15,157,107,.18); }
+.revise-card.hint-no { border-color: var(--wind, #d98324); box-shadow: 0 12px 40px rgba(217,131,36,.18); }
+
+.revise-acts { display: flex; gap: 12px; justify-content: center; position: relative; z-index: 5; }
+.revise-btn { flex: 1; max-width: 200px; appearance: none; cursor: pointer; border: 1px solid var(--line); background: var(--bg); border-radius: 14px; padding: 14px; font: inherit; font-size: 15px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px; transition: border-color .15s, background .15s, color .15s; }
+.revise-btn span:first-child { font-size: 17px; }
+.revise-btn.yes { color: var(--ok, #0f9d6b); }
+.revise-btn.yes:hover { border-color: var(--ok, #0f9d6b); background: rgba(15,157,107,.06); }
+.revise-btn.no { color: var(--wind, #d98324); }
+.revise-btn.no:hover { border-color: var(--wind, #d98324); background: rgba(217,131,36,.06); }
+.revise-hint { text-align: center; font-size: 12.5px; color: var(--text-faint); line-height: 1.5; margin-top: 14px; }
+
+.revise-done { text-align: center; display: flex; flex-direction: column; align-items: center; animation: swapIn .3s ease both; }
+.revise-done-mark { width: 54px; height: 54px; border-radius: 50%; background: rgba(15,157,107,.12); color: var(--ok, #0f9d6b); font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
+.revise-done h2 { font-size: 21px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
