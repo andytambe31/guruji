@@ -579,9 +579,21 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   const wakeStart = settings.wake != null
     ? toMinutes(settings.wake) + (settings.freshenMinutes ?? 30)
     : DAY_START;
-  const startMin = date === todayISO(now)
+  let startMin = date === todayISO(now)
     ? Math.max(Math.ceil((nowMinutes(now) + 5) / 15) * 15, wakeStart)
     : wakeStart;
+  // If you never told us when you're up, don't manufacture a study slot in the
+  // gap before work. Defaulting the day start to 9am assumes you're awake and
+  // free an hour before a 9:30 start — exactly the bug that dropped a session
+  // into [9:00, 9:30). With no explicit wake, assume you're up *for* work: begin
+  // no earlier than your first work/commute commitment, so study lands after it
+  // (or on the commute), never in a sliver before it.
+  if (settings.wake == null) {
+    const workAnchor = activeBusy
+      .filter((b) => b.drain === 'high' || b.transit)
+      .reduce((m, b) => Math.min(m, b.start), Infinity);
+    if (Number.isFinite(workAnchor)) startMin = Math.max(startMin, workAnchor);
+  }
 
   // Obstacles the fresh plan flows around: all commitments (incl. full commute
   // windows), kept pinned/done blocks, and the commute-study we just placed.
