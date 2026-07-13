@@ -9,7 +9,7 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
-  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals,
+  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
@@ -187,11 +187,18 @@ export async function renderDay(mount, { navigate }) {
       }
     }
 
-    const why = blocks.length ? planWhy(blocks, items, settings) : null;
-    const whyNode = why ? el('div', { class: 'plan-why' }, [
-      el('div', { class: 'plan-why-mix', text: why.mix }),
-      el('div', { class: 'plan-why-note', text: why.note }),
-    ]) : null;
+    // The top of the day: a "how did I do?" score for today / past days (real
+    // activity, not the plan's intent); for a future day being planned, keep the
+    // one-line mix so you still see what's booked.
+    let whyNode = null;
+    if (blocks.length) {
+      if (date > todayISO()) {
+        const why = planWhy(blocks, items, settings);
+        whyNode = el('div', { class: 'plan-why' }, [el('div', { class: 'plan-why-mix', text: why.mix })]);
+      } else {
+        whyNode = scoreCard(await computeDayScore(date));
+      }
+    }
 
     const surfaceableAreas = surfaceable;
     const footer = el('div', { class: 'day-actions' }, [
@@ -648,6 +655,30 @@ export async function renderDay(mount, { navigate }) {
       el('div', { class: 'add-at' }, [el('span', { class: 'muted', text: 'at' }), timeInput]),
     ]);
   }
+}
+
+// "How did I do?" — the day's real activity as one score, with per-part chips and
+// the single worst gap flagged. Replaces the plan-intent card on today/past days.
+function scoreCard(s) {
+  const chips = s.components.filter((c) => c.relevant).map((c) =>
+    el('span', { class: 'ds-chip' + (c.ratio >= 0.999 ? ' full' : c.ratio <= 0.15 ? ' empty' : '') }, [
+      el('span', { class: 'ds-chip-l', text: c.label }),
+      el('span', { class: 'ds-chip-v', text: c.detail + (c.over ? ' ↑' : '') }),
+    ]));
+  return el('div', { class: `day-score t-${s.tone}` }, [
+    el('div', { class: 'day-score-top' }, [
+      el('div', { class: 'day-score-num', text: `${s.score}` }),
+      el('div', { class: 'day-score-head' }, [
+        el('div', { class: 'day-score-verdict', text: s.verdict }),
+        el('div', { class: 'day-score-sub', text: s.isToday ? 'how today’s going' : 'how the day went' }),
+      ]),
+    ]),
+    el('div', { class: 'day-score-chips' }, chips),
+    s.lowlight ? el('div', { class: 'day-score-low' }, [
+      el('span', { class: 'ds-warn', text: '!' }),
+      el('span', { text: s.lowlight.msg }),
+    ]) : null,
+  ]);
 }
 
 // Explain the day the coach built — the area mix, the ordering principle, and,

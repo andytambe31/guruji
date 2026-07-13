@@ -771,6 +771,57 @@ export async function setReviseState(v) {
   return put(STORES.kv, { k: 'reviseState', v: v || {} });
 }
 
+// ---- "How did I do?" — a single day score ----
+// Rolls a day's real activity into one number: did you put in the study time,
+// meet your session goals, do your LeetCode, read, clear your commitments, and
+// actually capture it in the app? Each part only counts when the day expected it
+// (no LeetCode planned → LeetCode doesn't drag the score). Surfaces the single
+// worst gap so a bad day gets a clear, honest nudge.
+export async function computeDayScore(date) {
+  const [blocks, busy, log] = await Promise.all([getBlocksForDate(date), getBusyForDate(date), getLog()]);
+  const dayLog = log.filter((e) => e.date === date);
+
+  const planned = blocks.reduce((s, b) => s + (b.minutes || 0), 0);
+  const studied = dayLog.reduce((s, e) => s + Math.max(0, Math.round(e.focusMinutes || 0)), 0);
+  let goalTot = 0; let goalMet = 0;
+  for (const b of blocks) if (Array.isArray(b.goals)) { goalTot += b.goals.length; goalMet += b.goals.filter((g) => g.met).length; }
+  let lcCount = 0; for (const e of dayLog) if (Array.isArray(e.leetcode)) lcCount += e.leetcode.length;
+  const hasDSA = blocks.some((b) => b.area === 'DSA');
+  const hasReadingBlock = blocks.some((b) => b.area === 'Reading');
+  const didRead = dayLog.some((e) => e.area === 'Reading' && (e.focusMinutes || 0) > 0);
+  const PASSIVE = new Set(['Office', 'Work', 'Freshen up', 'Commute']);
+  const doable = busy.filter((b) => !b.transit && !PASSIVE.has(b.label));
+  const doneCommit = doable.filter((b) => b.status === 'done').length;
+  const engaged = goalMet > 0 || dayLog.some((e) => (e.focusMinutes || 0) > 0 || (Array.isArray(e.leetcode) && e.leetcode.length) || (Array.isArray(e.concepts) && e.concepts.length));
+
+  const components = [
+    { key: 'study', label: 'Study', weight: 28, relevant: planned > 0, ratio: planned > 0 ? Math.min(1, studied / planned) : 0, detail: planned > 0 ? `${studied}/${planned}m` : `${studied}m`, over: planned > 0 && studied > planned },
+    { key: 'goals', label: 'Goals', weight: 22, relevant: goalTot > 0, ratio: goalTot > 0 ? goalMet / goalTot : 0, detail: `${goalMet}/${goalTot}` },
+    { key: 'leetcode', label: 'LeetCode', weight: 18, relevant: hasDSA || lcCount > 0, ratio: Math.min(1, lcCount / 3), detail: `${lcCount}` },
+    { key: 'reading', label: 'Reading', weight: 10, relevant: hasReadingBlock, ratio: didRead ? 1 : 0, detail: didRead ? 'done' : '—' },
+    { key: 'commitments', label: 'Commitments', weight: 10, relevant: doable.length > 0, ratio: doable.length ? doneCommit / doable.length : 0, detail: `${doneCommit}/${doable.length}` },
+    { key: 'engagement', label: 'Logged it', weight: 12, relevant: true, ratio: engaged ? 1 : 0, detail: engaged ? 'yes' : 'no' },
+  ];
+  const rel = components.filter((c) => c.relevant);
+  const wsum = rel.reduce((s, c) => s + c.weight, 0) || 1;
+  const score = Math.round((rel.reduce((s, c) => s + c.weight * c.ratio, 0) / wsum) * 100);
+
+  const LOW = {
+    study: 'No study logged yet — start a session, or log the time you put in.',
+    goals: 'No session goals ticked — mark what you actually met.',
+    leetcode: 'Zero LeetCode today — even one keeps you moving toward 500.',
+    reading: 'No reading today — a few pages keeps the habit alive.',
+    commitments: 'None of your commitments marked done yet.',
+    engagement: 'Nothing logged today — the app can only coach what it sees.',
+  };
+  const gaps = rel.filter((c) => c.ratio <= 0.15).sort((a, b) => b.weight - a.weight);
+  const lowlight = gaps.length ? { key: gaps[0].key, msg: LOW[gaps[0].key] } : null;
+  const verdict = score >= 85 ? 'Strong day' : score >= 65 ? 'Solid' : score >= 45 ? 'Middling' : score >= 25 ? 'Slow going' : 'Barely started';
+  const tone = score >= 65 ? 'ok' : score >= 40 ? 'mid' : 'low';
+
+  return { date, score, verdict, tone, components, lowlight, planned, studied, isToday: date === todayISO(), hasData: rel.length > 0 };
+}
+
 // Log time you studied *without* the timer — you forgot to start focus mode but
 // still put in the work. Creates a real session entry against the block, so its
 // minutes count everywhere a timed session would (the block's "X / reserved",

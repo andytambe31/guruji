@@ -1149,3 +1149,25 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .revise-done { text-align: center; display: flex; flex-direction: column; align-items: center; animation: swapIn .3s ease both; }
 .revise-done-mark { width: 54px; height: 54px; border-radius: 50%; background: rgba(15,157,107,.12); color: var(--ok, #0f9d6b); font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
 .revise-done h2 { font-size: 21px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
+
+/* ---------- Day score — "how did I do today?" ---------- */
+.day-score { border-radius: 16px; background: var(--bg-soft); padding: 16px 18px; margin-bottom: 22px; }
+.day-score.t-low { background: rgba(217,131,36,.07); }
+.day-score-top { display: flex; align-items: center; gap: 16px; }
+.day-score-num { font-size: 42px; font-weight: 700; letter-spacing: -.03em; line-height: 1; color: var(--text); font-variant-numeric: tabular-nums; }
+.day-score.t-ok .day-score-num { color: var(--ok, #0f9d6b); }
+.day-score.t-mid .day-score-num { color: var(--wind, #d98324); }
+.day-score.t-low .day-score-num { color: #c2483d; }
+.day-score-head { min-width: 0; }
+.day-score-verdict { font-size: 17px; font-weight: 650; letter-spacing: -.01em; color: var(--text); }
+.day-score-sub { font-size: 12px; color: var(--text-faint); letter-spacing: .02em; }
+.day-score-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 14px; }
+.ds-chip { display: inline-flex; align-items: baseline; gap: 6px; padding: 5px 11px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); font-size: 12px; }
+.ds-chip-l { color: var(--text-faint); letter-spacing: .01em; }
+.ds-chip-v { color: var(--text-dim); font-weight: 650; font-variant-numeric: tabular-nums; }
+.ds-chip.full { border-color: rgba(15,157,107,.3); background: rgba(15,157,107,.08); }
+.ds-chip.full .ds-chip-v { color: var(--ok, #0f9d6b); }
+.ds-chip.empty { border-color: rgba(194,72,61,.28); }
+.ds-chip.empty .ds-chip-v { color: #c2483d; }
+.day-score-low { display: flex; align-items: flex-start; gap: 9px; margin-top: 14px; padding: 11px 13px; border-radius: 12px; background: rgba(194,72,61,.08); font-size: 13px; line-height: 1.45; color: var(--text-dim); }
+.ds-warn { flex: 0 0 auto; width: 18px; height: 18px; border-radius: 50%; background: #c2483d; color: #fff; font-size: 12px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-top: 1px; }
