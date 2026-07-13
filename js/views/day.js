@@ -9,12 +9,12 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
-  getItem, setObjectives, toggleObjective,
+  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
 import { openConceptWizard } from './concept-wizard.js';
-import { openObjectivesEditor, objectivesProgress, sessionBadge } from '../objectives.js';
+import { openObjectivesEditor, goalsProgress, sessionBadge, tierLine } from '../objectives.js';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
@@ -145,6 +145,8 @@ export async function renderDay(mount, { navigate }) {
     const conceptsByItem = new Map(items.map((i) => [i.id, (i.coach && Array.isArray(i.coach.concepts)) ? i.coach.concepts : []]));
     // Full item behind each block — for its session expectations (view/edit/tick).
     const itemsById = new Map(items.map((i) => [i.id, i]));
+    // Each block's own goal set (per-session; built lazily, carried forward).
+    const goalsByBlock = new Map(await Promise.all(blocks.map(async (b) => [b.id, await ensureBlockGoals(b.id)])));
 
     const head = el('div', { class: 'day-head' }, [
       el('button', { class: 'day-nav', text: '‹', 'aria-label': 'Previous day', onclick: async () => { date = addDaysISO(date, -1); adding = false; pl = null; await paint(); } }),
@@ -162,7 +164,7 @@ export async function renderDay(mount, { navigate }) {
     const covered = (bb) => bb.transit && blocks.some((bl) => bl.onCommute && bl.start < bb.start + bb.minutes && bl.start + bl.minutes > bb.start);
     const busyShown = busy.filter((bb) => !covered(bb));
     const entries = [
-      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions, conceptsByItem.get(b.itemId) || [], itemsById.get(b.itemId) || null) })),
+      ...blocks.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'block', b, node: blockCard(b, studied.get(b.id) || 0, swapOptions, conceptsByItem.get(b.itemId) || [], itemsById.get(b.itemId) || null, goalsByBlock.get(b.id) || []) })),
       ...busyShown.map((b) => ({ t: b.start, end: b.start + b.minutes, kind: 'busy', b, node: busyCard(b) })),
     ].sort((a, b) => a.t - b.t || (a.kind === 'busy' ? -1 : 1));
     if (!entries.length) {
@@ -490,19 +492,19 @@ export async function renderDay(mount, { navigate }) {
     }
   }
 
-  function blockCard(b, studied = 0, swapOptions = [], concepts = [], item = null) {
+  function blockCard(b, studied = 0, swapOptions = [], concepts = [], item = null, goals = []) {
     const done = b.status === 'done';
     const canSwap = !done && swapOptions.length > 0;
-    // Session expectations for this topic — a tap opens the editor to view, tick,
-    // add or reword them. Works before the session and after it's closed.
-    const objProg = item ? objectivesProgress(item, b.minutes, b.load) : { total: 0, done: 0 };
+    // This session's own goals — a tap opens the panel to tick what you met
+    // (retroactively too), or edit them. Per-session: independent of other blocks.
+    const objProg = goalsProgress(goals);
     // How demanding this session is — length + how spent you'll be at its time.
     const badge = sessionBadge(b.minutes, b.load);
     const openGoals = () => openObjectivesEditor({
-      item, minutes: b.minutes, load: b.load,
-      // Tapping a row logs that you met it (retroactive, off-timer) — persists now.
-      onToggle: (text) => toggleObjective(item.id, text),
-      onSave: async (list, doneList) => { await setObjectives(item.id, list, doneList); toast('Expectations saved'); },
+      goals, title: item ? item.title : b.area, note: tierLine(b.minutes, b.load),
+      // Tapping a row logs that you met it in THIS session — persists now.
+      onToggle: (text) => toggleBlockGoal(b.id, text),
+      onSave: async (list, doneList) => { await setBlockGoals(b.id, list.map((t) => ({ text: t, met: doneList.includes(t) }))); toast('Goals saved'); },
       onClose: async () => { await paint(); },
     });
 

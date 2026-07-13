@@ -1,6 +1,7 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
 import { uid, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes } from './util.js';
+import { buildSessionGoals } from './objectives.js';
 import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
@@ -323,6 +324,51 @@ export async function getBlocksForDate(date) {
 export async function getBlock(id) {
   const b = await get(STORES.schedule, id);
   return b && b.kind === 'block' ? b : null;
+}
+
+// ---- Per-session goals ----
+// Each planned session (block) owns its goals, so completion is per-session, not
+// per-topic: today's DSA block and tomorrow's are independent. Goals are built
+// the first time a block needs them — unmet goals from the topic's previous
+// session carry forward (a real second chance), and fresh goals rotate in so
+// successive sessions differ. See buildSessionGoals in objectives.js.
+export async function ensureBlockGoals(id) {
+  const block = await get(STORES.schedule, id);
+  if (!block || block.kind !== 'block') return [];
+  if (Array.isArray(block.goals) && block.goals.length) return block.goals;
+  const item = await get(STORES.items, block.itemId);
+  if (!item) return [];
+  const all = await getBlocks();
+  // Prior sessions of this same topic (strictly before this block in time).
+  const priors = all
+    .filter((b) => b.kind === 'block' && b.itemId === block.itemId && b.id !== block.id &&
+      (b.date < block.date || (b.date === block.date && (b.start || 0) < (block.start || 0))))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.start || 0) - (b.start || 0)));
+  const last = [...priors].reverse().find((b) => Array.isArray(b.goals) && b.goals.length);
+  block.goals = buildSessionGoals({
+    item, minutes: block.minutes, load: block.load,
+    prior: last ? last.goals : [], seq: priors.length,
+  });
+  await put(STORES.schedule, block);
+  return block.goals;
+}
+export async function toggleBlockGoal(id, text) {
+  await ensureBlockGoals(id);
+  const block = await get(STORES.schedule, id);
+  if (!block || !Array.isArray(block.goals)) return [];
+  const g = block.goals.find((x) => x.text === text);
+  if (g) g.met = !g.met;
+  await put(STORES.schedule, block);
+  return block.goals;
+}
+export async function setBlockGoals(id, goals) {
+  const block = await get(STORES.schedule, id);
+  if (!block) return [];
+  block.goals = (Array.isArray(goals) ? goals : [])
+    .map((x) => ({ text: String(x.text || '').trim(), met: !!x.met }))
+    .filter((x) => x.text);
+  await put(STORES.schedule, block);
+  return block.goals;
 }
 export async function deleteBlock(id) {
   return del(STORES.schedule, id);

@@ -180,70 +180,102 @@ export function resolveObjectives(item, minutes, load) {
   return pickTier(AREA_OBJECTIVES[item.area] || AREA_OBJECTIVES.default, minutes, load);
 }
 
-export function objectivesProgress(item, minutes, load) {
-  const list = resolveObjectives(item, minutes, load);
-  const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
-  return { total: list.length, done: list.filter((o) => met.has(o)).length };
+const dedup = (arr) => { const seen = new Set(); const out = []; for (const x of arr) { if (x && !seen.has(x)) { seen.add(x); out.push(x); } } return out; };
+
+// The full menu of goals for a topic — the union of its intensity tiers (or its
+// authored / user pool). Bigger than a single session, so consecutive sessions
+// can draw a *different* deliberate subset instead of repeating one fixed list.
+export function poolFor(item) {
+  if (!item) return [];
+  if (Array.isArray(item.objectives) && item.objectives.length) return dedup(item.objectives);
+  const c = item.coach && typeof item.coach === 'object' ? item.coach : null;
+  const co = c ? c.objectives : null;
+  if (co && !Array.isArray(co) && typeof co === 'object') return dedup([...(co.short || []), ...(co.medium || []), ...(co.long || [])]);
+  if (Array.isArray(co) && co.length) return dedup(co);
+  const set = AREA_OBJECTIVES[item.area] || AREA_OBJECTIVES.default;
+  return dedup([...(set.short || []), ...(set.medium || []), ...(set.long || [])]);
 }
 
-// A live, tappable checklist: progress count, the first unmet item flagged as the
-// current focus, met items struck through, an all-met nudge. `onToggle(text)`
-// persists and returns the new met-list. Shared by the timer's coach panel and
-// the wrap-up confirm. Returns the box node; it repaints itself on each tap.
-export function renderChecklist(item, { onToggle, doneLabel, minutes, load } = {}) {
-  const objectives = resolveObjectives(item, minutes, load);
-  const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
+// Build the deliberate goal set for ONE session: unmet goals carried over from the
+// last session come first (a real second chance), then fresh goals rotated through
+// the pool by `seq` (the session number) so successive sessions differ. `count` is
+// the intensity-sized number of goals. Returns [{text, met:false}].
+export function buildSessionGoals({ item, minutes, load, prior = [], seq = 0 } = {}) {
+  const count = Math.max(1, resolveObjectives(item, minutes, load).length);
+  const pool = poolFor(item);
+  const chosen = [];
+  for (const g of prior) { if (g && !g.met && !chosen.includes(g.text)) chosen.push(g.text); if (chosen.length >= count) break; }
+  if (pool.length) {
+    const start = ((seq % pool.length) + pool.length) % pool.length;
+    for (let k = 0; k < pool.length && chosen.length < count; k++) {
+      const t = pool[(start + k) % pool.length];
+      if (!chosen.includes(t)) chosen.push(t);
+    }
+  }
+  return chosen.slice(0, count).map((text) => ({ text, met: false }));
+}
+
+export function goalsProgress(goals) {
+  const g = Array.isArray(goals) ? goals : [];
+  return { total: g.length, done: g.filter((x) => x && x.met).length };
+}
+
+// A live, tappable checklist over THIS session's goals ([{text, met}]). Progress
+// count, the first unmet item flagged as current, met items struck through, an
+// all-met nudge. `onToggle(text)` persists and returns the new goal list; the
+// component repaints from it. `note` is the intensity line. Per-session by design.
+export function renderChecklist(goals, { onToggle, doneLabel, note } = {}) {
+  let list = (Array.isArray(goals) ? goals : []).map((g) => ({ text: g.text, met: !!g.met }));
   const box = el('div', { class: 'fc-obj-box' });
   const paint = () => {
     clear(box);
-    const done = objectives.filter((o) => met.has(o)).length;
-    const allMet = objectives.length > 0 && done === objectives.length;
-    const currentIdx = objectives.findIndex((o) => !met.has(o));
+    const done = list.filter((o) => o.met).length;
+    const allMet = list.length > 0 && done === list.length;
+    const currentIdx = list.findIndex((o) => !o.met);
     box.append(el('div', { class: 'fc-obj-top' }, [
       el('div', { class: 'fc-head', text: 'This session — meet these' }),
-      el('div', { class: 'fc-obj-count' + (allMet ? ' all' : ''), text: `${done}/${objectives.length}` }),
+      el('div', { class: 'fc-obj-count' + (allMet ? ' all' : ''), text: `${done}/${list.length}` }),
     ]));
-    objectives.forEach((o, i) => {
-      const on = met.has(o);
+    list.forEach((o, i) => {
       const isCurrent = !allMet && i === currentIdx;
       box.append(el('button', {
-        class: 'fc-obj' + (on ? ' met' : '') + (isCurrent ? ' current' : ''),
-        type: 'button', title: on ? 'Met — tap to undo' : 'Tap when you’ve met this',
+        class: 'fc-obj' + (o.met ? ' met' : '') + (isCurrent ? ' current' : ''),
+        type: 'button', title: o.met ? 'Met — tap to undo' : 'Tap when you’ve met this',
         onclick: async () => {
-          const list = onToggle ? await onToggle(o) : (on ? [...met].filter((x) => x !== o) : [...met, o]);
-          met.clear(); (list || []).forEach((x) => met.add(x));
-          item.doneObjectives = list || [];
+          if (onToggle) { const ng = await onToggle(o.text); if (Array.isArray(ng)) list = ng.map((g) => ({ text: g.text, met: !!g.met })); }
+          else { o.met = !o.met; }
           paint();
         },
       }, [
-        el('span', { class: 'fc-obj-mark', text: on ? '✓' : (isCurrent ? '›' : '') }),
-        el('span', { class: 'fc-obj-text', text: o }),
+        el('span', { class: 'fc-obj-mark', text: o.met ? '✓' : (isCurrent ? '›' : '') }),
+        el('span', { class: 'fc-obj-text', text: o.text }),
       ]));
     });
     box.append(allMet
       ? el('div', { class: 'fc-obj-note done', text: doneLabel || '✓ Every expectation met — mark this topic done when you end.' })
-      : el('div', { class: 'fc-obj-note', text: tierNote(minutes, load) + ' Tick each honestly as you meet it.' }));
+      : el('div', { class: 'fc-obj-note', text: (note ? note + ' ' : '') + 'Tick each honestly as you meet it.' }));
   };
   paint();
   return box;
 }
 
-// A read-only preview for the prep screen: what you're about to take on, sized to
-// the length you picked. No checkboxes — just the list and where you stand.
-export function renderPreview(item, minutes, load) {
-  const objectives = resolveObjectives(item, minutes, load);
-  if (!objectives.length) return null;
-  const met = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
-  const done = objectives.filter((o) => met.has(o)).length;
+// The intensity line for a session (exported so callers can pass it as `note`).
+export function tierLine(minutes, load) { return tierNote(minutes, load); }
+
+// A read-only preview of THIS session's goals for the prep screen.
+export function renderPreview(goals) {
+  const list = Array.isArray(goals) ? goals : [];
+  if (!list.length) return null;
+  const done = list.filter((o) => o.met).length;
   return el('div', { class: 'prep-obj' }, [
     el('div', { class: 'prep-obj-head' }, [
       el('span', { text: 'What you’ll accomplish' }),
-      done ? el('span', { class: 'prep-obj-count', text: `${done}/${objectives.length} so far` }) : null,
+      done ? el('span', { class: 'prep-obj-count', text: `${done}/${list.length} so far` }) : null,
     ]),
-    el('ul', { class: 'prep-obj-list' }, objectives.map((o) =>
-      el('li', { class: met.has(o) ? 'met' : '' }, [
-        el('span', { class: 'prep-obj-mark', text: met.has(o) ? '✓' : '○' }),
-        el('span', { text: o }),
+    el('ul', { class: 'prep-obj-list' }, list.map((o) =>
+      el('li', { class: o.met ? 'met' : '' }, [
+        el('span', { class: 'prep-obj-mark', text: o.met ? '✓' : '○' }),
+        el('span', { text: o.text }),
       ]))),
   ]);
 }
@@ -253,10 +285,12 @@ export function renderPreview(item, minutes, load) {
 // whenever — persisting immediately via onToggle. Editing the wording (add /
 // reword / remove) lives behind a secondary "Edit" toggle, so the common case
 // (logging what you accomplished) is the obvious one, not an afterthought.
-// onToggle(text) → new met-list; onSave(list, done) saves an edited list;
-// onClose fires after the sheet closes so the caller can repaint.
-export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, onClose } = {}) {
+// Operates on THIS session's goals ([{text,met}]). onToggle(text) → new goal list;
+// onSave(list, done) saves an edited list; onClose fires after close so the caller
+// can repaint. `note` is the intensity line.
+export function openObjectivesEditor({ goals, title, note, onToggle, onSave, onClose } = {}) {
   let mode = 'check';
+  const seed = (Array.isArray(goals) ? goals : []).map((g) => ({ text: g.text, met: !!g.met }));
   const body = el('div', { class: 'oe-body' });
   const controls = el('div', { class: 'oe-controls' });
 
@@ -264,9 +298,14 @@ export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, on
   // met here works exactly like it does live, and persists on tap.
   function checkView() {
     return el('div', { class: 'focus-coach oe-check-wrap' }, [
-      renderChecklist(item, {
-        minutes, load,
-        onToggle: onToggle ? (o) => onToggle(o) : undefined,
+      renderChecklist(seed, {
+        note,
+        // keep `seed` in sync so a switch to Edit mode reflects the ticks.
+        onToggle: onToggle ? async (t) => {
+          const ng = await onToggle(t);
+          if (Array.isArray(ng)) { seed.length = 0; ng.forEach((g) => seed.push({ text: g.text, met: !!g.met })); }
+          return ng;
+        } : undefined,
         doneLabel: '✓ Every expectation met — nice work.',
       }),
     ]);
@@ -274,9 +313,7 @@ export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, on
 
   // EDIT mode — add, reword, remove; Save writes the list (and its ticks) back.
   function editView() {
-    const objectives = resolveObjectives(item, minutes, load);
-    const metSet = new Set(Array.isArray(item.doneObjectives) ? item.doneObjectives : []);
-    const rows = objectives.map((text) => ({ text, met: metSet.has(text) }));
+    const rows = seed.map((g) => ({ text: g.text, met: g.met }));
     const list = el('div', { class: 'oe-list' });
     const rowNode = (row) => {
       const check = el('button', {
@@ -316,7 +353,8 @@ export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, on
       controls.append(
         el('button', { class: 'btn btn-primary btn-block oe-save', type: 'button', text: 'Save', onclick: () => {
           const { list, done } = editView._collect();
-          item.objectives = list; item.doneObjectives = done; // reflect locally so check mode is fresh
+          // reflect locally so check mode is fresh
+          seed.length = 0; list.forEach((t) => seed.push({ text: t, met: done.includes(t) }));
           if (onSave) onSave(list, done);
           mode = 'check'; render();
         } }),
@@ -330,7 +368,7 @@ export function openObjectivesEditor({ item, minutes, load, onToggle, onSave, on
       el('div', { class: 'lc-title', text: 'What you met' }),
       el('button', { class: 'lc-close', type: 'button', 'aria-label': 'Close', text: '✕', onclick: () => close() }),
     ]),
-    el('p', { class: 'oe-sub', text: item.title }),
+    el('p', { class: 'oe-sub', text: title || '' }),
     body,
     controls,
   ]);
