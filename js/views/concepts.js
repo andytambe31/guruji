@@ -4,7 +4,10 @@
 // This closes the gap where Drills used to presume you'd studied everything.
 import { el, clear } from '../util.js';
 import { CONCEPTS, drillsForConcept } from './drills.js';
+import { NUGGET_BANK, conceptOfNugget } from './nuggets.js';
 import { getStudiedConcepts, toggleStudiedConcept, computeDeck } from '../store.js';
+
+const nuggetsForConcept = (id) => NUGGET_BANK().filter((n) => conceptOfNugget(n) === id).length;
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
 
@@ -20,11 +23,12 @@ export async function renderConcepts(mount, { navigate }) {
   const wrap = el('div', { class: 'concepts-wrap' });
   mount.append(wrap);
 
-  // Total drills currently unlocked (studied concepts + solved problems).
-  const unlockedCount = () => CONCEPTS.reduce((n, c) => {
-    if (studied[c.id]) return n + drillsForConcept(c.id).length;
-    return n + solvedInConcept(c.id);
-  }, 0);
+  // What's unlocked right now (studied concepts + LeetCode-solved drills).
+  const unlockedCounts = () => CONCEPTS.reduce((acc, c) => {
+    acc.drills += studied[c.id] ? drillsForConcept(c.id).length : solvedInConcept(c.id);
+    acc.nuggets += studied[c.id] ? nuggetsForConcept(c.id) : 0;
+    return acc;
+  }, { drills: 0, nuggets: 0 });
 
   const byArea = new Map();
   for (const c of CONCEPTS) { if (!byArea.has(c.area)) byArea.set(c.area, []); byArea.get(c.area).push(c); }
@@ -32,10 +36,11 @@ export async function renderConcepts(mount, { navigate }) {
   const footer = el('div', { class: 'con-footer' });
   function paintFooter() {
     clear(footer);
-    const n = unlockedCount();
+    const { drills, nuggets } = unlockedCounts();
     footer.append(
-      el('button', { class: 'btn btn-primary btn-block', text: n ? `Start drilling — ${n} unlocked` : 'Start drilling', onclick: () => navigate('/drills') }),
-      el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px', text: 'Back', onclick: () => navigate('/now') }),
+      el('p', { class: 'con-summary', text: `${drills} drill${drills === 1 ? '' : 's'} · ${nuggets} nugget${nuggets === 1 ? '' : 's'} unlocked` }),
+      el('button', { class: 'btn btn-primary btn-block', text: 'Start drilling', onclick: () => navigate('/drills') }),
+      el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px', text: 'Browse nuggets', onclick: () => navigate('/nuggets') }),
     );
   }
 
@@ -45,9 +50,13 @@ export async function renderConcepts(mount, { navigate }) {
     const on = () => !!studied[c.id];
     const check = el('button', { class: 'con-check' + (on() ? ' on' : ''), type: 'button', 'aria-label': 'Mark studied', text: on() ? '✓' : '' });
     const meta = el('div', { class: 'con-meta' });
+    const nuggets = nuggetsForConcept(c.id);
     const paintMeta = () => {
       clear(meta);
-      const bits = [`${drills.length} drill${drills.length === 1 ? '' : 's'}`];
+      const bits = [];
+      if (drills.length) bits.push(`${drills.length} drill${drills.length === 1 ? '' : 's'}`);
+      if (nuggets) bits.push(`${nuggets} nugget${nuggets === 1 ? '' : 's'}`);
+      if (!bits.length) bits.push('coming soon');
       if (!on() && solved) bits.push(`${solved} unlocked from LeetCode`);
       meta.append(el('span', { text: bits.join(' · ') }));
     };

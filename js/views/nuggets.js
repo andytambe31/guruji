@@ -3,13 +3,29 @@
 // design insights, CS-fundamentals facts, behavioral cues. Unlike the drills or a
 // focus session, there's nothing to solve — you just swipe through and absorb.
 //
-// It's relevance-gated: the coach only surfaces nuggets for the areas (and, within
-// CS fundamentals, the sub-topics) you're actually on THIS week, drawn from your
-// plan's current phase — so you're reinforcing what matters now, not getting
-// bombarded with operating-systems trivia while you're deep in databases. Swipe
-// right on the ones you've got (they fade back), left to keep one coming around.
+// It's concept-gated, exactly like Drills: nuggets only surface for the concepts
+// you've marked as studied in the catalog — so you reinforce what you've actually
+// covered, not operating-systems trivia you haven't touched. Swipe right on the
+// ones you've got (they fade back), left to keep one coming around.
 import { el, clear, todayISO } from '../util.js';
-import { getNuggetState, setNuggetState, computeRoadmap, computeDeck, getItems } from '../store.js';
+import { getNuggetState, setNuggetState, computeDeck, getStudiedConcepts } from '../store.js';
+
+// Which catalog concept each nugget belongs to — the Nuggets deck gates on the
+// same "studied concepts" list as Drills, so you only get bite-sized knowledge for
+// what you've actually marked as covered. DSA/CS nuggets map by id; System-Design
+// and Behavioral nuggets fall back to their area's concept.
+const NUGGET_CONCEPT = {
+  'dsa-tp-vs-sw': 'two-pointers', 'dsa-bsearch-mid': 'binary-search', 'dsa-hash-twosum': 'arrays-hashing',
+  'dsa-kadane': 'dynamic-programming', 'dsa-prefix-k': 'prefix-sum', 'dsa-fast-slow': 'linked-list',
+  'dsa-mono-stack': 'stack', 'dsa-sort-first': 'greedy', 'dsa-dfs-bfs': 'trees', 'dsa-heap-topk': 'heap', 'dsa-dp-ladder': 'dynamic-programming',
+  'cs-index-btree': 'databases', 'cs-n-plus-1': 'databases', 'cs-acid': 'databases', 'cs-isolation': 'databases', 'cs-mvcc': 'databases', 'cs-denormalize': 'databases', 'cs-explain': 'databases',
+  'cs-idempotent': 'networking', 'cs-status-codes': 'networking', 'cs-tls': 'networking',
+  'cs-proc-thread': 'concurrency', 'cs-deadlock': 'concurrency', 'cs-mutex-sema': 'concurrency', 'cs-async-io': 'concurrency',
+  'cs-password': 'security', 'cs-jwt-session': 'security', 'cs-csrf-xss': 'security',
+};
+export const conceptOfNugget = (n) => NUGGET_CONCEPT[n.id]
+  || (n.area === 'System Design' ? 'system-design' : n.area === 'Behavioral' ? 'behavioral' : null);
+export const NUGGET_BANK = () => NUGGETS;
 
 // Authored refreshers reused as nuggets for the material you've personally studied
 // (concepts you've rated, patterns you've practiced) — repetition of your own work,
@@ -95,44 +111,22 @@ const AREA_CLASS = (a) => 'a-' + String(a || '').replace(/[^a-z0-9]+/gi, '-');
 
 export async function renderNuggets(mount, { arg, navigate }) {
   const scope = arg ? decodeURIComponent(arg) : null; // optional area filter (commute)
-  const [stateRaw, road, deck, items] = await Promise.all([
-    getNuggetState(), computeRoadmap().catch(() => null), computeDeck().catch(() => ({ concepts: [], patterns: [] })), getItems().catch(() => []),
+  const [stateRaw, deck, studied] = await Promise.all([
+    getNuggetState(), computeDeck().catch(() => ({ concepts: [], patterns: [] })), getStudiedConcepts(),
   ]);
   const state = { ...(stateRaw || {}) };
 
-  // ---- Relevance: what am I on THIS week? ----
-  // Areas from the plan's current phase (fallback: areas of everything still to do).
-  const phase = road && road.currentPhase ? road.currentPhase : null;
-  const phaseAreas = phase && phase.areas && phase.areas.length ? phase.areas : null;
-  const todoAreas = [...new Set(items.filter((i) => i.status === 'todo').map((i) => i.area).filter(Boolean))];
-  let focusAreas = new Set(phaseAreas || todoAreas);
-  if (scope) focusAreas = new Set([scope]); // commute scope: just this area
-  // A topic corpus for gating the broad CS-fundamentals area to its current sub-
-  // domain: this phase's name + the titles of its (or all to-do) topics.
-  const phaseItems = phase ? items.filter((i) => i.phase === phase.id) : items.filter((i) => i.status === 'todo');
-  const corpus = `${phase ? phase.name : ''} ${phaseItems.map((i) => i.title || '').join(' ')}`.toLowerCase();
+  const wrap = el('div', { class: 'revise-wrap nuggets-wrap' });
+  mount.append(wrap);
+  const exit = () => navigate(scope ? '/day' : '/now');
 
-  // Whether a nugget's topics show up in this week's corpus — matched as whole
-  // words (with an optional plural), so "hash" doesn't fire on "hashing" and
-  // "number" doesn't fire on "numbers". Escapes regex metacharacters in the topic.
-  const corpusMatch = (n) => n.topics.some((t) => {
-    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`\\b${esc}s?\\b`).test(corpus);
-  });
-  // A focused area (DSA, System Design, …) brings in all its nuggets. CS
-  // Fundamentals is a cross-domain grab-bag — databases, networking, OS, security —
-  // so it's gated to corpus matches only: you get databases when this week reads SQL
-  // vs NoSQL (even though the plan files that under System Design), without being
-  // buried in operating-systems trivia you're not on.
-  const inScope = (n) => {
-    if (n.area === 'CS Fundamentals') return corpusMatch(n);
-    return focusAreas.has(n.area);
-  };
-
-  // Build the deck: relevant authored nuggets + your own studied material (concepts
-  // you've rated, patterns you've practiced) as repetition — your reps are always
-  // relevant, since you only logged what you actually studied.
+  // Gate on the same "studied concepts" catalog as Drills — a nugget only shows
+  // once you've marked its concept as covered. A scoped commute deck
+  // (/nuggets/:area) ignores the gate for that one area, since you opened it.
+  const inScope = (n) => scope ? n.area === scope : !!studied[conceptOfNugget(n)];
   const cards = NUGGETS.filter(inScope).map((n) => ({ id: n.id, area: n.area, front: n.front, body: n.body }));
+  // Your own studied material rides along as repetition — you only logged what you
+  // actually studied, so it's always fair game.
   for (const c of (deck.concepts || [])) {
     const body = CONCEPT_REFRESHER[c.concept];
     if (body) cards.push({ id: 'concept:' + c.concept, area: 'CS Fundamentals', front: c.concept, body, mine: true });
@@ -145,8 +139,17 @@ export async function renderNuggets(mount, { arg, navigate }) {
   const seenIds = new Set();
   let deckCards = cards.filter((c) => (seenIds.has(c.id) ? false : (seenIds.add(c.id), true)));
 
-  // Fallback: if the week's focus surfaced nothing (no plan yet), show everything.
-  if (!deckCards.length) deckCards = NUGGETS.map((n) => ({ id: n.id, area: n.area, front: n.front, body: n.body }));
+  // Nothing unlocked → point at the concept catalog (same gate as Drills).
+  if (!deckCards.length) {
+    wrap.append(el('div', { class: 'center-state' }, [
+      el('p', { class: 'eyebrow', text: 'Nuggets' }),
+      el('h1', { text: 'Mark what you’ve studied.' }),
+      el('p', { class: 'muted', text: 'Nuggets show for the concepts you’ve marked as covered — tick them off and the bite-sized cards for those topics appear here.' }),
+      el('button', { class: 'btn btn-primary', style: 'margin-top:16px', text: 'Choose concepts', onclick: () => navigate('/concepts') }),
+      el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px;max-width:320px', text: 'Back', onclick: exit }),
+    ]));
+    return;
+  }
 
   // Order: ones you asked to keep seeing ('again') first, then never-seen, then the
   // ones you've got. Ties break by least-recently-seen so nothing goes stale.
@@ -157,15 +160,11 @@ export async function renderNuggets(mount, { arg, navigate }) {
   };
   deckCards.sort((a, b) => pri(a) - pri(b) || (String(state[a.id]?.at || '') < String(state[b.id]?.at || '') ? -1 : 1));
 
-  const wrap = el('div', { class: 'revise-wrap nuggets-wrap' });
-  mount.append(wrap);
-  const exit = () => navigate(scope ? '/day' : '/now');
-
   // ---- session state ----
   let idx = 0;
   let got = 0; let again = 0;
 
-  const focusLabel = scope || (phaseAreas ? phaseAreas.join(', ') : [...focusAreas].join(', '));
+  const focusLabel = scope || [...new Set(deckCards.map((c) => c.area))].join(', ');
   const head = el('div', { class: 'revise-head' });
   const stack = el('div', { class: 'revise-stack' });
   const acts = el('div', { class: 'revise-acts' });

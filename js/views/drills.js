@@ -940,6 +940,13 @@ export const CONCEPTS = [
   { id: 'dynamic-programming', name: 'Dynamic Programming', area: 'DSA', patterns: ['Dynamic programming'] },
   { id: 'greedy', name: 'Greedy & Intervals', area: 'DSA', patterns: ['Greedy', 'Intervals'] },
   { id: 'heap', name: 'Heap / Top-K', area: 'DSA', patterns: ['Heap / Top-K'] },
+  // No drills yet — these gate the Nuggets deck (mapped from nugget topics).
+  { id: 'databases', name: 'Databases & SQL', area: 'CS Fundamentals', patterns: [] },
+  { id: 'networking', name: 'Networking & HTTP', area: 'CS Fundamentals', patterns: [] },
+  { id: 'concurrency', name: 'OS & Concurrency', area: 'CS Fundamentals', patterns: [] },
+  { id: 'security', name: 'Security & Auth', area: 'CS Fundamentals', patterns: [] },
+  { id: 'system-design', name: 'System Design', area: 'System Design', patterns: [] },
+  { id: 'behavioral', name: 'Behavioral', area: 'Behavioral', patterns: [] },
 ];
 const PATTERN_CONCEPT = new Map();
 for (const c of CONCEPTS) for (const p of c.patterns) PATTERN_CONCEPT.set(p, c.id);
