@@ -179,7 +179,7 @@ export async function renderNow(mount, { navigate }) {
       el('span', { class: 'now-sep', text: '·' }),
       el('button', { class: 'secondary-link', text: 'Schedule', onclick: () => navigate('/day') }),
       el('span', { class: 'now-sep', text: '·' }),
-      el('button', { class: 'secondary-link', text: 'Revise', onclick: () => navigate('/revise') }),
+      el('button', { class: 'secondary-link', text: 'Nuggets', onclick: () => navigate('/nuggets') }),
       el('span', { class: 'now-sep', text: '·' }),
       el('button', { class: 'secondary-link', text: 'Drills', onclick: () => navigate('/drills') }),
       el('span', { class: 'now-sep', text: '·' }),

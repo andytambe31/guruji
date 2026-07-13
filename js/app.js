@@ -11,7 +11,7 @@ import { renderReading } from './views/reading.js';
 import { renderData } from './views/data.js';
 import { renderProgress } from './views/progress.js';
 import { renderRoadmap } from './views/roadmap.js';
-import { renderRevise } from './views/revise.js';
+import { renderNuggets } from './views/nuggets.js';
 import { renderDrills } from './views/drills.js';
 
 const viewEl = () => document.getElementById('view');
@@ -28,7 +28,8 @@ const ROUTES = {
   focus: renderFocus,
   progress: renderProgress,
   roadmap: renderRoadmap,
-  revise: renderRevise,
+  nuggets: renderNuggets,
+  revise: renderNuggets, // legacy alias — Revise became Nuggets
   drills: renderDrills,
 };
 

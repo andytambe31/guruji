@@ -952,6 +952,17 @@ export async function setReviseState(v) {
   return put(STORES.kv, { k: 'reviseState', v: v || {} });
 }
 
+// ---- Nuggets spaced-rep memory ----
+// Per-nugget record { conf: 'got'|'again', at, seen } so ones you want to keep
+// seeing resurface first. Keyed by nugget id.
+export async function getNuggetState() {
+  const rec = await get(STORES.kv, 'nuggetState');
+  return rec ? rec.v : {};
+}
+export async function setNuggetState(v) {
+  return put(STORES.kv, { k: 'nuggetState', v: v || {} });
+}
+
 // ---- Drills spaced-rep memory ----
 // Per-drill record { conf: 'got'|'missed', at, seen } so missed fill-in-the-blank
 // cards resurface first next time. Keyed by drill id.

@@ -1150,6 +1150,17 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .revise-done-mark { width: 54px; height: 54px; border-radius: 50%; background: rgba(15,157,107,.12); color: var(--ok, #0f9d6b); font-size: 26px; font-weight: 800; display: flex; align-items: center; justify-content: center; margin-bottom: 14px; }
 .revise-done h2 { font-size: 21px; font-weight: 650; letter-spacing: -.01em; margin: 0 0 6px; }
 
+/* ---------- Nuggets — bite-sized knowledge cards ---------- */
+/* Reuse the revise card frame; the info shows directly (no flip). */
+.nug-card .revise-card-inner { justify-content: flex-start; }
+.nug-front { font-size: 22px; font-weight: 660; letter-spacing: -.02em; line-height: 1.22; color: var(--text); margin-top: 4px; }
+.nug-body { font-size: 15.5px; color: var(--text-dim); line-height: 1.6; margin-top: 14px; }
+.nug-card .revise-kind { color: var(--desk, #3b5bd9); }
+.nug-card.a-DSA .revise-kind { color: var(--transit, #0f9d6b); }
+.nug-card.a-System-Design .revise-kind { color: var(--desk, #3b5bd9); }
+.nug-card.a-CS-Fundamentals .revise-kind { color: #7d5bd6; }
+.nug-card.a-Behavioral .revise-kind { color: var(--wind, #d98324); }
+
 /* ---------- Drills — fill-in-the-blank MCQ cards ---------- */
 /* Reuses the revise card frame; the card is static (no swipe), so grab/pan and
    the peek are dropped and it grows with its content. */
