@@ -1158,10 +1158,22 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
   transition: none; display: block;
 }
 .drill-stack { margin: 8px 0 18px; }
+.drill-lead { font-size: 12.5px; color: var(--text-dim); line-height: 1.5; margin: 10px 0 2px; }
+.drill-kindrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.drill-kindrow .revise-kind { margin-bottom: 0; }
 .drill-card .revise-kind { color: var(--desk, #3b5bd9); }
 .drill-card.p-Two-pointers .revise-kind { color: var(--transit, #0f9d6b); }
-.drill-card.p-Frequency-map .revise-kind { color: #7d5bd6; }
-.drill-card.p-Arrays .revise-kind { color: var(--wind, #d98324); }
+.drill-card.p-Hashing .revise-kind { color: #7d5bd6; }
+.drill-card.p-Sliding-window .revise-kind { color: var(--desk, #3b5bd9); }
+.drill-card.p-Prefix-sum .revise-kind { color: var(--wind, #d98324); }
+.drill-card.p-Binary-search .revise-kind { color: #0e8a9c; }
+.drill-card.p-Stack-Monotonic-stack .revise-kind { color: #b5561f; }
+.drill-card.p-Dynamic-programming .revise-kind { color: #c2483d; }
+.drill-practiced {
+  font-size: 10px; letter-spacing: .04em; text-transform: uppercase; font-weight: 700;
+  color: var(--ok, #0f9d6b); background: rgba(15,157,107,.12);
+  padding: 3px 8px; border-radius: 999px;
+}
 .drill-title { font-size: 21px; font-weight: 660; letter-spacing: -.02em; line-height: 1.2; color: var(--text); }
 .drill-prompt { font-size: 14.5px; color: var(--text-dim); line-height: 1.5; margin-top: 8px; }
 .drill-code {
