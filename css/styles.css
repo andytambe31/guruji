@@ -1132,7 +1132,7 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .revise-card.flipped .revise-back { display: block; }
 .revise-card.flipped .revise-prompt { opacity: .4; }
 .revise-back-lbl { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 6px; }
-.revise-back-text { font-size: 15px; color: var(--text); line-height: 1.55; }
+.revise-back-text { font-size: 15px; color: var(--text); line-height: 1.55; white-space: pre-line; }
 /* swipe intent hints */
 .revise-card.hint-yes { border-color: var(--ok, #0f9d6b); box-shadow: 0 12px 40px rgba(15,157,107,.18); }
 .revise-card.hint-no { border-color: var(--wind, #d98324); box-shadow: 0 12px 40px rgba(217,131,36,.18); }

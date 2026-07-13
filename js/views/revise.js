@@ -27,6 +27,43 @@ const PATTERN_REFRESHER = {
   'Math': 'Look for patterns, modular arithmetic, GCD, counting. Watch overflow and the edge values.',
   'Other': 'Recall the core idea and the trick that made it click.',
 };
+// Authored, interview-ready refreshers for the CS Fundamentals concepts — the
+// "right words" to recall on the back of a concept card. You quiz yourself on the
+// front, flip, and check your phrasing against this. Keys match the concept names
+// exactly (as rated in the coach's concept wizard).
+const CONCEPT_REFRESHER = {
+  'The relational model (PK/FK, referential integrity)': 'Data lives in tables of typed rows. A primary key uniquely identifies a row; a foreign key points at another table’s primary key. The database enforces referential integrity — you can’t reference a row that doesn’t exist.',
+  'Normalization & when to denormalize': 'Normalize so every fact lives in exactly one place — no duplication to drift out of sync (1NF atomic, 2NF/3NF no partial/transitive dependencies). Denormalize deliberately — duplicate data to skip expensive joins — when reads dominate and the join is the proven bottleneck, accepting you must keep the copies in sync.',
+  'JOINs + GROUP BY / HAVING': 'INNER keeps matches; LEFT keeps all left rows with NULLs for misses (find “no match” with LEFT JOIN … WHERE right IS NULL). GROUP BY collapses rows into groups; WHERE filters rows before grouping, HAVING filters groups after.',
+  'SQL logical clause order': 'FROM/JOIN → WHERE → GROUP BY → HAVING → SELECT → ORDER BY → LIMIT. That’s why a SELECT alias can’t be used in WHERE (it runs first) but can in ORDER BY.',
+  'CTEs, window functions & EXPLAIN': 'CTEs (WITH) name intermediate results for readable multi-step queries. Window functions (ROW_NUMBER/RANK/SUM OVER PARTITION BY) rank or run totals without collapsing rows — top-N-per-group, running totals. EXPLAIN shows the plan: index seek vs full scan.',
+  'Transactions & ACID': 'A transaction is all-or-nothing. Atomic (all or none), Consistent (constraints hold), Isolated (concurrent txns don’t corrupt each other), Durable (a commit survives a crash).',
+  'The three anomalies (dirty / non-repeatable / phantom)': 'Dirty read: you read another txn’s uncommitted change. Non-repeatable read: you re-read a row and its value changed. Phantom: you re-run a query and new rows appear. Higher isolation prevents more of these.',
+  'The four isolation levels & the tradeoff': 'Read Uncommitted → Read Committed → Repeatable Read → Serializable. Each prevents more anomalies (dirty → non-repeatable → phantom) but costs concurrency. Most databases default to Read Committed.',
+  'Locking vs MVCC': 'Locking blocks conflicting access, so readers can block writers. MVCC (multi-version) gives each txn a consistent snapshot so readers never block writers — Postgres’s model — trading version storage/vacuum for concurrency.',
+  'Why distributed transactions (2PC) are avoided': 'Two-phase commit (prepare, then commit) blocks every participant on the coordinator — one slow or dead node stalls all of them, and it doesn’t scale. Prefer sagas / idempotent steps / eventual consistency.',
+  'What an ORM is & why': 'An ORM maps rows to objects so you write app code, not SQL — less boilerplate, parameterized (safer), portable. The cost: it hides the queries it generates, so you must watch what it actually runs.',
+  'The N+1 query problem': 'You fetch N parents, then fire one query per parent for its children — N+1 round trips. Fix by loading the children in one query (a JOIN or an IN).',
+  'Eager vs lazy loading (the fix)': 'Lazy loads a relation only when accessed (convenient, causes N+1). Eager loads it upfront in one query (JOIN/IN). Reach for eager when you know you’ll need the children.',
+  'Connection pooling & migrations': 'A connection pool reuses a fixed set of DB connections instead of opening one per request — opening is costly and connections are limited. Migrations are versioned, ordered schema changes in source control, applied in sequence.',
+  'When to drop to raw SQL': 'When the ORM can’t express it or generates a bad plan — complex reporting, window functions, bulk operations, or a hot path you must hand-tune. Measure with EXPLAIN, then drop down.',
+  'HTTP methods + safe / idempotent': 'GET read, POST create, PUT replace, PATCH partial, DELETE. Safe = no side effects (GET). Idempotent = repeating gives the same result (GET/PUT/DELETE yes, POST no).',
+  'Status-code families (2xx/3xx/4xx/5xx)': '2xx success, 3xx redirect, 4xx client error (your request is wrong — 400/401/403/404/429), 5xx server error (the server failed — 500/503). It’s the server telling you whose fault it is.',
+  'Idempotency keys (retry-safe POST)': 'POST isn’t idempotent, so a retry can double-charge. The client sends a unique idempotency key; the server records it and returns the first result for any retry carrying that key.',
+  'REST conventions': 'Resources as nouns (/users/123), HTTP verbs for actions, statelessness (each request self-contained), status codes for outcome. Plural nouns, nesting for relationships.',
+  'HTTPS / TLS': 'TLS encrypts the connection and authenticates the server via a CA-signed certificate. The handshake uses asymmetric keys to agree a symmetric session key — giving confidentiality, integrity, and server identity.',
+  'Authn vs authz': 'Authentication = who you are (login). Authorization = what you’re allowed to do (permissions). Authenticate first, then authorize.',
+  'Password storage (salted slow hash)': 'Never store or reversibly encrypt passwords. Store a slow, salted hash — bcrypt/scrypt/Argon2. A unique salt per user defeats rainbow tables; the slowness defeats brute force.',
+  'Sessions vs JWT tradeoff': 'Session: server holds state, client holds an opaque id — easy to revoke, needs a store. JWT: self-contained signed token — stateless and scalable, but hard to revoke before expiry. Choose by revocation needs vs scale.',
+  'OAuth2 / OIDC (delegated auth)': 'OAuth2 delegates scoped access — you grant an app a token without sharing your password. OIDC adds an identity layer (an ID token) for “log in with Google”. Use the authorization-code flow for web apps.',
+  'CSRF & XSS mitigations': 'XSS: attacker runs script in your page — escape output, use a CSP. CSRF: attacker rides your logged-in cookie — use CSRF tokens or SameSite cookies. XSS is untrusted content; CSRF is unwanted requests.',
+  'Process vs thread': 'A process has its own memory; threads share the process’s memory. Threads are cheaper to spawn and to communicate, but shared memory means you must synchronize.',
+  'Concurrency vs parallelism': 'Concurrency = dealing with many things at once (structure/interleaving). Parallelism = doing many at once (multiple cores). You can be concurrent on a single core.',
+  'Race conditions & critical sections': 'A race condition: the outcome depends on unlucky timing of threads touching shared state. The critical section is the code that must run atomically — guard it so only one thread is inside at a time.',
+  'Locks / mutexes / semaphores': 'A mutex allows one holder at a time (mutual exclusion). A semaphore allows up to N (a counter) — for pools/rate limits. Hold locks briefly and acquire them in a consistent order.',
+  'Deadlock (4 conditions) + lock ordering': 'Deadlock needs all four: mutual exclusion, hold-and-wait, no preemption, circular wait. Break any one — the usual fix is a global lock ordering to kill circular wait (or timeouts).',
+  'Async vs threads (I/O- vs CPU-bound)': 'I/O-bound work (network, disk) → async/event loop: one thread cheaply juggles many waits. CPU-bound work → real threads/processes across cores. Async doesn’t speed up CPU-bound work.',
+};
 const CONF_LABEL = { solid: 'was solid', shaky: 'was shaky', noyet: 'not yet' };
 
 export async function renderRevise(mount, { arg, navigate }) {
@@ -38,10 +75,14 @@ export async function renderRevise(mount, { arg, navigate }) {
     const cards = [];
     const wantConcepts = !scoped || scoped === 'CS Fundamentals';
     const wantDSA = !scoped || scoped === 'DSA';
-    if (wantConcepts) for (const c of deck.concepts) cards.push({ kind: 'concept', key: 'concept:' + c.concept, front: c.concept, sub: c.topic, conf: c.confidence, prompt: 'Explain it in your own words — out loud.', back: null });
+    if (wantConcepts) for (const c of deck.concepts) cards.push({ kind: 'concept', key: 'concept:' + c.concept, front: c.concept, sub: c.topic, conf: c.confidence, prompt: 'Say it out loud — then flip to check your phrasing.', back: CONCEPT_REFRESHER[c.concept] || null });
     if (wantDSA) {
       for (const p of deck.patterns) cards.push({ kind: 'pattern', key: 'pattern:' + p.pattern, front: p.pattern, sub: 'DSA pattern', prompt: 'When do you reach for it? What’s the template?', back: PATTERN_REFRESHER[p.pattern] || 'Recall the core idea.' });
-      for (const pr of deck.problems) cards.push({ kind: 'problem', key: 'lc:' + (pr.slug || pr.front), front: pr.title || pr.slug || 'problem', sub: [pr.difficulty, pr.pattern].filter(Boolean).join(' · '), prompt: 'What was the key insight?', back: pr.note ? '“' + pr.note + '”' : (pr.pattern ? 'Pattern: ' + pr.pattern : 'Recall your approach.') });
+      for (const pr of deck.problems) {
+        const patternHint = pr.pattern ? `Pattern: ${pr.pattern}. ${PATTERN_REFRESHER[pr.pattern] || ''}`.trim() : 'Recall the approach and its Big-O.';
+        const back = pr.note ? `Your note: “${pr.note}”\n${patternHint}` : patternHint;
+        cards.push({ kind: 'problem', key: 'lc:' + (pr.slug || pr.front), front: pr.title || pr.slug || 'problem', sub: [pr.difficulty, pr.pattern].filter(Boolean).join(' · '), prompt: 'What was the key insight?', back });
+      }
     }
     return cards;
   };
