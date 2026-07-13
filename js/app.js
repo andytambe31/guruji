@@ -1,6 +1,6 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
 import { clear, el, toast } from './util.js';
-import { getActiveSession, clearActiveSession } from './store.js';
+import { getActiveSession, clearActiveSession, runStartupMigrations } from './store.js';
 import { exportCanonical } from './importexport.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
@@ -141,6 +141,11 @@ async function boot() {
   if (navigator.storage && navigator.storage.persist) {
     navigator.storage.persist().catch(() => {});
   }
+
+  // Run any one-time data migrations before the first render so views paint
+  // against the cleaned-up state (e.g. the fresh-start purge of pre-launch
+  // tracking data). Non-fatal — swallows its own errors.
+  await runStartupMigrations();
 
   // Resume an in-progress focus session so an accidental close drops you right
   // back into it (the timer is wall-clock accurate). Set the hash before the

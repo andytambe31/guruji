@@ -93,6 +93,33 @@ export async function setMeta(meta) {
   return put(STORES.kv, { k: 'meta', v: meta || {} });
 }
 
+// ---------- One-time startup migrations ----------
+// Guruji was a work-in-progress for a long stretch, and the tracking stores
+// accumulated throwaway data from that build-out. Treat 2026-07-13 — the first
+// day of real study — as day one: purge every dated activity (logged sessions,
+// planned blocks, commitments) from before it, so the streak, hours logged and
+// plan adherence all start clean from today. Runs exactly once per device,
+// gated by a kv flag; today's and future records are left untouched. The plan
+// itself (phases, items, notes) is content, not tracking, so it's never touched.
+const FRESH_START_CUTOFF = '2026-07-13';
+export async function runStartupMigrations() {
+  const flagKey = 'migration:fresh-start-2026-07-13';
+  try {
+    const done = await get(STORES.kv, flagKey);
+    if (done && done.v) return { ran: false };
+    let removed = 0;
+    for (const store of [STORES.log, STORES.schedule]) {
+      const all = await getAll(store);
+      const stale = all.filter((r) => typeof r.date === 'string' && r.date < FRESH_START_CUTOFF);
+      for (const r of stale) { await del(store, r.id); removed += 1; }
+    }
+    await put(STORES.kv, { k: flagKey, v: true });
+    return { ran: true, removed };
+  } catch {
+    return { ran: false };
+  }
+}
+
 // ---------- Cognitive-load context (office / commute / …) ----------
 export async function getContext() {
   const rec = await get(STORES.kv, 'context');
