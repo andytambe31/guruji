@@ -974,6 +974,23 @@ export async function setDrillState(v) {
   return put(STORES.kv, { k: 'drillState', v: v || {} });
 }
 
+// ---- Studied concepts (the Drills catalog gate) ----
+// You tell the app which concepts you've actually studied; drills for a concept
+// only unlock once it's marked. { [conceptId]: true }.
+export async function getStudiedConcepts() {
+  const rec = await get(STORES.kv, 'studiedConcepts');
+  return rec ? rec.v : {};
+}
+export async function setStudiedConcepts(v) {
+  return put(STORES.kv, { k: 'studiedConcepts', v: v || {} });
+}
+export async function toggleStudiedConcept(id) {
+  const cur = await getStudiedConcepts();
+  if (cur[id]) delete cur[id]; else cur[id] = true;
+  await setStudiedConcepts(cur);
+  return cur;
+}
+
 // ---- "How did I do?" — a single day score ----
 // Rolls a day's real activity into one number: did you put in the study time,
 // meet your session goals, do your LeetCode, read, clear your commitments, and

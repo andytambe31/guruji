@@ -5,7 +5,7 @@
 // like Revise, but multiple-choice — no swiping. Missed cards resurface first
 // (spaced-rep memory), so the ones you don't understand come back around.
 import { el, clear, todayISO } from '../util.js';
-import { getDrillState, setDrillState, computeDeck } from '../store.js';
+import { getDrillState, setDrillState, computeDeck, getStudiedConcepts } from '../store.js';
 
 // The blank marker embedded in each snippet — replaced by the chosen fragment.
 const BLANK = '▢';
@@ -447,7 +447,505 @@ const DRILLS = [
     answer: 0,
     why: 'Each stacked index is still hunting for its next-greater value. When n beats the top, n is that value — assign it and pop in one move. Not popping (`stack[-1]`) loops forever; `res[i] = …` fills the wrong slot.',
   },
+  // ---------- More Arrays & Hashing ----------
+  {
+    id: 'group-anagrams', title: 'Group Anagrams', pattern: 'Hashing', difficulty: 'Medium',
+    prompt: 'Group the strings that are anagrams of each other.',
+    code: `def group_anagrams(strs):
+    groups = {}
+    for s in strs:
+        key = ${BLANK}
+        groups.setdefault(key, []).append(s)
+    return list(groups.values())`,
+    choices: ['tuple(sorted(s))', 'sorted(s)', 's', 'hash(s)'],
+    answer: 0,
+    why: 'Anagrams share the same letters, so their sorted form is identical — that’s the group key. It must be hashable to index a dict, and a list isn’t; a tuple is.',
+  },
+  {
+    id: 'longest-consecutive', title: 'Longest Consecutive Sequence', pattern: 'Hashing', difficulty: 'Medium',
+    prompt: 'Return the length of the longest run of consecutive integers, in O(n).',
+    code: `def longest_consecutive(nums):
+    num_set = set(nums)
+    best = 0
+    for n in num_set:
+        if ${BLANK}:
+            length = 1
+            while n + length in num_set:
+                length += 1
+            best = max(best, length)
+    return best`,
+    choices: ['n - 1 not in num_set', 'n + 1 in num_set', 'n - 1 in num_set', 'n not in num_set'],
+    answer: 0,
+    why: 'Only start counting from the start of a run — a number with no predecessor in the set. That walks each sequence exactly once, keeping it O(n) instead of O(n²).',
+  },
+  {
+    id: 'ransom-note', title: 'Ransom Note', pattern: 'Hashing', difficulty: 'Easy',
+    prompt: 'Can the note be built from the magazine’s letters (each used once)?',
+    code: `def can_construct(note, magazine):
+    from collections import Counter
+    have = Counter(magazine)
+    for c in note:
+        if have[c] <= 0:
+            return False
+        ${BLANK}
+    return True`,
+    choices: ['have[c] -= 1', 'have[c] += 1', 'del have[c]', 'have[c] = 0'],
+    answer: 0,
+    why: 'Each magazine letter is usable once. Decrement as you consume it; if a needed letter is already exhausted (≤ 0), the note can’t be built.',
+  },
+  // ---------- More Two Pointers ----------
+  {
+    id: 'three-sum', title: '3Sum', pattern: 'Two pointers', difficulty: 'Medium',
+    prompt: 'Return all unique triplets that sum to zero.',
+    code: `def three_sum(nums):
+    nums.sort()
+    res = []
+    for i in range(len(nums)):
+        if i > 0 and nums[i] == nums[i-1]:
+            continue
+        lo, hi = i + 1, len(nums) - 1
+        while lo < hi:
+            s = nums[i] + nums[lo] + nums[hi]
+            if s < 0:   lo += 1
+            elif s > 0: hi -= 1
+            else:
+                res.append([nums[i], nums[lo], nums[hi]])
+                lo += 1
+                ${BLANK}
+    return res`,
+    choices: ['while lo < hi and nums[lo] == nums[lo - 1]: lo += 1', 'hi -= 1', 'lo += 1', 'while lo < hi and nums[lo] != nums[lo - 1]: lo += 1'],
+    answer: 0,
+    why: 'After recording a triplet, skip past duplicate left values so the same triplet isn’t emitted twice. Sorting first is what makes duplicates adjacent and this skip work.',
+  },
+  {
+    id: 'trapping-rain', title: 'Trapping Rain Water', pattern: 'Two pointers', difficulty: 'Hard',
+    prompt: 'Each value is a bar height. How much water is trapped between them?',
+    code: `def trap(height):
+    left, right = 0, len(height) - 1
+    lmax = rmax = water = 0
+    while left < right:
+        if height[left] < height[right]:
+            lmax = max(lmax, height[left])
+            water += lmax - height[left]
+            left += 1
+        else:
+            rmax = max(rmax, height[right])
+            ${BLANK}
+            right -= 1
+    return water`,
+    choices: ['water += rmax - height[right]', 'water += lmax - height[right]', 'water += height[right] - rmax', 'water += rmax - height[left]'],
+    answer: 0,
+    why: 'Water above a bar is (the shorter of the tallest walls each side) − its height. Move the side with the smaller wall — that side’s running max is the binding constraint, so the trapped water there is rmax − height[right].',
+  },
+  {
+    id: 'is-subsequence', title: 'Is Subsequence', pattern: 'Two pointers', difficulty: 'Easy',
+    prompt: 'Is s a subsequence of t (characters in order, not necessarily contiguous)?',
+    code: `def is_subsequence(s, t):
+    i = 0
+    for c in t:
+        if i < len(s) and s[i] == c:
+            ${BLANK}
+    return i == len(s)`,
+    choices: ['i += 1', 'i -= 1', 'return True', 'continue'],
+    answer: 0,
+    why: 'Walk t with one pointer into s; advance in s on each match. If the pointer reaches the end of s, every character was found in order — s is a subsequence.',
+  },
+  // ---------- More Sliding Window ----------
+  {
+    id: 'longest-repeat-replace', title: 'Longest Repeating Char Replacement', pattern: 'Sliding window', difficulty: 'Medium',
+    prompt: 'Longest substring of one repeated char after replacing at most k characters.',
+    code: `def character_replacement(s, k):
+    from collections import Counter
+    count = Counter()
+    left = maxf = best = 0
+    for right in range(len(s)):
+        count[s[right]] += 1
+        maxf = max(maxf, count[s[right]])
+        while ${BLANK}:
+            count[s[left]] -= 1
+            left += 1
+        best = max(best, right - left + 1)
+    return best`,
+    choices: ['(right - left + 1) - maxf > k', '(right - left + 1) - maxf < k', 'right - left + 1 > k', 'maxf > k'],
+    answer: 0,
+    why: 'A window is valid if the chars you’d need to replace — its size minus the most frequent char — is at most k. When that exceeds k, shrink from the left until it’s valid again.',
+  },
+  {
+    id: 'max-ones-iii', title: 'Max Consecutive Ones III', pattern: 'Sliding window', difficulty: 'Medium',
+    prompt: 'Longest run of 1s if you may flip at most k zeros.',
+    code: `def longest_ones(nums, k):
+    left = zeros = best = 0
+    for right in range(len(nums)):
+        if nums[right] == 0:
+            zeros += 1
+        while zeros > k:
+            if nums[left] == 0:
+                ${BLANK}
+            left += 1
+        best = max(best, right - left + 1)
+    return best`,
+    choices: ['zeros -= 1', 'zeros += 1', 'zeros = 0', 'k -= 1'],
+    answer: 0,
+    why: 'You may flip up to k zeros. Grow the window; when it holds more than k zeros, shrink from the left, decrementing the zero count as each zero leaves.',
+  },
+  // ---------- More Binary Search ----------
+  {
+    id: 'koko-bananas', title: 'Koko Eating Bananas', pattern: 'Binary search', difficulty: 'Medium',
+    prompt: 'Smallest eating speed to finish all piles within h hours. Search the answer.',
+    code: `def min_eating_speed(piles, h):
+    import math
+    lo, hi = 1, max(piles)
+    while lo < hi:
+        mid = (lo + hi) // 2
+        hours = sum(math.ceil(p / mid) for p in piles)
+        if hours <= h:
+            ${BLANK}
+        else:
+            lo = mid + 1
+    return lo`,
+    choices: ['hi = mid', 'lo = mid + 1', 'hi = mid - 1', 'lo = mid'],
+    answer: 0,
+    why: 'Binary-search the answer: if speed mid finishes in time it’s a candidate, but a slower speed might too — keep mid (hi = mid) and search lower. Too slow → speed up (lo = mid + 1).',
+  },
+  {
+    id: 'find-peak', title: 'Find Peak Element', pattern: 'Binary search', difficulty: 'Medium',
+    prompt: 'Return the index of any peak (greater than its neighbors), in O(log n).',
+    code: `def find_peak(nums):
+    lo, hi = 0, len(nums) - 1
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if nums[mid] < nums[mid + 1]:
+            ${BLANK}
+        else:
+            hi = mid
+    return lo`,
+    choices: ['lo = mid + 1', 'hi = mid', 'lo = mid', 'hi = mid - 1'],
+    answer: 0,
+    why: 'If the slope rises at mid (nums[mid] < nums[mid+1]), a peak lies to the right, so move lo past mid. Otherwise it’s at mid or left. You always walk uphill and converge on a peak.',
+  },
+  {
+    id: 'first-bad-version', title: 'First Bad Version', pattern: 'Binary search', difficulty: 'Easy',
+    prompt: 'Find the first bad version in a False…True sequence.',
+    code: `def first_bad(n, is_bad):
+    lo, hi = 1, n
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if is_bad(mid):
+            ${BLANK}
+        else:
+            lo = mid + 1
+    return lo`,
+    choices: ['hi = mid', 'hi = mid - 1', 'lo = mid + 1', 'lo = mid'],
+    answer: 0,
+    why: 'If mid is bad it might be the first, so keep it (hi = mid) and look left. If good, the first bad is strictly right (lo = mid + 1). The loop lands on the boundary.',
+  },
+  // ---------- More Stacks ----------
+  {
+    id: 'min-stack', title: 'Min Stack', pattern: 'Stack / Monotonic stack', difficulty: 'Medium',
+    prompt: 'Support push and O(1) getMin. Fill the push.',
+    code: `class MinStack:
+    def __init__(self):
+        self.stack = []
+    def push(self, x):
+        m = min(x, self.stack[-1][1] if self.stack else x)
+        ${BLANK}
+    def getMin(self):
+        return self.stack[-1][1]`,
+    choices: ['self.stack.append((x, m))', 'self.stack.append(x)', 'self.stack.append((x, x))', 'self.stack.append((m, x))'],
+    answer: 0,
+    why: 'Store the running minimum alongside each value so getMin is O(1) without scanning. Each frame carries (value, min-so-far); the top’s min is the whole stack’s min.',
+  },
+  {
+    id: 'eval-rpn', title: 'Evaluate Reverse Polish Notation', pattern: 'Stack / Monotonic stack', difficulty: 'Medium',
+    prompt: 'Evaluate an RPN expression given as tokens.',
+    code: `def eval_rpn(tokens):
+    stack = []
+    ops = {'+', '-', '*', '/'}
+    for t in tokens:
+        if t in ops:
+            b = stack.pop(); a = stack.pop()
+            stack.append(apply(a, b, t))
+        else:
+            ${BLANK}
+    return stack[0]`,
+    choices: ['stack.append(int(t))', 'stack.append(t)', 'stack.push(t)', 'stack.append(a)'],
+    answer: 0,
+    why: 'Push operands; on an operator pop the two most recent, apply, push the result. Operands arrive as strings, so convert to int before pushing.',
+  },
+  {
+    id: 'asteroid-collision', title: 'Asteroid Collision', pattern: 'Stack / Monotonic stack', difficulty: 'Medium',
+    prompt: 'Right-movers (positive) and left-movers (negative) collide; the smaller explodes.',
+    code: `def asteroid_collision(asteroids):
+    stack = []
+    for a in asteroids:
+        alive = True
+        while alive and a < 0 and stack and stack[-1] > 0:
+            if stack[-1] < -a:
+                stack.pop()
+            elif stack[-1] == -a:
+                stack.pop(); alive = False
+            else:
+                ${BLANK}
+        if alive:
+            stack.append(a)
+    return stack`,
+    choices: ['alive = False', 'stack.pop()', 'break', 'a = 0'],
+    answer: 0,
+    why: 'A right-mover on the stack meets left-mover a. If the stacked one is bigger, the incoming one dies — mark it not alive so it isn’t pushed. Equal sizes destroy both; smaller pops and keeps checking.',
+  },
+  // ---------- More Prefix Sum ----------
+  {
+    id: 'contiguous-array', title: 'Contiguous Array', pattern: 'Prefix sum', difficulty: 'Medium',
+    prompt: 'Longest subarray with equal numbers of 0s and 1s.',
+    code: `def find_max_length(nums):
+    seen = {0: -1}   # running count -> first index
+    count = best = 0
+    for i, n in enumerate(nums):
+        count += 1 if n == 1 else -1
+        if count in seen:
+            best = max(best, i - seen[count])
+        else:
+            ${BLANK}
+    return best`,
+    choices: ['seen[count] = i', 'seen[count] = best', 'seen[i] = count', 'seen[count] += i'],
+    answer: 0,
+    why: 'Map 0→−1, 1→+1; the counts of 0s and 1s are equal over any span where the running count returns to a previous value. Store only the first index per count (longest span), so don’t overwrite.',
+  },
+  // ---------- Dynamic Programming ----------
+  {
+    id: 'climbing-stairs', title: 'Climbing Stairs', pattern: 'Dynamic programming', difficulty: 'Easy',
+    prompt: 'Each move climbs 1 or 2 steps. How many ways to reach step n?',
+    code: `def climb_stairs(n):
+    a, b = 1, 1
+    for _ in range(n):
+        ${BLANK}
+    return a`,
+    choices: ['a, b = b, a + b', 'a, b = a + b, b', 'a = a + b', 'a, b = b, a'],
+    answer: 0,
+    why: 'Ways(i) = ways(i−1) + ways(i−2) — it’s Fibonacci. Roll two variables forward instead of a whole array, for O(1) space.',
+  },
+  {
+    id: 'house-robber', title: 'House Robber', pattern: 'Dynamic programming', difficulty: 'Medium',
+    prompt: 'Max sum with no two adjacent houses robbed.',
+    code: `def rob(nums):
+    prev, cur = 0, 0
+    for n in nums:
+        ${BLANK}
+    return cur`,
+    choices: ['prev, cur = cur, max(cur, prev + n)', 'prev, cur = cur, prev + n', 'cur = max(cur, prev + n)', 'prev, cur = cur, max(prev, cur + n)'],
+    answer: 0,
+    why: 'At each house, either skip it (keep cur) or rob it (prev + n) — you can’t rob adjacent, so robbing builds on the total from two back. Slide prev/cur forward; cur holds the best so far.',
+  },
+  {
+    id: 'coin-change', title: 'Coin Change', pattern: 'Dynamic programming', difficulty: 'Medium',
+    prompt: 'Fewest coins to make the amount (−1 if impossible).',
+    code: `def coin_change(coins, amount):
+    dp = [0] + [float('inf')] * amount
+    for a in range(1, amount + 1):
+        for c in coins:
+            if c <= a:
+                ${BLANK}
+    return dp[amount] if dp[amount] != float('inf') else -1`,
+    choices: ['dp[a] = min(dp[a], dp[a - c] + 1)', 'dp[a] = min(dp[a], dp[a - c])', 'dp[a] = dp[a - c] + 1', 'dp[a] = min(dp[a], dp[c] + 1)'],
+    answer: 0,
+    why: 'Fewest coins for a = one coin c plus the fewest for (a − c). Take the best over all coins; the +1 counts the coin just used, and dp[0] = 0 anchors it.',
+  },
+  {
+    id: 'lis', title: 'Longest Increasing Subsequence', pattern: 'Dynamic programming', difficulty: 'Medium',
+    prompt: 'Length of the longest strictly increasing subsequence (O(n²) DP).',
+    code: `def length_of_lis(nums):
+    dp = [1] * len(nums)
+    for i in range(len(nums)):
+        for j in range(i):
+            if nums[j] < nums[i]:
+                ${BLANK}
+    return max(dp) if dp else 0`,
+    choices: ['dp[i] = max(dp[i], dp[j] + 1)', 'dp[i] = dp[j] + 1', 'dp[i] = max(dp[i], dp[j])', 'dp[j] = max(dp[j], dp[i] + 1)'],
+    answer: 0,
+    why: 'dp[i] = longest increasing subsequence ending at i. For each smaller earlier element j you can extend its subsequence: dp[j] + 1. Keep the best; the answer is the max over all endings.',
+  },
+  // ---------- Linked List ----------
+  {
+    id: 'reverse-linked-list', title: 'Reverse Linked List', pattern: 'Linked list', difficulty: 'Easy',
+    prompt: 'Reverse a singly linked list in place.',
+    code: `def reverse_list(head):
+    prev = None
+    cur = head
+    while cur:
+        nxt = cur.next
+        ${BLANK}
+        prev = cur
+        cur = nxt
+    return prev`,
+    choices: ['cur.next = prev', 'cur.next = nxt', 'prev.next = cur', 'cur.next = cur'],
+    answer: 0,
+    why: 'Re-point each node backward: save next, flip cur.next to prev, then walk both forward. Saving nxt first is essential — you overwrite cur.next before moving on.',
+  },
+  {
+    id: 'merge-two-lists', title: 'Merge Two Sorted Lists', pattern: 'Linked list', difficulty: 'Easy',
+    prompt: 'Merge two sorted lists into one sorted list.',
+    code: `def merge_two_lists(a, b):
+    dummy = tail = ListNode()
+    while a and b:
+        if a.val <= b.val:
+            tail.next = a; a = a.next
+        else:
+            tail.next = b; b = b.next
+        ${BLANK}
+    tail.next = a or b
+    return dummy.next`,
+    choices: ['tail = tail.next', 'tail = dummy', 'tail.next = tail', 'tail = a'],
+    answer: 0,
+    why: 'A dummy head avoids special-casing the first node. Attach the smaller node, advance that list, then move the tail forward. Any leftover list is linked wholesale at the end.',
+  },
+  {
+    id: 'linked-list-cycle', title: 'Linked List Cycle', pattern: 'Linked list', difficulty: 'Easy',
+    prompt: 'Detect whether the list has a cycle, in O(1) space.',
+    code: `def has_cycle(head):
+    slow = fast = head
+    while fast and fast.next:
+        slow = slow.next
+        fast = fast.next.next
+        if ${BLANK}:
+            return True
+    return False`,
+    choices: ['slow is fast', 'slow == fast.next', 'fast is None', 'slow.next is fast'],
+    answer: 0,
+    why: 'Floyd’s: advance slow by 1 and fast by 2. In a cycle the fast pointer laps the slow one and they land on the same node; with no cycle, fast runs off the end.',
+  },
+  // ---------- Trees ----------
+  {
+    id: 'max-depth-tree', title: 'Maximum Depth of Binary Tree', pattern: 'Trees (DFS/BFS)', difficulty: 'Easy',
+    prompt: 'Return the tree’s maximum depth.',
+    code: `def max_depth(root):
+    if not root:
+        return 0
+    ${BLANK}`,
+    choices: ['return 1 + max(max_depth(root.left), max_depth(root.right))', 'return max(max_depth(root.left), max_depth(root.right))', 'return 1 + max_depth(root.left) + max_depth(root.right)', 'return 1 + min(max_depth(root.left), max_depth(root.right))'],
+    answer: 0,
+    why: 'Depth is 1 (this node) plus the deeper of its two subtrees. The empty base returns 0, so a leaf returns 1, and recursion carries the count up.',
+  },
+  {
+    id: 'invert-tree', title: 'Invert Binary Tree', pattern: 'Trees (DFS/BFS)', difficulty: 'Easy',
+    prompt: 'Mirror the tree — swap every left/right.',
+    code: `def invert_tree(root):
+    if not root:
+        return None
+    ${BLANK}
+    invert_tree(root.left)
+    invert_tree(root.right)
+    return root`,
+    choices: ['root.left, root.right = root.right, root.left', 'root.left = root.right', 'root.right = root.left', 'root.left, root.right = root.left, root.right'],
+    answer: 0,
+    why: 'Swap each node’s children, then recurse both sides. The tuple swap exchanges the subtrees in one step; assigning one side first would lose a reference.',
+  },
+  {
+    id: 'level-order', title: 'Binary Tree Level Order', pattern: 'Trees (DFS/BFS)', difficulty: 'Medium',
+    prompt: 'Return node values grouped by level (BFS).',
+    code: `def level_order(root):
+    from collections import deque
+    res = []
+    q = deque([root] if root else [])
+    while q:
+        level = []
+        for _ in range(len(q)):
+            node = q.popleft()
+            level.append(node.val)
+            if node.left:  q.append(node.left)
+            if node.right: q.append(node.right)
+        ${BLANK}
+    return res`,
+    choices: ['res.append(level)', 'res.append(q)', 'res += level', 'res.append(node.val)'],
+    answer: 0,
+    why: 'Snapshotting len(q) before the inner loop processes exactly one level; collect those values and append the level as a group. That grouping is what makes it level-order, not a flat traversal.',
+  },
+  // ---------- Greedy & Intervals ----------
+  {
+    id: 'merge-intervals', title: 'Merge Intervals', pattern: 'Intervals', difficulty: 'Medium',
+    prompt: 'Merge all overlapping intervals.',
+    code: `def merge(intervals):
+    intervals.sort(key=lambda x: x[0])
+    res = []
+    for s, e in intervals:
+        if res and s <= res[-1][1]:
+            ${BLANK}
+        else:
+            res.append([s, e])
+    return res`,
+    choices: ['res[-1][1] = max(res[-1][1], e)', 'res[-1][1] = e', 'res.append([s, e])', 'res[-1][0] = min(res[-1][0], s)'],
+    answer: 0,
+    why: 'Sort by start, then walk: if the current interval overlaps the last kept one (start ≤ that end), merge by extending the end to the farther of the two. Otherwise start a new one.',
+  },
+  {
+    id: 'jump-game', title: 'Jump Game', pattern: 'Greedy', difficulty: 'Medium',
+    prompt: 'Each value is a max jump length. Can you reach the last index?',
+    code: `def can_jump(nums):
+    reach = 0
+    for i, n in enumerate(nums):
+        if i > reach:
+            return False
+        ${BLANK}
+    return True`,
+    choices: ['reach = max(reach, i + n)', 'reach = i + n', 'reach += n', 'reach = max(reach, n)'],
+    answer: 0,
+    why: 'Track the farthest index reachable so far. If you ever stand beyond it, you’re stuck; otherwise extend the reach to i + nums[i]. Greedy — no DP needed.',
+  },
+  // ---------- Heap / Top-K ----------
+  {
+    id: 'kth-largest', title: 'Kth Largest Element', pattern: 'Heap / Top-K', difficulty: 'Medium',
+    prompt: 'Return the kth largest element using a heap.',
+    code: `def find_kth_largest(nums, k):
+    import heapq
+    heap = []
+    for n in nums:
+        heapq.heappush(heap, n)
+        if len(heap) > k:
+            ${BLANK}
+    return heap[0]`,
+    choices: ['heapq.heappop(heap)', 'heap.pop()', 'heapq.heappush(heap, n)', 'heap.clear()'],
+    answer: 0,
+    why: 'Keep a min-heap of the k largest. Push each value; when the heap exceeds k, pop the smallest. What remains are the top k, and the root — the smallest of those — is the kth largest.',
+  },
+  {
+    id: 'k-closest-points', title: 'K Closest Points to Origin', pattern: 'Heap / Top-K', difficulty: 'Medium',
+    prompt: 'Return the k points nearest the origin using a size-k heap.',
+    code: `def k_closest(points, k):
+    import heapq
+    heap = []
+    for x, y in points:
+        d = x * x + y * y
+        heapq.heappush(heap, (-d, x, y))
+        if len(heap) > k:
+            ${BLANK}
+    return [[x, y] for _, x, y in heap]`,
+    choices: ['heapq.heappop(heap)', 'heap.pop()', 'heapq.heappush(heap, (-d, x, y))', 'break'],
+    answer: 0,
+    why: 'A max-heap of size k (negate the distance, since heapq is a min-heap) keeps the k closest: push, and when it overflows pop the farthest — the largest distance, i.e. the most-negative key.',
+  },
 ];
+
+// ---- Concept catalog ----
+// The units you mark as "studied" to unlock their drills. Each concept owns one or
+// more drill patterns. The catalog screen lists these; a drill only surfaces once
+// its concept is marked studied (or you've solved a matching LeetCode problem).
+export const CONCEPTS = [
+  { id: 'arrays-hashing', name: 'Arrays & Hashing', area: 'DSA', patterns: ['Hashing'] },
+  { id: 'two-pointers', name: 'Two Pointers', area: 'DSA', patterns: ['Two pointers'] },
+  { id: 'sliding-window', name: 'Sliding Window', area: 'DSA', patterns: ['Sliding window'] },
+  { id: 'stack', name: 'Stack & Monotonic Stack', area: 'DSA', patterns: ['Stack / Monotonic stack'] },
+  { id: 'binary-search', name: 'Binary Search', area: 'DSA', patterns: ['Binary search'] },
+  { id: 'prefix-sum', name: 'Prefix Sum', area: 'DSA', patterns: ['Prefix sum'] },
+  { id: 'linked-list', name: 'Linked List', area: 'DSA', patterns: ['Linked list'] },
+  { id: 'trees', name: 'Trees & Traversals', area: 'DSA', patterns: ['Trees (DFS/BFS)'] },
+  { id: 'dynamic-programming', name: 'Dynamic Programming', area: 'DSA', patterns: ['Dynamic programming'] },
+  { id: 'greedy', name: 'Greedy & Intervals', area: 'DSA', patterns: ['Greedy', 'Intervals'] },
+  { id: 'heap', name: 'Heap / Top-K', area: 'DSA', patterns: ['Heap / Top-K'] },
+];
+const PATTERN_CONCEPT = new Map();
+for (const c of CONCEPTS) for (const p of c.patterns) PATTERN_CONCEPT.set(p, c.id);
+export const conceptIdOf = (drill) => PATTERN_CONCEPT.get(drill.pattern) || null;
+export const drillsForConcept = (id) => DRILLS.filter((d) => conceptIdOf(d) === id);
+export const DRILL_BANK = DRILLS;
 
 // Deterministic-ish shuffle seeded by a number, so choice order varies per card
 // but a card's layout is stable within a single render.
@@ -462,22 +960,46 @@ function shuffle(arr, seed) {
   return a;
 }
 
+const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+
 export async function renderDrills(mount, { arg, navigate }) {
   const scope = arg ? decodeURIComponent(arg) : null; // optional pattern filter
-  const [stateRaw, deck] = await Promise.all([getDrillState(), computeDeck()]);
+  const [stateRaw, deck, studied] = await Promise.all([getDrillState(), computeDeck(), getStudiedConcepts()]);
   const state = { ...(stateRaw || {}) };
 
-  // Patterns you've actually logged from real LeetCode practice, with counts.
-  // The deck leans on these: drills in a pattern you've been grinding surface
-  // first (after anything you previously missed), so practice and drilling stay
-  // in step. On a fresh start with nothing logged, this is just empty → the
-  // authored bank plays in its default order.
+  // Gate: a drill unlocks only once you've marked its concept studied, OR you've
+  // solved a matching LeetCode problem (so anything you've actually done shows up).
+  const solvedKeys = new Set();
+  for (const p of (deck.problems || [])) { if (p.slug) solvedKeys.add(norm(p.slug)); if (p.title) solvedKeys.add(norm(p.title)); }
+  const solvedMatch = (d) => solvedKeys.has(d.id) || solvedKeys.has(norm(d.title));
+  const unlocked = (d) => !!studied[conceptIdOf(d)] || solvedMatch(d);
+
+  const wrap = el('div', { class: 'revise-wrap drills-wrap' });
+  mount.append(wrap);
+  const exit = () => navigate('/now');
+
+  // Nothing unlocked yet → point at the concept catalog. (A scoped commute deck
+  // ignores the gate — you launched it for that area on purpose.)
+  let pool = DRILLS.filter((d) => scope ? d.pattern === scope : unlocked(d));
+  if (!pool.length) {
+    wrap.append(el('div', { class: 'center-state' }, [
+      el('p', { class: 'eyebrow', text: 'Drills' }),
+      el('h1', { text: 'Mark what you’ve studied.' }),
+      el('p', { class: 'muted', text: 'Drills unlock per concept — tick off the ones you’ve covered and their fill-in-the-blank questions appear here. Anything you’ve logged on LeetCode unlocks automatically.' }),
+      el('button', { class: 'btn btn-primary', style: 'margin-top:16px', text: 'Choose concepts', onclick: () => navigate('/concepts') }),
+      el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px;max-width:320px', text: 'Back', onclick: exit }),
+    ]));
+    return;
+  }
+
+  // Patterns you've actually logged from real LeetCode practice, with counts —
+  // used to lead with what you've been grinding.
   const practiceCount = new Map((deck.patterns || []).map((p) => [p.pattern, p.count]));
   const practiced = new Set(practiceCount.keys());
 
   // Order: previously-missed first (spaced-rep), then practiced patterns you
-  // haven't drilled, then the rest, mastered last. Ties break by least-recently
-  // seen so nothing goes stale.
+  // haven't drilled, then the rest, mastered last. Within a tier, a fresh random
+  // shuffle each visit so you don't get the same sequence twice.
   const pri = (d) => {
     const s = state[d.id];
     if (s && s.conf === 'missed') return 0;
@@ -485,18 +1007,14 @@ export async function renderDrills(mount, { arg, navigate }) {
     if (!s) return 1 + prac;   // unseen: practiced (1) before unpracticed (2)
     return 3 + prac;           // mastered: practiced (3) before unpracticed (4)
   };
-  let cards = DRILLS.slice();
-  if (scope) { const scoped = cards.filter((d) => d.pattern === scope); if (scoped.length) cards = scoped; }
-  cards.sort((a, b) => pri(a) - pri(b) || (String(state[a.id]?.at || '') < String(state[b.id]?.at || '') ? -1 : 1));
-
-  const wrap = el('div', { class: 'revise-wrap drills-wrap' });
-  mount.append(wrap);
-  const exit = () => navigate('/now');
+  const rnd = new Map(pool.map((d) => [d.id, Math.random()]));
+  let cards = pool.slice().sort((a, b) => pri(a) - pri(b) || (rnd.get(a.id) - rnd.get(b.id)));
 
   // ---- session state ----
   let idx = 0;
   let got = 0; let missed = 0;
   let seedBase = 7;
+  let retrySeed = 0;
 
   const head = el('div', { class: 'revise-head' });
   const stack = el('div', { class: 'revise-stack drill-stack' });
@@ -512,7 +1030,10 @@ export async function renderDrills(mount, { arg, navigate }) {
     head.append(
       el('div', { class: 'revise-top' }, [
         el('p', { class: 'eyebrow', text: scope ? `Drills · ${scope}` : 'Drills · fill in the blank' }),
-        el('button', { class: 'revise-close', 'aria-label': 'Close', text: '✕', onclick: exit }),
+        el('div', { class: 'drill-head-actions' }, [
+          el('button', { class: 'drill-concepts-link', text: 'Concepts', title: 'Mark which concepts you’ve studied', onclick: () => navigate('/concepts') }),
+          el('button', { class: 'revise-close', 'aria-label': 'Close', text: '✕', onclick: exit }),
+        ]),
       ]),
       (!scope && leadPatterns.length)
         ? el('p', { class: 'drill-lead', text: `Leading with the patterns you've been practicing — ${leadPatterns.slice(0, 3).join(', ')}.` })
@@ -530,15 +1051,16 @@ export async function renderDrills(mount, { arg, navigate }) {
     return el('pre', { class: 'drill-code' }, [parts[0] || '', slot, parts[1] || '']);
   }
 
-  function cardNode(card) {
+  function cardNode(card, { record = true } = {}) {
     const slotRef = {};
     const codeEl = codeNode(card, slotRef);
     const feedback = el('div', { class: 'drill-feedback' });
     const choicesEl = el('div', { class: 'drill-choices' });
 
-    // Shuffle choices so the answer isn't always first; track the correct text.
+    // Shuffle choices so the answer isn't always first; retrySeed reshuffles on a
+    // retry so the correct one isn't in the same place.
     const correctText = card.choices[card.answer];
-    const order = shuffle(card.choices.map((text, i) => ({ text, correct: i === card.answer })), seedBase + idx * 13 + card.id.length);
+    const order = shuffle(card.choices.map((text, i) => ({ text, correct: i === card.answer })), seedBase + idx * 13 + card.id.length + retrySeed * 131);
 
     let answered = false;
     const buttons = [];
@@ -564,10 +1086,13 @@ export async function renderDrills(mount, { arg, navigate }) {
         if (t === correctText) b.classList.add('correct');
         if (b === btn && !opt.correct) b.classList.add('wrong');
       }
-      if (opt.correct) got++; else missed++;
-      // Persist spaced-rep memory: a miss marks the card to resurface first.
-      const prev = state[card.id];
-      state[card.id] = { conf: opt.correct ? 'got' : 'missed', at: todayISO(), seen: (prev?.seen || 0) + 1 };
+      // Only a card's FIRST genuine attempt scores it and drives spaced-rep; a
+      // "Try it again" re-attempt is practice and doesn't re-tally.
+      if (record) {
+        if (opt.correct) got++; else missed++;
+        const prev = state[card.id];
+        state[card.id] = { conf: opt.correct ? 'got' : 'missed', at: todayISO(), seen: (prev?.seen || 0) + 1 };
+      }
 
       // Reveal the "why", the whole point of the drill.
       clear(feedback);
@@ -575,12 +1100,19 @@ export async function renderDrills(mount, { arg, navigate }) {
         el('div', { class: 'drill-verdict ' + (opt.correct ? 'ok' : 'bad'), text: opt.correct ? 'Right.' : `Not quite — it’s ${correctText}` }),
         el('div', { class: 'drill-why-lbl', text: 'Why it fits' }),
         el('div', { class: 'drill-why', text: card.why }),
-        el('button', {
-          class: 'btn btn-primary btn-block drill-next', style: 'margin-top:16px',
-          text: idx + 1 >= cards.length ? 'Finish' : 'Next',
-          onclick: () => { idx++; paint(); },
-        }),
       );
+      // Got it wrong? Retry it right now (reshuffled) before moving on.
+      if (!opt.correct) {
+        feedback.append(el('button', {
+          class: 'btn btn-ghost btn-block drill-retry', style: 'margin-top:14px', text: 'Try it again',
+          onclick: () => { retrySeed++; clear(stack); stack.append(cardNode(card, { record: false })); window.scrollTo(0, 0); },
+        }));
+      }
+      feedback.append(el('button', {
+        class: 'btn btn-primary btn-block drill-next', style: 'margin-top:10px',
+        text: idx + 1 >= cards.length ? 'Finish' : 'Next',
+        onclick: () => { idx++; paint(); },
+      }));
       feedback.classList.add('show');
     }
 
@@ -620,7 +1152,7 @@ export async function renderDrills(mount, { arg, navigate }) {
       missed > 0 ? el('button', {
         class: 'btn btn-primary btn-block', style: 'margin-top:16px;max-width:320px',
         text: `Retry the ${missed} you missed`,
-        onclick: () => { cards = DRILLS.filter((d) => state[d.id]?.conf === 'missed'); idx = 0; got = 0; missed = 0; seedBase += 5; paint(); },
+        onclick: () => { cards = pool.filter((d) => state[d.id]?.conf === 'missed'); idx = 0; got = 0; missed = 0; seedBase += 5; paint(); },
       }) : null,
       el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px;max-width:320px', text: 'Done', onclick: exit }),
     ]));
