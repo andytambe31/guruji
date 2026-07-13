@@ -9,7 +9,7 @@ import {
   hasPlan, getItems, getBlocksForDate, getBusyForDate, autoPlanDay, deleteBlock, setBlockStatus,
   retimeBlock, moveBlockToDate, blockItem, swapBlockItem, putBusy, deleteBusy, retimeBusy, setBusyStatus, getSettings, setSettings,
   clearBusyForDate, deconflictBusy, arrangeCommitments, pushBlock, depsSatisfied, studiedMinutesByBlock, logManualSession, logLeetcodeForBlock, logConceptsForBlock,
-  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore, reclaimStaleBlocks,
+  getItem, ensureBlockGoals, toggleBlockGoal, setBlockGoals, computeDayScore, reclaimStaleBlocks, extendBlock,
 } from '../store.js';
 import { downloadICS } from '../ics.js';
 import { openLeetcodeWizard } from './leetcode-wizard.js';
@@ -538,6 +538,7 @@ export async function renderDay(mount, { navigate }) {
       (b.area === 'CS Fundamentals' && concepts.length) ? el('button', { class: 'blk-act', text: 'Concepts', title: 'Rate your confidence on this topic’s key concepts', onclick: () => openConceptWizard({ concepts, onSave: async (r) => { if (r.length) { await logConceptsForBlock(b, r); toast(`Rated ${r.length} concept${r.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,
       canSwap ? el('button', { class: 'blk-act', text: 'Swap', title: 'Not feeling it? Replace with another eligible focus, same time slot', onclick: () => fill(clear(acts), swapActs()) }) : null,
       done ? null : el('button', { class: 'blk-act', text: 'Delay', title: 'Running late — push the rest of the day', onclick: () => fill(clear(acts), delayActs()) }),
+      (!done && extendOpts.length) ? el('button', { class: 'blk-act', text: 'Extend', title: 'Got the time and the focus? Make it a longer, deeper session — the goals scale up to match', onclick: () => fill(clear(acts), extendActs()) }) : null,
       el('button', { class: 'blk-act', text: done ? 'Undo' : 'Done', onclick: async () => { await setBlockStatus(b.id, done ? 'planned' : 'done'); await paint(); } }),
       item ? el('button', { class: 'blk-act blk-goals', title: 'View, tick, add or reword this session’s expectations', onclick: openGoals }, [
         'Goals', objProg.total ? el('span', { class: 'blk-goals-n', text: ` ${objProg.done}/${objProg.total}` }) : null,
@@ -548,6 +549,16 @@ export async function renderDay(mount, { navigate }) {
     const delayActs = () => [
       el('span', { class: 'blk-delay-k', text: 'Push by' }),
       ...[10, 15, 30].map((n) => el('button', { class: 'blk-act blk-delay', text: `${n}m`, onclick: async () => { await pushBlock(b.id, n); await paint(); } })),
+      el('button', { class: 'blk-act', text: 'Cancel', onclick: () => fill(clear(acts), normalActs()) }),
+    ];
+    // Extend to a longer, deeper sitting — offer the standard lengths beyond the
+    // current one. Grows the block, restructures its goals up a tier, and slides
+    // the rest of the day to make room.
+    const durLabel = (m) => (m % 60 === 0 ? `${m / 60}h` : m < 60 ? `${m}m` : `${(m / 60).toFixed(1)}h`);
+    const extendOpts = [45, 60, 90, 120].filter((m) => m > b.minutes);
+    const extendActs = () => [
+      el('span', { class: 'blk-delay-k', text: 'Extend to' }),
+      ...extendOpts.map((n) => el('button', { class: 'blk-act blk-delay', text: durLabel(n), onclick: async () => { await extendBlock(b.id, n); toast(`Extended to ${durLabel(n)} — goals scaled up`); await paint(); } })),
       el('button', { class: 'blk-act', text: 'Cancel', onclick: () => fill(clear(acts), normalActs()) }),
     ];
     // Manually log off-timer study time against this block. Defaults to what's

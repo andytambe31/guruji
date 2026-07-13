@@ -1,7 +1,7 @@
 // Higher-level data operations over the IndexedDB layer.
 import { STORES, getAll, get, put, del, replaceStores, clearStore, bulkPut } from './db.js';
 import { uid, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes } from './util.js';
-import { buildSessionGoals } from './objectives.js';
+import { buildSessionGoals, regradeSessionGoals } from './objectives.js';
 import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
 
@@ -785,6 +785,60 @@ export async function pushBlock(id, delta) {
   }
   for (const d of dropped) await del(STORES.schedule, d.id);
   await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  return getBlocksForDate(date);
+}
+
+// Extend a scheduled session to a longer, deeper sitting — when the time and the
+// freshness are there. Choosing to extend asserts you're fresh, so the session is
+// re-sized by its new LENGTH (not the drained load that may have made it Light):
+// the badge lifts (Light → Standard → Deep) and the goals restructure up a tier,
+// keeping whatever you've already met and adding more. Everything after it slides
+// later to make room, preserving the gaps and stopping at bedtime.
+export async function extendBlock(id, newMinutes) {
+  const b0 = await get(STORES.schedule, id);
+  if (!b0 || b0.kind !== 'block') return null;
+  const date = b0.date;
+  const target = Math.round(Number(newMinutes) || 0);
+  const extra = Math.max(0, target - (b0.minutes || 0));
+  if (extra <= 0) return getBlocksForDate(date);
+
+  // 1. Grow the block; assert freshness (cap the load so length drives the tier),
+  //    and regrade its goals to the deeper tier — keeping what you've met.
+  await ensureBlockGoals(id);
+  const block = await get(STORES.schedule, id);
+  const item = await get(STORES.items, block.itemId);
+  block.minutes = target;
+  block.load = Math.min(block.load == null ? 40 : block.load, 40);
+  block.goals = regradeSessionGoals({ item, existing: block.goals || [], minutes: target, load: block.load });
+  await put(STORES.schedule, block);
+
+  // 2. Push the later sessions out by the added time, keeping order, gaps, and
+  //    obstacles — same discipline as a Delay, just applied to the tail only.
+  const [blocks, busy, settings] = await Promise.all([getBlocksForDate(date), getBusyForDate(date), getSettings()]);
+  const planned = blocks.filter((b) => b.status !== 'done').sort((a, b) => a.start - b.start);
+  const done = blocks.filter((b) => b.status === 'done');
+  const idx = planned.findIndex((b) => b.id === id);
+  const head = planned.slice(0, idx + 1); // includes the now-longer block
+  const tail = planned.slice(idx + 1);
+  const fixed = [...busy.filter((x) => x.status !== 'done'), ...done, ...head].map((x) => ({ start: x.start, minutes: x.minutes }));
+  let prevEnd = block.start + block.minutes;
+  for (const bl of tail) {
+    let s = slidePast(Math.max(0, bl.start + extra), bl.minutes, fixed);
+    if (s < prevEnd) s = slidePast(prevEnd, bl.minutes, fixed);
+    bl.start = s;
+    prevEnd = s + bl.minutes;
+  }
+  let bed = settings.bedtime ? toMinutes(settings.bedtime) : DAY_END;
+  if (bed < 5 * 60) bed += 24 * 60;
+  const kept = []; const dropped = [];
+  for (const b of tail) {
+    if (b.start >= bed) { dropped.push(b); continue; }
+    if (b.start + b.minutes > bed) b.minutes = bed - b.start;
+    if (b.minutes < 15) { dropped.push(b); continue; }
+    kept.push(b);
+  }
+  for (const d of dropped) await del(STORES.schedule, d.id);
+  await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block' })));
   return getBlocksForDate(date);
 }
 

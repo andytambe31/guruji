@@ -215,6 +215,22 @@ export function buildSessionGoals({ item, minutes, load, prior = [], seq = 0 } =
   return chosen.slice(0, count).map((text) => ({ text, met: false }));
 }
 
+// Re-size an existing session's goals to a new intensity (when you extend a block
+// to a longer, deeper sitting). Everything you've already met or set is kept as-is;
+// the set only grows — additional goals are drawn from the topic's pool to reach the
+// deeper tier's count. Shrinking never drops goals you might have met. [{text,met}].
+export function regradeSessionGoals({ item, existing = [], minutes, load } = {}) {
+  const keep = (Array.isArray(existing) ? existing : []).map((g) => ({ text: g.text, met: !!g.met }));
+  const target = Math.max(keep.length, resolveObjectives(item, minutes, load).length);
+  if (keep.length >= target) return keep;
+  const have = new Set(keep.map((g) => g.text));
+  for (const t of poolFor(item)) {
+    if (keep.length >= target) break;
+    if (!have.has(t)) { keep.push({ text: t, met: false }); have.add(t); }
+  }
+  return keep;
+}
+
 export function goalsProgress(goals) {
   const g = Array.isArray(goals) ? goals : [];
   return { total: g.length, done: g.filter((x) => x && x.met).length };
