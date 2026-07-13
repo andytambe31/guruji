@@ -782,7 +782,12 @@ export async function computeDayScore(date) {
   const dayLog = log.filter((e) => e.date === date);
 
   const planned = blocks.reduce((s, b) => s + (b.minutes || 0), 0);
-  const studied = dayLog.reduce((s, e) => s + Math.max(0, Math.round(e.focusMinutes || 0)), 0);
+  // Study time = minutes attributed to THIS day's actual blocks — exactly what the
+  // block cards show (their "X / planned"). Summing every focus entry on the date
+  // would double-count sessions on blocks since re-planned away, so the score's
+  // total wouldn't match the cards (178 vs a visible 105).
+  const blockIds = new Set(blocks.map((b) => b.id));
+  const studied = log.reduce((s, e) => (e.blockId && blockIds.has(e.blockId)) ? s + Math.max(0, Math.round(e.focusMinutes || 0)) : s, 0);
   let goalTot = 0; let goalMet = 0;
   for (const b of blocks) if (Array.isArray(b.goals)) { goalTot += b.goals.length; goalMet += b.goals.filter((g) => g.met).length; }
   let lcCount = 0; for (const e of dayLog) if (Array.isArray(e.leetcode)) lcCount += e.leetcode.length;
@@ -794,10 +799,20 @@ export async function computeDayScore(date) {
   const doneCommit = doable.filter((b) => b.status === 'done').length;
   const engaged = goalMet > 0 || dayLog.some((e) => (e.focusMinutes || 0) > 0 || (Array.isArray(e.leetcode) && e.leetcode.length) || (Array.isArray(e.concepts) && e.concepts.length));
 
+  // The LeetCode daily target derives from the run-to-goal pace (Path), spread
+  // across ~5 study days a week — so it tightens as the deadline nears and as you
+  // fall behind. Falls back to a flat 3 with no goal date.
+  let lcTarget = 3;
+  try {
+    const road = await computeRoadmap();
+    const perWeek = road && road.pacing && road.pacing.lc ? road.pacing.lc.perWeek : null;
+    if (perWeek) lcTarget = Math.max(1, Math.min(6, Math.round(perWeek / 5)));
+  } catch { /* keep the flat fallback */ }
+
   const components = [
     { key: 'study', label: 'Study', weight: 28, relevant: planned > 0, ratio: planned > 0 ? Math.min(1, studied / planned) : 0, detail: planned > 0 ? `${studied}/${planned}m` : `${studied}m`, over: planned > 0 && studied > planned },
     { key: 'goals', label: 'Goals', weight: 22, relevant: goalTot > 0, ratio: goalTot > 0 ? goalMet / goalTot : 0, detail: `${goalMet}/${goalTot}` },
-    { key: 'leetcode', label: 'LeetCode', weight: 18, relevant: hasDSA || lcCount > 0, ratio: Math.min(1, lcCount / 3), detail: `${lcCount}` },
+    { key: 'leetcode', label: 'LeetCode', weight: 18, relevant: hasDSA || lcCount > 0, ratio: Math.min(1, lcCount / lcTarget), detail: `${lcCount}/${lcTarget}` },
     { key: 'reading', label: 'Reading', weight: 10, relevant: hasReadingBlock, ratio: didRead ? 1 : 0, detail: didRead ? 'done' : '—' },
     { key: 'commitments', label: 'Commitments', weight: 10, relevant: doable.length > 0, ratio: doable.length ? doneCommit / doable.length : 0, detail: `${doneCommit}/${doable.length}` },
     { key: 'engagement', label: 'Logged it', weight: 12, relevant: true, ratio: engaged ? 1 : 0, detail: engaged ? 'yes' : 'no' },
