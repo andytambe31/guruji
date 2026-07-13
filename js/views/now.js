@@ -4,6 +4,12 @@
 import { el, clear, fill, habitStats, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, fmtDur, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings, getReading } from '../store.js';
 
+// At or above this cognitive load, real study (deep or concept work) stops
+// being the confident default: the coach eases off, reframes the screen, and
+// demotes "Start studying" to a quiet "Start anyway". Matches the "high" band
+// in loadStatus — the point where an easier rep or a break beats pushing.
+const DRAINED = 65;
+
 const AREA_LINE = {
   'DSA': 'Patterns only stick with reps. Get one in.',
   'System Design': 'Think in tradeoffs — one system at a time.',
@@ -104,6 +110,20 @@ export async function renderNow(mount, { navigate }) {
       if (habitArea) {
         return { area: habitArea, headline: `Ten minutes, then bed — ${habitArea}.`, reason: `It’s the one thing left today. A short read keeps the streak and the routine — the hard stuff can wait for tomorrow.` };
       }
+    }
+
+    // Drained: when you're running high, the coach stops pushing. Even a rep
+    // that's technically "within capacity" isn't worth a tired, throwaway
+    // session. Steer to the lightest thing available — and if nothing gentle is
+    // on offer, wave you off with something kinder than "go study". This fires
+    // ahead of the normal pick so a loaded evening never leads with a hard CTA.
+    if (load >= DRAINED) {
+      const MW = { WIND_DOWN: 0, TRANSIT: 1, DESK: 2 };
+      const lightest = [...availAreas].sort((a, b) => (MW[nextForArea(a).mode] ?? 2) - (MW[nextForArea(b).mode] ?? 2))[0];
+      if (nextForArea(lightest).mode === 'WIND_DOWN') {
+        return { area: lightest, soft: true, headline: `Wind down — ${lightest}.`, reason: `You’re at ${load}% and running low. Something gentle fits right now; the hard reps can wait for a fresher head.` };
+      }
+      return { area: lightest, soft: true, headline: 'Ease off tonight.', reason: `You’re at ${load}% and running drained. A hard session now buys tired reps that won’t stick — rest, or keep it short. Tomorrow’s fresh rep is worth three of tonight’s.` };
     }
 
     const within = availAreas.filter((a) => { const it = nextForArea(a); return it && withinCapacity(it.mode, load); });
@@ -260,18 +280,32 @@ export async function renderNow(mount, { navigate }) {
         reasonEl.textContent = coachFor(selectedArea);
       }
 
+      // Heavy work (deep or concept) stops being the confident push once you're
+      // drained — even if it's technically within the fuzzy mode gate. A gentle
+      // wind-down read is always fair game.
+      const heavyMode = item && (item.mode === 'DESK' || item.mode === 'TRANSIT');
+      const drainedHeavy = heavyMode && load >= DRAINED;
+      const canPush = item && withinCapacity(item.mode, load) && !drainedHeavy;
+
       let children;
       if (!item) {
         children = [el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'See the map', onclick: () => navigate('/plan') })];
-      } else if (withinCapacity(item.mode, load)) {
+      } else if (canPush) {
         children = [
           el('button', { class: 'btn btn-primary btn-lg btn-block', text: isReadingHabit ? 'Start reading' : 'Start studying', onclick: () => navigate(`/prep/${item.id}`) }),
           isReadingHabit ? el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:10px', text: 'Your reading', onclick: () => navigate('/reading') }) : null,
         ];
       } else {
+        // Demoted: don't lead with a hard push when you're spent. Say why, offer
+        // a genuinely light alternative if one exists, and keep "start anyway"
+        // available but quiet — the choice is yours, just not the headline.
+        const lightAlt = availAreas.find((a) => a !== selectedArea && nextForArea(a).mode === 'WIND_DOWN');
         children = [
-          el('div', { class: 'gate-note', text: `You're at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),
-          el('button', { class: 'btn btn-ghost btn-lg btn-block', text: 'Start anyway', onclick: () => navigate(`/prep/${item.id}`) }),
+          el('div', { class: 'gate-note', text: drainedHeavy
+            ? `You’re at ${load}% and running drained — a hard rep now won’t stick. Be honest about whether it’s worth it tonight.`
+            : `You’re at ${load}% — ${modeWord(item.mode)} will be a grind right now.` }),
+          lightAlt ? el('button', { class: 'btn btn-ghost btn-lg btn-block', text: `${lightAlt} instead — go gentle`, onclick: () => navigate(`/prep/${nextForArea(lightAlt).id}`) }) : null,
+          el('button', { class: 'btn btn-ghost btn-block', style: lightAlt ? 'margin-top:10px' : '', text: 'Start anyway', onclick: () => navigate(`/prep/${item.id}`) }),
         ];
       }
       fill(clear(ctaWrap), children);
