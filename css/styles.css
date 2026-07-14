@@ -122,6 +122,9 @@ body { overscroll-behavior-y: none; }
   padding: 6px 4px; transition: color .15s;
 }
 .nav-item.active { color: var(--text); }
+/* Extra module tabs only earn their place on the wide desktop nav; on the phone
+   they'd overflow the bar, so they stay in the Now dashboard's quick row. */
+.nav-desktop { display: none; }
 
 /* ---------- Typography ---------- */
 .eyebrow {
@@ -888,6 +891,8 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
     max-width: none; gap: 30px;
     background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none;
   }
+  /* Surface the modules as real tabs now that the bar spans the screen. */
+  .nav-desktop { display: inline-block; }
 
   /* The Plan/study route runs edge-to-edge; align its own header rows with the
      panes (the study grid already full-bleeds itself). */
