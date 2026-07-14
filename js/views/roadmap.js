@@ -2,14 +2,18 @@
 // week / month / quarter demand? One page that ties the plan's phase trajectory,
 // the countdown, and everything captured (LeetCode, concepts, topics, effort)
 // into "here's the plan to land a FAANG offer in N days."
-import { el, clear, fmtDur, todayISO } from '../util.js';
-import { computeRoadmap } from '../store.js';
+import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
+import { computeRoadmap, getDrillState, getNuggetState } from '../store.js';
 
 const fmtDate = (iso) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 const AREA_DOT = { DSA: '#3b5bd9', 'System Design': '#0f9d6b', 'CS Fundamentals': '#7d5bd6', Behavioral: '#d05b7d', Applications: '#c98a2e', Reading: '#d98324' };
 
+// Remembered across navigations within the session — the phone's default is the
+// focused weekly view; the full roadmap is a tap away.
+let mode = 'week';
+
 export async function renderRoadmap(mount, { navigate }) {
-  const r = await computeRoadmap();
+  const [r, drillState, nuggetState] = await Promise.all([computeRoadmap(), getDrillState(), getNuggetState()]);
   const wrap = el('div', { class: 'road-wrap' });
   mount.append(wrap);
 
@@ -22,6 +26,103 @@ export async function renderRoadmap(mount, { navigate }) {
     return;
   }
 
+  // Repetition achieved this week: drill + nugget cards reviewed in the last 7 days.
+  const weekAgo = addDaysISO(todayISO(), -6);
+  const repsIn = (st) => Object.values(st || {}).filter((s) => s && s.at && String(s.at) >= weekAgo).length;
+  const repsThisWeek = repsIn(drillState) + repsIn(nuggetState);
+
+  // ---- Mode toggle: focused week vs full roadmap ----
+  wrap.append(el('div', { class: 'seg road-seg' }, [
+    el('button', { class: 'seg-btn' + (mode === 'week' ? ' on' : ''), text: 'This week', onclick: () => { mode = 'week'; clear(wrap); build(); } }),
+    el('button', { class: 'seg-btn' + (mode === 'full' ? ' on' : ''), text: 'Roadmap', onclick: () => { mode = 'full'; clear(wrap); build(); } }),
+  ]));
+
+  build();
+
+  function build() {
+    // re-add the toggle after a clear()
+    if (!wrap.querySelector('.road-seg')) {
+      wrap.append(el('div', { class: 'seg road-seg' }, [
+        el('button', { class: 'seg-btn' + (mode === 'week' ? ' on' : ''), text: 'This week', onclick: () => { mode = 'week'; clear(wrap); build(); } }),
+        el('button', { class: 'seg-btn' + (mode === 'full' ? ' on' : ''), text: 'Roadmap', onclick: () => { mode = 'full'; clear(wrap); build(); } }),
+      ]));
+    }
+    if (mode === 'week') renderThisWeek();
+    else renderFull();
+  }
+
+  // =================== THIS WEEK — the focused expectations ===================
+  function renderThisWeek() {
+    const p = r.pacing;
+    const wk = r.horizons.week;
+    const ph = r.currentPhase;
+
+    wrap.append(el('div', { class: 'tw-head' }, [
+      el('div', { class: 'tw-week' }, [
+        el('span', { class: 'tw-week-n', text: `Week ${r.currentWeek}` }),
+        el('span', { class: 'tw-week-win', text: `through ${fmtDate(wk.endDate)} · ${r.daysLeft} days to ${r.goalLabel}` }),
+      ]),
+      ph ? el('div', { class: 'tw-focus', text: `Focus — ${ph.name}` }) : null,
+      el('div', { class: 'tw-verdict ' + (r.onTrack ? 'ok' : 'behind') }, [
+        el('span', { class: 'tw-verdict-dot' }),
+        el('span', { text: r.onTrack ? 'On pace — hold it.' : 'Behind pace — tighten up this week.' }),
+      ]),
+    ]));
+
+    // A weekly expectation with a progress bar. `done`/`target` drive the fill.
+    const barRow = (label, done, target, unit, sub) => {
+      const pct = target > 0 ? Math.min(100, Math.round((done / target) * 100)) : (done > 0 ? 100 : 0);
+      const met = target > 0 && done >= target;
+      return el('div', { class: 'tw-row' + (met ? ' met' : '') }, [
+        el('div', { class: 'tw-row-top' }, [
+          el('span', { class: 'tw-label', text: label }),
+          el('span', { class: 'tw-val' }, [el('b', { text: `${done}` }), el('span', { class: 'tw-val-t', text: ` / ${target}${unit ? ' ' + unit : ''}` })]),
+        ]),
+        el('div', { class: 'tw-track' }, [el('div', { class: 'tw-fill', style: `width:${pct}%` })]),
+        sub ? el('div', { class: 'tw-sub', text: sub }) : null,
+      ]);
+    };
+
+    const rows = el('div', { class: 'tw-rows' });
+    // Questions solved (LeetCode) — this week's count vs the weekly target.
+    rows.append(barRow('Questions solved', p.lc.actualPerWeek || 0, wk.lc || 0, 'this week',
+      `${p.lc.done}/${p.lc.goal} overall · ~${p.lc.perWeek || 0}/wk keeps you on pace`));
+    // Topics — progress within the current phase (the concrete unit that advances the arc).
+    if (ph) rows.append(barRow('Topics cleared', ph.done, ph.total, 'in ' + ph.name,
+      `${p.topics.remaining} topics left overall · ~${p.topics.perWeek || 0}/wk`));
+    // Concepts firmed up.
+    rows.append(barRow('Concepts firm', p.concepts.solid || 0, p.concepts.total || 0, 'rated solid',
+      p.concepts.total ? `${p.concepts.shaky} shaky to firm up · ${p.concepts.noyet} not yet rated` : 'mark + rate concepts to fill this in'));
+    // Repetition achieved — reviews keep patterns warm; soft weekly target of ~2/day.
+    rows.append(barRow('Repetition', repsThisWeek, 14, 'reviews this week',
+      'drills + nuggets reviewed · cold re-solves keep patterns sharp'));
+    // Study time.
+    if (p.hours.needed != null) rows.append(barRow('Study time', Math.round(p.hours.actual), p.hours.needed, 'h this week',
+      `~${p.hours.needed}h/wk to clear the remaining work`));
+    wrap.append(el('div', { class: 'road-section' }, [el('div', { class: 'road-h', text: 'What this week expects' }), rows]));
+
+    // The concrete topics to clear this week.
+    if (r.nextTopics.length) {
+      wrap.append(el('div', { class: 'road-section' }, [
+        el('div', { class: 'road-h', text: 'Clear these this week' }),
+        el('div', { class: 'road-next' }, r.nextTopics.map((t) => el('button', {
+          class: 'road-next-row', onclick: () => navigate('/plan'),
+        }, [
+          el('span', { class: 'road-next-dot', style: `background:${AREA_DOT[t.area] || '#a9acb2'}` }),
+          el('span', { class: 'road-next-t', text: t.title }),
+          el('span', { class: 'road-next-meta', text: [t.area, t.est ? `~${t.est}m` : ''].filter(Boolean).join(' · ') }),
+        ]))),
+      ]));
+    }
+
+    wrap.append(el('div', { class: 'road-links' }, [
+      el('button', { class: 'btn-link', text: 'See the full roadmap →', onclick: () => { mode = 'full'; clear(wrap); build(); } }),
+      el('button', { class: 'btn-link', text: 'The topic list →', onclick: () => navigate('/plan') }),
+    ]));
+  }
+
+  // =================== FULL ROADMAP (the original strategic view) =============
+  function renderFull() {
   // ---- Header: the countdown + the on-track verdict ----
   const head = el('div', { class: 'road-head' }, [
     el('p', { class: 'eyebrow', text: 'The plan' }),
@@ -151,4 +252,5 @@ export async function renderRoadmap(mount, { navigate }) {
     el('button', { class: 'btn-link', text: 'Full progress →', onclick: () => navigate('/progress') }),
     el('button', { class: 'btn-link', text: 'The topic list →', onclick: () => navigate('/plan') }),
   ]));
+  } // end renderFull
 }

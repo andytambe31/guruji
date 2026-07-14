@@ -743,6 +743,28 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .plan-item.skipped .t { color: var(--text-faint); }
 .plan-item .sub { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
 .plan-item .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+/* ---------- Path · "This week" focus mode ---------- */
+.road-seg { margin: 2px 0 18px; }
+.tw-head { margin-bottom: 22px; }
+.tw-week { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tw-week-n { font-size: 26px; font-weight: 700; letter-spacing: -.02em; color: var(--text); }
+.tw-week-win { font-size: 13px; color: var(--text-faint); }
+.tw-focus { font-size: 15px; font-weight: 600; color: var(--text); margin-top: 6px; }
+.tw-verdict { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 13px; padding: 6px 12px; border-radius: 999px; }
+.tw-verdict.ok { background: rgba(15,157,107,.12); color: #0f9d6b; }
+.tw-verdict.behind { background: rgba(194,72,61,.12); color: #c2483d; }
+.tw-verdict-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+.tw-rows { display: flex; flex-direction: column; gap: 16px; }
+.tw-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
+.tw-label { font-size: 14.5px; font-weight: 600; color: var(--text); }
+.tw-val { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.tw-val b { color: var(--text); font-size: 15px; }
+.tw-track { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
+.tw-fill { height: 100%; border-radius: 999px; background: var(--desk, #3b5bd9); transition: width .4s ease; }
+.tw-row.met .tw-fill { background: var(--ok, #0f9d6b); }
+.tw-row.met .tw-label::after { content: ' ✓'; color: var(--ok, #0f9d6b); }
+.tw-sub { font-size: 12px; color: var(--text-faint); margin-top: 6px; line-height: 1.5; }
+
 /* ---------- Mobile topic reader (read-only study guide) ---------- */
 .topic-reader { animation: viewIn .3s ease both; padding-bottom: 24px; }
 .topic-back { appearance: none; background: none; border: none; color: var(--text-faint); font-size: 14px; cursor: pointer; padding: 6px 0; margin-bottom: 4px; }
