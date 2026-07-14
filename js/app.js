@@ -3,6 +3,7 @@ import { clear, el, toast } from './util.js';
 import { getActiveSession, clearActiveSession, runStartupMigrations } from './store.js';
 import { exportCanonical, snapshotText, importFromText } from './importexport.js';
 import { isLinked, writeLinked, readLinked, shareSnapshot, getAutoSync, setLastSync } from './fsync.js';
+import { isGistConfigured, syncGist, pushGist } from './gistsync.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
@@ -167,6 +168,17 @@ async function autoSyncOnOpen() {
   } catch { /* best effort — never block the app */ }
 }
 
+// Cloud sync on open: pull the gist, merge, and push the merged result back so
+// both devices converge. Silent on failure (offline / bad token).
+async function cloudSyncOnOpen() {
+  try {
+    if (!(await isGistConfigured())) return;
+    const res = await syncGist();
+    const s = res && res.pulled;
+    if (s && (s.status || s.notes || s.added || s.scheduleAdopted)) { toast('Synced from the cloud'); router(); }
+  } catch { /* best effort — never block the app */ }
+}
+
 async function boot() {
   const bootStart = Date.now();
   // Failsafe: never leave the splash stuck if boot stalls for any reason.
@@ -193,6 +205,14 @@ async function boot() {
   hideSplash(bootStart);
   mountSyncFab();
   autoSyncOnOpen();
+  cloudSyncOnOpen();
+
+  // Cloud sync (Gist): push whatever changed when you leave the app, so the
+  // next device pulls it. visibilitychange covers backgrounding an iOS PWA;
+  // pagehide covers a hard close.
+  const pushOnLeave = () => { isGistConfigured().then((ok) => { if (ok) pushGist().catch(() => {}); }).catch(() => {}); };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') pushOnLeave(); });
+  window.addEventListener('pagehide', pushOnLeave);
 
   // Register the service worker (offline shell). Non-fatal if it fails.
   // Register directly — this module is deferred, so the window 'load' event may

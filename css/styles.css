@@ -346,6 +346,10 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .break-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .1em; padding: 4px 0; opacity: .8; }
 .wake-row { text-align: center; font-size: 11px; color: var(--text-faint); letter-spacing: .14em; text-transform: uppercase; padding: 2px 0 6px; opacity: .75; }
 .sync-status { font-size: 12.5px; color: var(--text-faint); margin: 2px 0 10px; font-variant-numeric: tabular-nums; }
+.gist-steps { margin: 8px 0 12px; padding-left: 20px; color: var(--text-dim); font-size: 13px; line-height: 1.55; }
+.gist-steps li { margin-bottom: 6px; }
+.gist-steps a { color: var(--accent, #3b5bd9); }
+.gist-token { width: 100%; box-sizing: border-box; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; padding: 11px 12px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--text); }
 .reset-row { display: flex; gap: 10px; align-items: flex-start; margin: 0 0 14px; font-size: 13px; color: var(--text-dim); line-height: 1.45; cursor: pointer; }
 .reset-row input { margin-top: 2px; flex: none; }
 .plan-why { margin: 2px 0 16px; padding: 12px 14px; border-radius: 14px; background: var(--surface, rgba(0,0,0,.03)); }

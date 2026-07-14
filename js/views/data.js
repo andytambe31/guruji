@@ -4,6 +4,7 @@ import { el, clear, toast, todayISO } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch, snapshotText } from '../importexport.js';
 import { wipeAll, hasPlan, getDeviceRole, setDeviceRole } from '../store.js';
 import { fsaSupported, isLinked, linkedName, linkFile, unlink, writeLinked, readLinked, getLastSync, setLastSync, getAutoSync, setAutoSync, shareSnapshot } from '../fsync.js';
+import { isGistConfigured, connectGist, disconnectGist, syncGist, getLastCloudSync } from '../gistsync.js';
 import { SCHEMA_VERSION } from '../migrations.js';
 
 // "3 hours ago" style relative time for the last-synced nudge.
@@ -27,6 +28,9 @@ export async function renderData(mount, { navigate }) {
   const linkName = linked ? await linkedName() : null;
   const autoSync = await getAutoSync();
   const lastSync = await getLastSync();
+  const gistOn = await isGistConfigured();
+  const lastCloud = await getLastCloudSync();
+  let gistTokenInput = null; // assigned when the connect form is built
 
   const fileInput = el('input', {
     type: 'file',
@@ -166,8 +170,55 @@ export async function renderData(mount, { navigate }) {
     else { try { await exportCanonical(); toast('Downloaded guruji.json — move it to iCloud Drive'); } catch { toast('Save failed', true); } }
   }
 
-  // Build the sync section, tuned to what this browser can do.
-  const syncNodes = [el('h2', { text: 'Sync with iCloud' })];
+  // --- Cloud sync (GitHub Gist) handlers ---
+  async function doConnect() {
+    const token = (gistTokenInput && gistTokenInput.value || '').trim();
+    if (!token) { toast('Paste a token first', true); return; }
+    const veil = showImport('Connecting to GitHub…');
+    try {
+      const { created } = await connectGist(token);
+      try { await syncGist(); } catch { /* first sync best-effort */ }
+      hideImport(veil);
+      toast(created ? 'Connected — created your private gist' : 'Connected to your gist');
+      navigate('/data');
+    } catch (e) { hideImport(veil); toast('Connect failed' + (e && e.message ? ` — ${e.message}` : ''), true); }
+  }
+  async function doCloudSyncNow() {
+    const veil = showImport('Syncing with your gist…');
+    try { await syncGist(); hideImport(veil); toast('Synced'); navigate('/data'); }
+    catch (e) { hideImport(veil); toast('Sync failed' + (e && e.message ? ` — ${e.message}` : ''), true); }
+  }
+  async function doDisconnect() {
+    if (!confirm('Disconnect cloud sync? Your gist stays in GitHub; only the token is removed from this device.')) return;
+    await disconnectGist(); toast('Disconnected'); navigate('/data');
+  }
+
+  const cloudNodes = [el('h2', { text: 'Cloud sync' })];
+  if (gistOn) {
+    cloudNodes.push(
+      el('p', { class: 'muted', text: 'Connected to your private GitHub gist. Guruji auto-pulls when you open the app and pushes when you leave — every device stays in step, hands-off, even on Safari.' }),
+      el('div', { class: 'sync-status', text: `Last cloud sync · ${agoText(lastCloud)}` }),
+      el('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;margin-top:4px' }, [
+        el('button', { class: 'btn btn-primary', text: 'Sync now', onclick: doCloudSyncNow }),
+        el('button', { class: 'btn btn-ghost', text: 'Disconnect', onclick: doDisconnect }),
+      ]),
+    );
+  } else {
+    gistTokenInput = el('input', { type: 'password', placeholder: 'GitHub token (gist scope)', autocomplete: 'off', autocapitalize: 'off', spellcheck: false, class: 'gist-token' });
+    cloudNodes.push(
+      el('p', { class: 'muted', text: 'Hands-off sync that works in Safari: your data lives in a PRIVATE gist in your own GitHub account, auto-synced on open and on leave. The token is stored only on this device — never exported, never shared.' }),
+      el('ol', { class: 'gist-steps' }, [
+        el('li', {}, [el('span', { text: 'Create a token: ' }), el('a', { href: 'https://github.com/settings/tokens?type=beta', target: '_blank', rel: 'noopener', text: 'github.com/settings/tokens' }), el('span', { text: ' → Fine-grained → Account permissions → Gists: Read and write. (Or a classic token with only the “gist” scope.)' })]),
+        el('li', { text: 'Paste it below and Connect — Guruji makes one private gist and keeps guruji.json in it.' }),
+        el('li', { text: 'On your other device, connect with a token from the same GitHub account; it finds the same gist.' }),
+      ]),
+      el('div', { class: 'field', style: 'margin-top:6px' }, [gistTokenInput]),
+      el('button', { class: 'btn btn-primary', text: 'Connect', disabled: !planLoaded, onclick: doConnect }),
+    );
+  }
+
+  // Build the file-sync section, tuned to what this browser can do.
+  const syncNodes = [el('h2', { text: 'Sync with a file (iCloud)' })];
   if (supported && linked) {
     syncNodes.push(
       el('p', { class: 'muted', text: `Linked to ${linkName}. “Save” writes straight into it; “Pull” reads the other device’s changes and merges them — no Downloads folder.` }),
@@ -262,7 +313,7 @@ export async function renderData(mount, { navigate }) {
     el('h1', { text: 'Data' }),
     el('p', {
       class: 'muted',
-      text: 'Everything lives on this device. To sync: Save to iCloud here, keep guruji.json in iCloud Drive, then Load it on your other device — Guruji merges the two smartly rather than overwriting.',
+      text: 'Everything lives on this device. For hands-off sync across devices, connect Cloud sync below. Prefer no account? Use the file-based iCloud option instead. Either way, Guruji merges devices smartly rather than overwriting.',
     }),
 
     el('hr', { class: 'sep' }),
@@ -272,6 +323,10 @@ export async function renderData(mount, { navigate }) {
       ? 'Set as your desktop — it owns your study-guide content (your notes win when you sync). Your phone stays in charge of the daily schedule and session log.'
       : 'Set as your phone — it owns your daily schedule and session log (they’re never overwritten by a desktop snapshot). Study-guide content flows in from the desktop. Progress like “done” syncs both ways, newest change winning.' }),
     roleRow,
+
+    el('hr', { class: 'sep' }),
+
+    ...cloudNodes,
 
     el('hr', { class: 'sep' }),
 
