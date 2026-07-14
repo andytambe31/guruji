@@ -3,8 +3,11 @@
 // the countdown, and everything captured (LeetCode, concepts, topics, effort)
 // into "here's the plan to land a FAANG offer in N days."
 import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
-import { computeRoadmap, getDrillState, getNuggetState, getItems, getStudiedConcepts, getWeekSolved, toggleWeekSolved } from '../store.js';
+import { computeRoadmap, getDrillState, getNuggetState, getItems, getStudiedConcepts, getLog } from '../store.js';
 import { PROBLEM_BANK, conceptsForTitles, ALL_CONCEPT_KEYS } from '../problems.js';
+import { CONCEPTS } from './drills.js';
+
+const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
 const fmtDate = (iso) => iso ? new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '';
 const AREA_DOT = { DSA: '#3b5bd9', 'System Design': '#0f9d6b', 'CS Fundamentals': '#7d5bd6', Behavioral: '#d05b7d', Applications: '#c98a2e', Reading: '#d98324' };
@@ -14,10 +17,9 @@ const AREA_DOT = { DSA: '#3b5bd9', 'System Design': '#0f9d6b', 'CS Fundamentals'
 let mode = 'week';
 
 export async function renderRoadmap(mount, { navigate }) {
-  const [r, drillState, nuggetState, items, studied] = await Promise.all([
-    computeRoadmap(), getDrillState(), getNuggetState(), getItems(), getStudiedConcepts(),
+  const [r, drillState, nuggetState, items, studied, log] = await Promise.all([
+    computeRoadmap(), getDrillState(), getNuggetState(), getItems(), getStudiedConcepts(), getLog(),
   ]);
-  let weekSolved = r.goalDate ? await getWeekSolved(r.currentWeek) : {};
   const wrap = el('div', { class: 'road-wrap' });
   mount.append(wrap);
 
@@ -55,68 +57,101 @@ export async function renderRoadmap(mount, { navigate }) {
     else renderFull();
   }
 
-  // =================== THIS WEEK — concrete, named work ===================
+  // =================== THIS WEEK — a mirror of the week's effort ===================
+  // Nothing here is editable: everything reflects what you actually logged this
+  // week. Each item is Completed (logged + confident), Attempted (logged, not
+  // confident yet), or not-yet. The point is to see the time going in.
   function renderThisWeek() {
     const ph = r.currentPhase;
+    const weekAgo = addDaysISO(todayISO(), -6);
+    const weekLog = log.filter((e) => e.date && String(e.date) >= weekAgo);
 
-    // This week's concepts: patterns the current phase's DSA topics cover. If the
-    // phase has no pattern-topics (e.g. an interview-mode phase), fall back to the
-    // whole bank so there's always concrete work to keep sharp.
-    const phaseTitles = items
-      .filter((i) => i.area === 'DSA' && (!ph || i.phase === ph.id))
-      .map((i) => i.title);
-    let conceptKeys = conceptsForTitles(phaseTitles);
-    if (!conceptKeys.length) conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && i.status === 'todo').map((i) => i.title));
-    if (!conceptKeys.length) conceptKeys = ALL_CONCEPT_KEYS;
+    // LeetCode problems logged this week → status by normalised title/slug.
+    const lcStatus = new Map();
+    for (const e of weekLog) for (const pr of (e.leetcode || [])) {
+      const key = norm(pr.slug || pr.title); if (!key) continue;
+      const st = pr.outcome === 'solved' ? 'completed' : 'attempted';
+      if (st === 'completed' || !lcStatus.has(key)) lcStatus.set(key, st);
+    }
+    // Which plan items you spent time on this week (for milestone "attempted").
+    const workedThisWeek = new Set(weekLog.filter((e) => e.itemId).map((e) => e.itemId));
 
-    const allProblems = conceptKeys.flatMap((k) => PROBLEM_BANK[k].problems);
-    const solvedCount = () => allProblems.filter((pr) => weekSolved[pr.t]).length;
+    const statusRow = (label, status, right) => el('div', { class: `tw-item st-${status}` }, [
+      el('span', { class: 'tw-mark', text: status === 'completed' ? '✓' : status === 'attempted' ? '◐' : '○' }),
+      el('span', { class: 'tw-item-t', text: label }),
+      right || null,
+    ]);
+    const tally = (arr, of) => {
+      const c = arr.filter((s) => s === 'completed').length, a = arr.filter((s) => s === 'attempted').length;
+      const parts = [`${c} done`]; if (a) parts.push(`${a} attempted`); if (of != null) parts.push(`of ${of}`);
+      return parts.join(' · ');
+    };
 
-    // Minimal header — just the week + focus.
+    // Header — just the week + focus.
     wrap.append(el('div', { class: 'tw-head' }, [
       el('div', { class: 'tw-week' }, [
         el('span', { class: 'tw-week-n', text: `Week ${r.currentWeek}` }),
         el('span', { class: 'tw-week-win', text: ph ? ph.name : `${r.daysLeft} days to ${r.goalLabel}` }),
       ]),
+      el('div', { class: 'tw-note', text: 'Reflects what you logged this week — keep putting the time in.' }),
     ]));
 
-    // ---- Concepts + the exact problems to solve for each ----
-    const counter = el('span', { class: 'tw-count', text: `${solvedCount()} / ${allProblems.length} solved` });
-    wrap.append(el('div', { class: 'road-h tw-h' }, [el('span', { text: 'Solve these — this week' }), counter]));
-
+    // ---------- DSA — the named problems, status from your logs ----------
+    let conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && (!ph || i.phase === ph.id)).map((i) => i.title));
+    if (!conceptKeys.length) conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && i.status === 'todo').map((i) => i.title));
+    if (!conceptKeys.length) conceptKeys = ALL_CONCEPT_KEYS;
+    const bankStatuses = [];
+    const conceptBlocks = [];
     for (const key of conceptKeys) {
       const c = PROBLEM_BANK[key];
-      const isStudied = !!studied[key];
       const block = el('div', { class: 'tw-concept' });
       block.append(el('div', { class: 'tw-concept-top' }, [
         el('span', { class: 'tw-concept-name', text: c.name }),
-        el('span', { class: 'tw-concept-tag' + (isStudied ? ' studied' : ''), text: isStudied ? 'studied' : 'to study' }),
+        el('span', { class: 'tw-concept-tag' + (studied[key] ? ' studied' : ''), text: studied[key] ? 'studied' : 'to study' }),
       ]));
       for (const pr of c.problems) {
-        const row = el('button', { class: 'tw-prob' + (weekSolved[pr.t] ? ' done' : ''), onclick: async () => {
-          weekSolved = await toggleWeekSolved(r.currentWeek, pr.t);
-          row.classList.toggle('done', !!weekSolved[pr.t]);
-          row.querySelector('.tw-box').textContent = weekSolved[pr.t] ? '☑' : '☐';
-          counter.textContent = `${solvedCount()} / ${allProblems.length} solved`;
-        } }, [
-          el('span', { class: 'tw-box', text: weekSolved[pr.t] ? '☑' : '☐' }),
-          el('span', { class: 'tw-prob-t', text: pr.t }),
-          el('span', { class: 'lc-diff ' + (pr.d === 'Hard' ? 'd-hard' : 'd-medium'), text: pr.d }),
-        ]);
-        block.append(row);
+        const st = lcStatus.get(norm(pr.t)) || 'none';
+        bankStatuses.push(st);
+        block.append(statusRow(pr.t, st, el('span', { class: 'lc-diff ' + (pr.d === 'Hard' ? 'd-hard' : 'd-medium'), text: pr.d })));
       }
-      wrap.append(block);
+      conceptBlocks.push(block);
+    }
+    // Any solved this week that aren't on the named list — still real effort.
+    const bankKeys = new Set(conceptKeys.flatMap((k) => PROBLEM_BANK[k].problems.map((pr) => norm(pr.t))));
+    let extraDone = 0, extraAtt = 0;
+    for (const [k, st] of lcStatus) if (!bankKeys.has(k)) { if (st === 'completed') extraDone++; else extraAtt++; }
+    wrap.append(el('div', { class: 'road-h tw-h' }, [el('span', { text: 'DSA problems' }), el('span', { class: 'tw-count', text: tally(bankStatuses) })]));
+    conceptBlocks.forEach((bl) => wrap.append(bl));
+    if (extraDone || extraAtt) wrap.append(el('div', { class: 'tw-extra', text: `+ ${extraDone} more solved${extraAtt ? `, ${extraAtt} attempted` : ''} off-list this week` }));
+
+    // ---------- System Design — this phase's milestones ----------
+    const sdItems = items.filter((i) => i.area === 'System Design' && ph && i.phase === ph.id);
+    if (sdItems.length) {
+      const sdSt = sdItems.map((it) => it.status === 'done' ? 'completed' : (workedThisWeek.has(it.id) ? 'attempted' : 'none'));
+      wrap.append(el('div', { class: 'road-h tw-h', style: 'margin-top:26px' }, [el('span', { text: 'System Design' }), el('span', { class: 'tw-count', text: tally(sdSt, sdItems.length) })]));
+      const box = el('div', { class: 'tw-concept' });
+      sdItems.forEach((it, i) => box.append(statusRow(it.title.replace(/^System design read:\s*/i, ''), sdSt[i])));
+      wrap.append(box);
     }
 
-    // ---- Repetition — measured by drills + nuggets reviewed this week ----
-    const dReps = repsIn(drillState), nReps = repsIn(nuggetState);
-    wrap.append(el('div', { class: 'road-h tw-h', style: 'margin-top:26px' }, [el('span', { text: 'Repetition — this week' })]));
+    // ---------- CS Fundamentals — concepts covered ----------
+    const csf = CONCEPTS.filter((c) => c.area === 'CS Fundamentals');
+    if (csf.length) {
+      const csfSt = csf.map((c) => studied[c.id] ? 'completed' : 'none');
+      wrap.append(el('div', { class: 'road-h tw-h', style: 'margin-top:26px' }, [el('span', { text: 'CS Fundamentals' }), el('span', { class: 'tw-count', text: tally(csfSt, csf.length) })]));
+      const box = el('div', { class: 'tw-concept' });
+      csf.forEach((c, i) => box.append(statusRow(c.name, csfSt[i], el('button', { class: 'tw-mini-link', text: csfSt[i] === 'completed' ? 'review' : 'study', onclick: () => navigate(csfSt[i] === 'completed' ? '/nuggets' : '/concepts') }))));
+      wrap.append(box);
+    }
+
+    // ---------- Repetition — drills + nuggets reviewed this week ----------
+    wrap.append(el('div', { class: 'road-h tw-h', style: 'margin-top:26px' }, [el('span', { text: 'Repetition' })]));
     wrap.append(el('div', { class: 'tw-reps' }, [
       el('button', { class: 'tw-rep', onclick: () => navigate('/drills') }, [
-        el('span', { class: 'tw-rep-n', text: `${dReps}` }), el('span', { class: 'tw-rep-l', text: 'drills reviewed' }),
+        el('span', { class: 'tw-rep-n', text: `${repsIn(drillState)}` }), el('span', { class: 'tw-rep-l', text: 'drills reviewed' }),
       ]),
       el('button', { class: 'tw-rep', onclick: () => navigate('/nuggets') }, [
-        el('span', { class: 'tw-rep-n', text: `${nReps}` }), el('span', { class: 'tw-rep-l', text: 'nuggets reviewed' }),
+        el('span', { class: 'tw-rep-n', text: `${repsIn(nuggetState)}` }), el('span', { class: 'tw-rep-l', text: 'nuggets reviewed' }),
       ]),
     ]));
 

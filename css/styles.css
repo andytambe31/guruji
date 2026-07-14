@@ -762,17 +762,22 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .tw-concept-name { font-size: 15px; font-weight: 700; color: var(--text); }
 .tw-concept-tag { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
 .tw-concept-tag.studied { color: #0f9d6b; border-color: rgba(15,157,107,.4); }
-.tw-prob {
+/* Non-editable status rows — a mirror of what you logged. */
+.tw-item {
   display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
-  background: none; border: none; border-bottom: 1px solid var(--line-soft);
-  padding: 11px 2px; font: inherit; color: var(--text); cursor: pointer;
+  border-bottom: 1px solid var(--line-soft); padding: 11px 2px; font-size: 14.5px;
 }
-.tw-prob:active { background: var(--bg-soft); }
-.tw-box { font-size: 17px; color: var(--text-faint); flex: 0 0 auto; line-height: 1; }
-.tw-prob.done .tw-box { color: var(--ok, #0f9d6b); }
-.tw-prob-t { flex: 1; min-width: 0; font-size: 14.5px; }
-.tw-prob.done .tw-prob-t { color: var(--text-faint); text-decoration: line-through; }
-.tw-prob .lc-diff { flex: 0 0 auto; }
+.tw-mark { flex: 0 0 auto; width: 18px; text-align: center; font-size: 15px; line-height: 1; color: var(--text-faint); }
+.tw-item-t { flex: 1; min-width: 0; color: var(--text); }
+.tw-item .lc-diff, .tw-item .tw-mini-link { flex: 0 0 auto; }
+.tw-item.st-completed .tw-mark { color: var(--ok, #0f9d6b); }
+.tw-item.st-completed .tw-item-t { color: var(--text-faint); }
+.tw-item.st-attempted .tw-mark { color: #c98a2e; }
+.tw-item.st-none .tw-item-t { color: var(--text-faint); }
+.tw-mini-link { background: none; border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; font: inherit; font-size: 12px; color: var(--text-faint); cursor: pointer; }
+.tw-mini-link:active { background: var(--bg-soft); }
+.tw-extra { font-size: 12.5px; color: var(--text-faint); margin: 4px 2px 0; }
+.tw-note { font-size: 13px; color: var(--text-faint); margin-top: 6px; }
 /* Repetition tiles */
 .tw-reps { display: flex; gap: 12px; }
 .tw-rep { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; background: var(--bg-soft); border: none; border-radius: 14px; padding: 14px 16px; cursor: pointer; font: inherit; }
