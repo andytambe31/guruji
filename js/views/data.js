@@ -190,17 +190,18 @@ export async function renderData(mount, { navigate }) {
       el('button', { class: 'btn btn-primary', text: 'Link my iCloud file', disabled: !planLoaded, onclick: doLink }),
     );
   } else {
-    // No File System Access API (Safari, iOS) — no persistent handle. Share
-    // sheet → Save to Files. On a desktop, point at Chrome/Edge for the
-    // seamless linked-file flow, since that's actionable there.
+    // No File System Access API (Safari / installed iOS PWA) — no persistent
+    // handle. Save via the share sheet (→ Save to Files → iCloud); Pull opens
+    // the file picker straight to iCloud Drive. Both live here so the loop is
+    // self-contained, not split across the page.
     syncNodes.push(
-      el('p', { class: 'muted', text: planLoaded ? 'Save your snapshot into Files → iCloud Drive (overwrite guruji.json), then Pull it on the other device from Load, below.' : 'Load a plan first, then you can save it.' }),
+      el('p', { class: 'muted', text: planLoaded ? 'Save writes your snapshot to iCloud (via the share sheet → Save to Files); Pull reads the other device’s file and merges it. A couple of taps each way — Safari doesn’t allow in-place file writing.' : 'Load a plan first, then you can save it.' }),
       el('div', { class: 'sync-status', text: `Last synced · ${agoText(lastSync)}` }),
-      el('button', { class: 'btn btn-primary', text: 'Save to iCloud', disabled: !planLoaded, onclick: doShareSave }),
+      el('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;margin-top:4px' }, [
+        el('button', { class: 'btn btn-primary', text: 'Save to iCloud', disabled: !planLoaded, onclick: doShareSave }),
+        el('button', { class: 'btn btn-ghost', text: 'Pull from iCloud', onclick: () => fileInput.click() }),
+      ]),
     );
-    if (role === 'desktop') {
-      syncNodes.push(el('p', { class: 'muted', style: 'font-size:12.5px;margin-top:10px', text: 'Tip: this browser can’t link a file for one-click, in-place sync — that needs the File System Access API. Open Guruji in Chrome or Edge on this Mac to get “Link my iCloud file” (Safari saves via the share sheet instead).' }));
-    }
   }
 
   const backupBtn = el('button', {
