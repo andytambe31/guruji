@@ -4,6 +4,7 @@ import { uid, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes } from '.
 import { buildSessionGoals, regradeSessionGoals } from './objectives.js';
 import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './schedule.js';
 import { SCHEMA_VERSION } from './migrations.js';
+import { seedSystemDesignContent } from './sdi-content.js';
 
 // ---------- Routine settings (bedtime, goal countdown) ----------
 const DEFAULT_SETTINGS = {
@@ -117,6 +118,11 @@ export async function runStartupMigrations() {
     return { ran: true, removed };
   } catch {
     return { ran: false };
+  } finally {
+    // Seed the bundled System Design Interview content pack (idempotent, and
+    // independent of the fresh-start purge above — runs on every boot but no-ops
+    // once present).
+    await seedSystemDesignContent();
   }
 }
 
