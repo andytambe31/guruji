@@ -15,6 +15,10 @@ const AREA_DOT = { DSA: '#3b5bd9', 'System Design': '#0f9d6b', 'CS Fundamentals'
 // Remembered across navigations within the session — the phone's default is the
 // focused weekly view; the full roadmap is a tap away.
 let mode = 'week';
+// Which DSA concept groups are expanded in the This-week view. Collapsed by
+// default so the page reads as a clean pattern list; tap one open to see the
+// exact problems. Persisted across re-renders within the session.
+const twOpen = new Set();
 
 export async function renderRoadmap(mount, { navigate }) {
   const [r, drillState, nuggetState, items, studied, log] = await Promise.all([
@@ -73,6 +77,10 @@ export async function renderRoadmap(mount, { navigate }) {
       const st = pr.outcome === 'solved' ? 'completed' : 'attempted';
       if (st === 'completed' || !lcStatus.has(key)) lcStatus.set(key, st);
     }
+    // The week at a glance: how many distinct problems solved / attempted.
+    let weekDone = 0, weekAtt = 0;
+    for (const st of lcStatus.values()) { if (st === 'completed') weekDone++; else weekAtt++; }
+    const weekTarget = (r.horizons && r.horizons.week && r.horizons.week.lc) || 0;
     // Which plan items you spent time on this week (for milestone "attempted").
     const workedThisWeek = new Set(weekLog.filter((e) => e.itemId).map((e) => e.itemId));
 
@@ -96,6 +104,23 @@ export async function renderRoadmap(mount, { navigate }) {
       el('div', { class: 'tw-note', text: 'Reflects what you logged this week — keep putting the time in.' }),
     ]));
 
+    // ---------- Progress at the top — problems solved / attempted this week ----------
+    const pctDone = weekTarget > 0 ? Math.min(100, Math.round((weekDone / weekTarget) * 100)) : (weekDone > 0 ? 100 : 0);
+    const pctAtt = weekTarget > 0 ? Math.min(100 - pctDone, Math.round((weekAtt / weekTarget) * 100)) : (weekAtt > 0 && !weekDone ? 12 : 0);
+    wrap.append(el('div', { class: 'tw-prog' }, [
+      el('div', { class: 'tw-prog-top' }, [
+        el('span', { class: 'tw-prog-l', text: 'Problems this week' }),
+        el('span', { class: 'tw-prog-v' }, [
+          el('b', { text: `${weekDone}` }),
+          el('span', { text: ` solved${weekAtt ? ` · ${weekAtt} attempted` : ''}${weekTarget ? ` / ${weekTarget}` : ''}` }),
+        ]),
+      ]),
+      el('div', { class: 'tw-prog-track' }, [
+        el('div', { class: 'tw-prog-fill done', style: `width:${pctDone}%` }),
+        el('div', { class: 'tw-prog-fill att', style: `width:${pctAtt}%` }),
+      ]),
+    ]));
+
     // ---------- DSA — the named problems, status from your logs ----------
     let conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && (!ph || i.phase === ph.id)).map((i) => i.title));
     if (!conceptKeys.length) conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && i.status === 'todo').map((i) => i.title));
@@ -104,16 +129,23 @@ export async function renderRoadmap(mount, { navigate }) {
     const conceptBlocks = [];
     for (const key of conceptKeys) {
       const c = PROBLEM_BANK[key];
-      const block = el('div', { class: 'tw-concept' });
-      block.append(el('div', { class: 'tw-concept-top' }, [
+      const open = twOpen.has(key);
+      const sts = c.problems.map((pr) => lcStatus.get(norm(pr.t)) || 'none');
+      sts.forEach((s) => bankStatuses.push(s));
+      const done = sts.filter((s) => s === 'completed').length;
+      const att = sts.filter((s) => s === 'attempted').length;
+      const block = el('div', { class: 'tw-concept' + (open ? ' open' : '') });
+      // Collapsed header: pattern name, studied tag, and a compact tally. Tap to
+      // reveal the exact problems underneath.
+      block.append(el('button', { class: 'tw-concept-top', type: 'button', 'aria-expanded': String(open), onclick: () => { if (twOpen.has(key)) twOpen.delete(key); else twOpen.add(key); clear(wrap); build(); } }, [
+        el('span', { class: 'tw-chev', text: '▸' }),
         el('span', { class: 'tw-concept-name', text: c.name }),
         el('span', { class: 'tw-concept-tag' + (studied[key] ? ' studied' : ''), text: studied[key] ? 'studied' : 'to study' }),
+        el('span', { class: 'tw-concept-mini', text: `${done}/${c.problems.length}${att ? ` · ${att} att` : ''}` }),
       ]));
-      for (const pr of c.problems) {
-        const st = lcStatus.get(norm(pr.t)) || 'none';
-        bankStatuses.push(st);
-        block.append(statusRow(pr.t, st, el('span', { class: 'lc-diff ' + (pr.d === 'Hard' ? 'd-hard' : 'd-medium'), text: pr.d })));
-      }
+      const body = el('div', { class: 'tw-concept-body' });
+      c.problems.forEach((pr, i) => body.append(statusRow(pr.t, sts[i], el('span', { class: 'lc-diff ' + (pr.d === 'Hard' ? 'd-hard' : 'd-medium'), text: pr.d }))));
+      block.append(body);
       conceptBlocks.push(block);
     }
     // Any solved this week that aren't on the named list — still real effort.

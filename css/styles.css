@@ -756,12 +756,32 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .tw-verdict-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .tw-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .tw-count { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-/* Concept groups + their named problems */
-.tw-concept { margin-bottom: 18px; }
-.tw-concept-top { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+/* Week-at-a-glance progress bar (solved + attempted this week) */
+.tw-prog { margin: 2px 0 22px; }
+.tw-prog-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; }
+.tw-prog-l { font-size: 13.5px; font-weight: 600; color: var(--text); }
+.tw-prog-v { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+.tw-prog-v b { color: var(--text); font-size: 14px; }
+.tw-prog-track { display: flex; height: 9px; border-radius: 999px; overflow: hidden; background: var(--bg-soft); }
+.tw-prog-fill { height: 100%; }
+.tw-prog-fill.done { background: var(--ok, #0f9d6b); }
+.tw-prog-fill.att { background: #c98a2e; opacity: .5; }
+/* Concept groups — collapsible; tap the header to reveal the problems */
+.tw-concept { margin-bottom: 4px; }
+.tw-concept-top {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--line-soft);
+  padding: 12px 2px; font: inherit; color: var(--text); cursor: pointer;
+}
+.tw-concept-top:active { background: var(--bg-soft); }
+.tw-chev { flex: 0 0 auto; font-size: 11px; color: var(--text-faint); transition: transform .15s ease; }
+.tw-concept.open .tw-chev { transform: rotate(90deg); }
 .tw-concept-name { font-size: 15px; font-weight: 700; color: var(--text); }
 .tw-concept-tag { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
 .tw-concept-tag.studied { color: #0f9d6b; border-color: rgba(15,157,107,.4); }
+.tw-concept-mini { margin-left: auto; font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+.tw-concept-body { display: none; padding: 2px 0 10px; }
+.tw-concept.open .tw-concept-body { display: block; }
 /* Non-editable status rows — a mirror of what you logged. */
 .tw-item {
   display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
