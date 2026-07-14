@@ -207,10 +207,17 @@ async function boot() {
   autoSyncOnOpen();
   cloudSyncOnOpen();
 
-  // Cloud sync (Gist): push whatever changed when you leave the app, so the
-  // next device pulls it. visibilitychange covers backgrounding an iOS PWA;
-  // pagehide covers a hard close.
-  const pushOnLeave = () => { isGistConfigured().then((ok) => { if (ok) pushGist().catch(() => {}); }).catch(() => {}); };
+  // Cloud sync (Gist): push whatever changed. Prefer an EAGER push a couple
+  // seconds after a change (while foregrounded, so the network call actually
+  // completes — iOS suspends a fetch fired on background). The on-leave push is
+  // a best-effort backup for anything not yet flushed.
+  let pushTimer = null;
+  const pushNow = () => { isGistConfigured().then((ok) => { if (ok) pushGist().catch(() => {}); }).catch(() => {}); };
+  window.addEventListener('guruji:changed', () => {
+    if (pushTimer) clearTimeout(pushTimer);
+    pushTimer = setTimeout(() => { pushTimer = null; pushNow(); }, 2500);
+  });
+  const pushOnLeave = () => { if (pushTimer) { clearTimeout(pushTimer); pushTimer = null; } pushNow(); };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') pushOnLeave(); });
   window.addEventListener('pagehide', pushOnLeave);
 

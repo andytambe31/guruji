@@ -11,6 +11,22 @@ import { seedCSFundamentalsContent } from './csf-content.js';
 // control it via page.clock and so the intent reads clearly at each call site.
 const nowISO = () => new Date().toISOString();
 
+// Broadcast a local data change so the app can eagerly push to the cloud while
+// still foregrounded (iOS kills a fetch fired on background). No-op off-browser.
+function emitChanged() { try { if (typeof window !== 'undefined') window.dispatchEvent(new Event('guruji:changed')); } catch { /* non-browser */ } }
+
+// Schedule versioning for sync: every schedule write bumps `scheduleAt`, and the
+// merge adopts a remote schedule only when its stamp is strictly newer — so a
+// device never clobbers its own newer schedule with an older remote copy (the
+// cross-device "my dinner edit reverted" bug). `SCH` avoids the wrappers below
+// matching their own STORES.schedule writes.
+const SCH = STORES.schedule;
+async function bumpSchedule() { try { await put(STORES.kv, { k: 'scheduleAt', v: nowISO() }); } catch { /* ignore */ } emitChanged(); }
+export async function getScheduleAt() { try { const r = await get(STORES.kv, 'scheduleAt'); return r ? r.v : null; } catch { return null; } }
+const sPut = async (rec) => { await put(SCH, rec); await bumpSchedule(); };
+const sBulkPut = async (recs) => { await bulkPut(SCH, recs); await bumpSchedule(); };
+const sDel = async (id) => { await del(SCH, id); await bumpSchedule(); };
+
 // ---------- Device role (phone / desktop) — the sync authority axis ----------
 // Content (study guides) is desktop-authoritative; the daily schedule/log is
 // phone-owned. Each install needs to know which it is. Default: auto-detect from
@@ -49,6 +65,7 @@ export async function setSettings(patch) {
   const cur = await getSettings();
   const next = { ...cur, ...(patch || {}), updatedAt: nowISO() };
   await put(STORES.kv, { k: 'settings', v: next });
+  emitChanged();
   return next;
 }
 
@@ -63,6 +80,7 @@ export async function getReading() {
 export async function setReading(v) {
   const stamped = { ...v, updatedAt: nowISO() };
   await put(STORES.kv, { k: 'reading', v: stamped });
+  emitChanged();
   return stamped;
 }
 export async function setCurrentBook({ title, author, intent, totalPages } = {}) {
@@ -221,6 +239,7 @@ export async function setItemStatus(id, status) {
   item.status = status;
   item.statusAt = nowISO(); // progress syncs both ways, newest-edit wins
   await put(STORES.items, item);
+  emitChanged();
   // Finishing a piece of content auto-marks the catalog concepts it covers as
   // studied, so its nuggets (and any drills) start surfacing right away — no
   // separate trip to the concept catalog. "Read the article → keep me fresh."
@@ -267,6 +286,7 @@ export async function setItemNotes(id, notes) {
   item.notes = notes || '';
   item.notesAt = nowISO(); // content is desktop-authored; stamp so newest desktop edit wins
   await put(STORES.items, item);
+  emitChanged();
   return item;
 }
 
@@ -369,6 +389,7 @@ export async function saveScheduleRows(rows) {
     _order: i,
   }));
   await replaceStores({ [STORES.schedule]: withIds });
+  await bumpSchedule();
   return withIds;
 }
 export async function clearSchedule() {
@@ -409,7 +430,7 @@ export async function reclaimStaleBlocks(date, now = new Date()) {
     if ((studiedByBlock.get(b.id) || 0) > 0) continue;       // real time logged — keep
     const beforeWake = wakeStart != null && b.start < wakeStart;
     const fullyPast = (b.start + (b.minutes || 0)) <= nowMin;
-    if (beforeWake || fullyPast) { await del(STORES.schedule, b.id); removed += 1; }
+    if (beforeWake || fullyPast) { await sDel(b.id); removed += 1; }
   }
   return removed;
 }
@@ -443,7 +464,7 @@ export async function ensureBlockGoals(id) {
     item, minutes: block.minutes, load: block.load,
     prior: last ? last.goals : [], seq: priors.length,
   });
-  await put(STORES.schedule, block);
+  await sPut(block);
   return block.goals;
 }
 export async function toggleBlockGoal(id, text) {
@@ -452,7 +473,7 @@ export async function toggleBlockGoal(id, text) {
   if (!block || !Array.isArray(block.goals)) return [];
   const g = block.goals.find((x) => x.text === text);
   if (g) g.met = !g.met;
-  await put(STORES.schedule, block);
+  await sPut(block);
   return block.goals;
 }
 export async function setBlockGoals(id, goals) {
@@ -461,18 +482,18 @@ export async function setBlockGoals(id, goals) {
   block.goals = (Array.isArray(goals) ? goals : [])
     .map((x) => ({ text: String(x.text || '').trim(), met: !!x.met }))
     .filter((x) => x.text);
-  await put(STORES.schedule, block);
+  await sPut(block);
   return block.goals;
 }
 export async function deleteBlock(id) {
-  return del(STORES.schedule, id);
+  return sDel(id);
 }
 export async function setBlockStatus(id, status) {
   const b = await get(STORES.schedule, id);
   if (!b) return null;
   b.status = status;
   if (status === 'done') b.pinned = true; // it happened — freeze it in place
-  await put(STORES.schedule, b);
+  await sPut(b);
   return b;
 }
 
@@ -483,13 +504,13 @@ export async function getBusyForDate(date) {
 }
 export async function putBusy({ date, start, minutes, label, drain, transit }) {
   const rec = { kind: 'busy', id: uid('busy'), date, start, minutes, label: label || 'Busy', drain: drain || 'none', transit: !!transit };
-  await put(STORES.schedule, rec);
+  await sPut(rec);
   await reflowDate(date);
   return rec;
 }
 export async function deleteBusy(id) {
   const b = await get(STORES.schedule, id);
-  await del(STORES.schedule, id);
+  await sDel(id);
   if (b) await reflowDate(b.date);
   return b;
 }
@@ -499,7 +520,7 @@ export async function setBusyStatus(id, status) {
   const b = await get(STORES.schedule, id);
   if (!b || b.kind !== 'busy') return null;
   b.status = status;
-  await put(STORES.schedule, b);
+  await sPut(b);
   // No reflow here — ticking a commitment off is just a state change; you drive
   // the re-fit explicitly with Reassess, so nothing shuffles under you.
   return b;
@@ -508,7 +529,7 @@ export async function setBusyStatus(id, status) {
 // first — otherwise each re-plan stacks another gym/walk/office.
 export async function clearBusyForDate(date) {
   const rows = await getBusyForDate(date);
-  for (const b of rows) await del(STORES.schedule, b.id);
+  for (const b of rows) await sDel(b.id);
 }
 
 // Two things can't happen at once. Fixed commitments (office, commute, meals)
@@ -536,7 +557,7 @@ export async function deconflictBusy(date) {
   const placed = [...anchors];
   for (const m of movable) {
     const s = slidePast(m.start, m.minutes, placed);
-    if (s !== m.start) { m.start = s; await put(STORES.schedule, m); }
+    if (s !== m.start) { m.start = s; await sPut(m); }
     placed.push({ start: m.start, minutes: m.minutes });
   }
 }
@@ -592,7 +613,7 @@ export async function arrangeCommitments(date) {
       // day, for a slot clear of other commitments and the post-meal digest zones.
       let slot = earliestFreeSlot(gym.minutes, eveningStart, PHYS_CURFEW, [...others(), ...digestZones]);
       if (slot == null) slot = earliestFreeSlot(gym.minutes, DAY_START, PHYS_CURFEW, [...others(), ...digestZones]);
-      if (slot != null && slot !== gym.start) { gym.start = slot; await put(STORES.schedule, gym); }
+      if (slot != null && slot !== gym.start) { gym.start = slot; await sPut(gym); }
     }
   }
   if (walk && walk.start >= 12 * 60) { // only rearrange an EVENING walk; a morning one stays
@@ -603,7 +624,7 @@ export async function arrangeCommitments(date) {
       const from = gymEnd != null ? gymEnd : eveningStart;
       const zones = [...others(), ...(gym ? [{ start: gym.start, end: gym.start + gym.minutes }] : [])];
       const slot = earliestFreeSlot(walk.minutes, from, PHYS_CURFEW, zones);
-      if (slot != null && slot !== walk.start) { walk.start = slot; await put(STORES.schedule, walk); }
+      if (slot != null && slot !== walk.start) { walk.start = slot; await sPut(walk); }
     }
   }
 }
@@ -615,7 +636,7 @@ export async function reflowDate(date) {
   if (!blocks.length) return [];
   // Done commitments are no longer obstacles — study may flow through their time.
   const packed = reflow(blocks, busy.filter((b) => b.status !== 'done'));
-  await bulkPut(STORES.schedule, packed.map((b) => ({ ...b, kind: 'block' })));
+  await sBulkPut(packed.map((b) => ({ ...b, kind: 'block' })));
   return packed;
 }
 
@@ -645,7 +666,7 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     b.status === 'done' || (b.pinned && !b.onCommute) || (studiedByBlock.get(b.id) || 0) > 0);
   const keepSet = new Set(keep);
   for (const b of existing) {
-    if (!keepSet.has(b)) await del(STORES.schedule, b.id);
+    if (!keepSet.has(b)) await sDel(b.id);
   }
 
   // A bedtime at/after midnight (e.g. 12:00am) belongs to the *next* calendar
@@ -734,7 +755,7 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
   const rows = [...commuteBlocks, ...fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }))];
   // No final reflow here — planDay already lays a clean, break-scaled layout
   // that respects the wake start and routes around commitments + pinned blocks.
-  await bulkPut(STORES.schedule, rows);
+  await sBulkPut(rows);
   return getBlocksForDate(date);
 }
 
@@ -755,7 +776,7 @@ export async function blockItem(itemId, date, startMin) {
     status: 'planned',
     pinned: true,
   };
-  await put(STORES.schedule, rec);
+  await sPut(rec);
   await reflowDate(date);
   return rec;
 }
@@ -773,7 +794,7 @@ export async function swapBlockItem(blockId, newItemId) {
   b.mode = it.mode;
   b.onCommute = false; // a hand-picked swap isn't tied to the old commute slot
   b.pinned = true;
-  await put(STORES.schedule, b);
+  await sPut(b);
   return b;
 }
 
@@ -795,7 +816,7 @@ export async function resequenceBlocks(date, orderedIds) {
     : wakeStart;
 
   sequence(planned, { startMin, busy: [...busy, ...done] });
-  await bulkPut(STORES.schedule, planned.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  await sBulkPut(planned.map((b) => ({ ...b, kind: 'block', pinned: false })));
   return getBlocksForDate(date);
 }
 
@@ -838,8 +859,8 @@ export async function pushBlock(id, delta) {
     if (b.minutes < 15) { dropped.push(b); continue; }
     kept.push(b);
   }
-  for (const d of dropped) await del(STORES.schedule, d.id);
-  await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block', pinned: false })));
+  for (const d of dropped) await sDel(d.id);
+  await sBulkPut(kept.map((b) => ({ ...b, kind: 'block', pinned: false })));
   return getBlocksForDate(date);
 }
 
@@ -865,7 +886,7 @@ export async function extendBlock(id, newMinutes) {
   block.minutes = target;
   block.load = Math.min(block.load == null ? 40 : block.load, 40);
   block.goals = regradeSessionGoals({ item, existing: block.goals || [], minutes: target, load: block.load });
-  await put(STORES.schedule, block);
+  await sPut(block);
 
   // 2. Push the later sessions out by the added time, keeping order, gaps, and
   //    obstacles — same discipline as a Delay, just applied to the tail only.
@@ -892,8 +913,8 @@ export async function extendBlock(id, newMinutes) {
     if (b.minutes < 15) { dropped.push(b); continue; }
     kept.push(b);
   }
-  for (const d of dropped) await del(STORES.schedule, d.id);
-  await bulkPut(STORES.schedule, kept.map((b) => ({ ...b, kind: 'block' })));
+  for (const d of dropped) await sDel(d.id);
+  await sBulkPut(kept.map((b) => ({ ...b, kind: 'block' })));
   return getBlocksForDate(date);
 }
 
@@ -922,7 +943,7 @@ export async function resequenceMixed(date, orderedIds) {
   const startMin = date === todayISO() ? Math.max(Math.ceil((nowMinutes() + 5) / 15) * 15, wakeStart) : wakeStart;
   sequence(ordered, { startMin, busy: [...fixedBusy, ...done] });
   const rows = ordered.map((x) => (x.kind === 'busy' ? { ...x } : { ...x, kind: 'block', pinned: false }));
-  await bulkPut(STORES.schedule, rows);
+  await sBulkPut(rows);
   return getBlocksForDate(date);
 }
 
@@ -935,7 +956,7 @@ export async function retimeBlock(id, startMin, minutes) {
   b.start = Math.max(0, Math.min(23 * 60 + 59, startMin));
   if (minutes != null) b.minutes = Math.max(10, Math.min(240, Math.round(minutes)));
   b.pinned = true;
-  await put(STORES.schedule, b);
+  await sPut(b);
   await reflowDate(b.date);
   return b;
 }
@@ -946,7 +967,7 @@ export async function retimeBusy(id, startMin, minutes) {
   if (!b) return null;
   b.start = Math.max(0, Math.min(23 * 60 + 59, startMin));
   if (minutes != null) b.minutes = Math.max(5, Math.min(720, Math.round(minutes)));
-  await put(STORES.schedule, b);
+  await sPut(b);
   await reflowDate(b.date); // study flows around the new times
   return b;
 }
@@ -958,7 +979,7 @@ export async function moveBlockToDate(id, date) {
   const from = b.date;
   b.date = date;
   b.pinned = false; // let the coach slot it into the new day
-  await put(STORES.schedule, b);
+  await sPut(b);
   if (from !== date) await reflowDate(from);
   await reflowDate(date);
   return b;
@@ -1575,6 +1596,9 @@ export async function ingestPlan(plan, { mergeStatus = true } = {}) {
       ...(plan.busy || []).map((b) => ({ kind: 'busy', id: b.id || uid('busy'), ...b })),
     ];
     await replaceStores({ [STORES.schedule]: sched });
+    // A restore carries its own schedule version if present; else stamp now so a
+    // later merge treats this restored schedule as current.
+    await put(STORES.kv, { k: 'scheduleAt', v: plan.scheduleAt || nowISO() });
   }
   if ('context' in plan) {
     await setContext(plan.context || null);
@@ -1669,6 +1693,7 @@ export async function buildExport() {
     reading,
     log,
     activeSession: await getActiveSession(), // so another device sees a live session
+    scheduleAt: await getScheduleAt(), // schedule version for last-writer-wins sync
     studiedConcepts: await getStudiedConcepts(),
     drillState: (await get(STORES.kv, 'drillState'))?.v || {},
     nuggetState: (await get(STORES.kv, 'nuggetState'))?.v || {},
@@ -1738,16 +1763,34 @@ export async function mergeRemote(remote) {
   }
   if (toPut.length) await bulkPut(STORES.items, toPut);
 
-  // Schedule + log — phone-owned: adopt only from a phone snapshot.
+  // Schedule — last-writer-wins by its own version stamp. Adopt the remote
+  // schedule ONLY when it's strictly newer than ours, so a device never
+  // overwrites its own fresher edits with an older remote copy (the "my dinner
+  // edit reverted after sync" bug). Falls back to the snapshot's exportedAt for
+  // pre-versioning files. The phone is still the de-facto owner because that's
+  // where scheduling happens, so its stamp is normally newest.
   let scheduleAdopted = false;
-  if (remoteRole === 'phone') {
+  const localSchedAt = await getScheduleAt();
+  // Require an explicit schedule version — never fall back to exportedAt, or a
+  // device that merely re-exported (newer exportedAt, unchanged schedule) would
+  // clobber the other's schedule.
+  const remoteSchedAt = remote.scheduleAt;
+  if (Array.isArray(remote.blocks) && remoteSchedAt && _t(remoteSchedAt) > _t(localSchedAt)) {
     const sched = [];
     for (const b of (remote.blocks || [])) sched.push({ kind: 'block', ...b });
     for (const bz of (remote.busy || [])) sched.push({ kind: 'busy', ...bz });
     await replaceStores({ [STORES.schedule]: sched });
-    if (Array.isArray(remote.log)) await replaceStores({ [STORES.log]: remote.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
+    await put(STORES.kv, { k: 'scheduleAt', v: remoteSchedAt }); // keep the adopted version
     if ('activeSession' in remote) await setActiveSession(remote.activeSession || null);
     scheduleAdopted = true;
+  }
+  // Log — union by id (append-only history): never drop or revert a session.
+  if (Array.isArray(remote.log) && remote.log.length) {
+    const localLog = await getAll(STORES.log);
+    const byId = new Map(localLog.map((l) => [l.id, l]));
+    const add = [];
+    for (const l of remote.log) { const id = l.id || uid('log'); if (!byId.has(id)) add.push({ ...l, id }); }
+    if (add.length) await bulkPut(STORES.log, add);
   }
 
   // Settings / reading / context — newest-edit wins.
