@@ -190,12 +190,17 @@ export async function renderData(mount, { navigate }) {
       el('button', { class: 'btn btn-primary', text: 'Link my iCloud file', disabled: !planLoaded, onclick: doLink }),
     );
   } else {
-    // iOS Safari and friends — no persistent handle. Share sheet → Save to Files.
+    // No File System Access API (Safari, iOS) — no persistent handle. Share
+    // sheet → Save to Files. On a desktop, point at Chrome/Edge for the
+    // seamless linked-file flow, since that's actionable there.
     syncNodes.push(
       el('p', { class: 'muted', text: planLoaded ? 'Save your snapshot into Files → iCloud Drive (overwrite guruji.json), then Pull it on the other device from Load, below.' : 'Load a plan first, then you can save it.' }),
       el('div', { class: 'sync-status', text: `Last synced · ${agoText(lastSync)}` }),
       el('button', { class: 'btn btn-primary', text: 'Save to iCloud', disabled: !planLoaded, onclick: doShareSave }),
     );
+    if (role === 'desktop') {
+      syncNodes.push(el('p', { class: 'muted', style: 'font-size:12.5px;margin-top:10px', text: 'Tip: this browser can’t link a file for one-click, in-place sync — that needs the File System Access API. Open Guruji in Chrome or Edge on this Mac to get “Link my iCloud file” (Safari saves via the share sheet instead).' }));
+    }
   }
 
   const backupBtn = el('button', {
