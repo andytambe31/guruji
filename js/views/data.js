@@ -1,13 +1,32 @@
 // Data view: iCloud sync (canonical file), import (file + paste, plan or
 // migration patch), dated backup, and a wipe.
 import { el, clear, toast, todayISO } from '../util.js';
-import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch } from '../importexport.js';
+import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch, snapshotText } from '../importexport.js';
 import { wipeAll, hasPlan, getDeviceRole, setDeviceRole } from '../store.js';
+import { fsaSupported, isLinked, linkedName, linkFile, unlink, writeLinked, readLinked, getLastSync, setLastSync, getAutoSync, setAutoSync, shareSnapshot } from '../fsync.js';
 import { SCHEMA_VERSION } from '../migrations.js';
+
+// "3 hours ago" style relative time for the last-synced nudge.
+function agoText(iso) {
+  if (!iso) return 'never';
+  const ms = Date.now() - Date.parse(iso);
+  if (!(ms >= 0)) return 'just now';
+  const m = Math.round(ms / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.round(h / 24)}d ago`;
+}
 
 export async function renderData(mount, { navigate }) {
   const planLoaded = await hasPlan();
   const role = await getDeviceRole();
+  const supported = fsaSupported();
+  const linked = await isLinked();
+  const linkName = linked ? await linkedName() : null;
+  const autoSync = await getAutoSync();
+  const lastSync = await getLastSync();
 
   const fileInput = el('input', {
     type: 'file',
@@ -115,19 +134,69 @@ export async function renderData(mount, { navigate }) {
     navigate('/now');
   }
 
-  const syncBtn = el('button', {
-    class: 'btn btn-primary',
-    text: 'Save to iCloud (guruji.json)',
-    disabled: !planLoaded,
-    onclick: async () => {
-      try {
-        await exportCanonical();
-        toast('Saved guruji.json — keep it in iCloud Drive');
-      } catch (err) {
-        toast('Save failed', true);
-      }
-    },
-  });
+  // --- Linked-file (File System Access) sync handlers ---
+  async function doPull() {
+    let text = null;
+    try { text = await readLinked(); } catch { text = null; }
+    if (!text) { toast('Could not read the linked file', true); return; }
+    await doImport(text);              // detects a snapshot → merges under the sync rules
+    await setLastSync(new Date().toISOString());
+  }
+  async function doSaveLinked() {
+    try {
+      const name = await writeLinked(await snapshotText());
+      await setLastSync(new Date().toISOString());
+      toast(`Saved to ${name}`);
+      navigate('/data');
+    } catch (e) { toast('Save failed' + (e && e.message ? ` — ${e.message}` : ''), true); }
+  }
+  async function doLink() {
+    try {
+      const name = await linkFile();
+      if (!name) return;              // cancelled the picker
+      try { await writeLinked(await snapshotText()); await setLastSync(new Date().toISOString()); } catch { /* first write optional */ }
+      toast(`Linked ${name}`);
+      navigate('/data');
+    } catch { toast('Could not link the file', true); }
+  }
+  async function doShareSave() {
+    const text = await snapshotText();
+    const shared = await shareSnapshot(text);
+    if (shared) { await setLastSync(new Date().toISOString()); toast('Shared — choose “Save to Files → iCloud Drive”'); navigate('/data'); }
+    else { try { await exportCanonical(); toast('Downloaded guruji.json — move it to iCloud Drive'); } catch { toast('Save failed', true); } }
+  }
+
+  // Build the sync section, tuned to what this browser can do.
+  const syncNodes = [el('h2', { text: 'Sync with iCloud' })];
+  if (supported && linked) {
+    syncNodes.push(
+      el('p', { class: 'muted', text: `Linked to ${linkName}. “Save” writes straight into it; “Pull” reads the other device’s changes and merges them — no Downloads folder.` }),
+      el('div', { class: 'sync-status', text: `Last synced · ${agoText(lastSync)}` }),
+      el('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap;margin-top:4px' }, [
+        el('button', { class: 'btn btn-primary', text: 'Save to iCloud', disabled: !planLoaded, onclick: doSaveLinked }),
+        el('button', { class: 'btn btn-ghost', text: 'Pull latest', onclick: doPull }),
+      ]),
+    );
+    const autoChk = el('input', { type: 'checkbox' });
+    if (autoSync) autoChk.checked = true;
+    autoChk.addEventListener('change', async () => { await setAutoSync(autoChk.checked); toast(autoChk.checked ? 'Auto-pull on open enabled' : 'Auto-pull off'); });
+    syncNodes.push(
+      el('label', { class: 'reset-row' }, [autoChk, el('span', { text: 'Pull the latest automatically when I open the app.' })]),
+      el('button', { class: 'btn-link', style: 'margin-top:4px', text: `Unlink ${linkName}`, onclick: async () => { await unlink(); toast('Unlinked'); navigate('/data'); } }),
+    );
+  } else if (supported) {
+    syncNodes.push(
+      el('p', { class: 'muted', text: planLoaded ? 'Link your guruji.json in iCloud Drive once — then Save and Pull read and write that same file directly, no Downloads folder and no re-picking.' : 'Load a plan first, then link your iCloud file.' }),
+      el('button', { class: 'btn btn-primary', text: 'Link my iCloud file', disabled: !planLoaded, onclick: doLink }),
+    );
+  } else {
+    // iOS Safari and friends — no persistent handle. Share sheet → Save to Files.
+    syncNodes.push(
+      el('p', { class: 'muted', text: planLoaded ? 'Save your snapshot into Files → iCloud Drive (overwrite guruji.json), then Pull it on the other device from Load, below.' : 'Load a plan first, then you can save it.' }),
+      el('div', { class: 'sync-status', text: `Last synced · ${agoText(lastSync)}` }),
+      el('button', { class: 'btn btn-primary', text: 'Save to iCloud', disabled: !planLoaded, onclick: doShareSave }),
+    );
+  }
 
   const backupBtn = el('button', {
     class: 'btn btn-ghost',
@@ -200,9 +269,7 @@ export async function renderData(mount, { navigate }) {
 
     el('hr', { class: 'sep' }),
 
-    el('h2', { text: 'Sync with iCloud' }),
-    el('p', { class: 'muted', text: planLoaded ? 'Writes the current plan, schedule, statuses, log and cognitive-load context into one guruji.json.' : 'Load a plan first, then you can save it.' }),
-    syncBtn,
+    ...syncNodes,
 
     el('hr', { class: 'sep' }),
 

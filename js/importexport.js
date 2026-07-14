@@ -156,6 +156,12 @@ export async function exportCanonical() {
   return download('guruji.json', JSON.stringify(data, null, 2));
 }
 
+// The same canonical snapshot as a JSON string — for writing straight into a
+// linked file (File System Access API) or sharing via the share sheet.
+export async function snapshotText() {
+  return JSON.stringify(await buildExport(), null, 2);
+}
+
 // A dated, never-overwritten snapshot — for keeping history / manual backups.
 export async function exportToFile() {
   const data = await buildExport();

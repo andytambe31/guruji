@@ -1,7 +1,8 @@
 // Guruji bootstrap: service worker registration, hash router, view mounting.
 import { clear, el, toast } from './util.js';
 import { getActiveSession, clearActiveSession, runStartupMigrations } from './store.js';
-import { exportCanonical } from './importexport.js';
+import { exportCanonical, snapshotText, importFromText } from './importexport.js';
+import { isLinked, writeLinked, readLinked, shareSnapshot, getAutoSync, setLastSync } from './fsync.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
@@ -130,11 +131,40 @@ function mountSyncFab() {
   fab.addEventListener('click', async () => {
     if (fab.classList.contains('busy')) return;
     fab.classList.add('busy');
-    try { await exportCanonical(); toast('Snapshot saved — keep guruji.json in iCloud'); }
-    catch { toast('Snapshot failed', true); }
+    try {
+      if (await isLinked()) {
+        await writeLinked(await snapshotText());
+        await setLastSync(new Date().toISOString());
+        toast('Saved to your iCloud file');
+      } else if (await shareSnapshot(await snapshotText())) {
+        await setLastSync(new Date().toISOString());
+        toast('Shared — choose Save to Files → iCloud');
+      } else {
+        await exportCanonical();
+        toast('Snapshot saved — keep guruji.json in iCloud');
+      }
+    } catch { toast('Snapshot failed', true); }
     setTimeout(() => fab.classList.remove('busy'), 600);
   });
   document.body.appendChild(fab);
+}
+
+// Opt-in: if a device is linked to its iCloud file and auto-pull is on, read it
+// silently on open and merge anything newer. Best-effort — a cold session where
+// the browser hasn't re-granted read permission is skipped without a prompt
+// (we never interrupt boot with a permission dialog).
+async function autoSyncOnOpen() {
+  try {
+    if (!(await getAutoSync()) || !(await isLinked())) return;
+    const text = await readLinked({ prompt: false });
+    if (!text) return;
+    const res = await importFromText(text);
+    if (res && res.ok && res.kind === 'sync') {
+      await setLastSync(new Date().toISOString());
+      const s = res.summary || {};
+      if (s.status || s.notes || s.added || s.scheduleAdopted) { toast('Pulled the latest from iCloud'); router(); }
+    }
+  } catch { /* best effort — never block the app */ }
 }
 
 async function boot() {
@@ -162,6 +192,7 @@ async function boot() {
   clearTimeout(splashFailsafe);
   hideSplash(bootStart);
   mountSyncFab();
+  autoSyncOnOpen();
 
   // Register the service worker (offline shell). Non-fatal if it fails.
   // Register directly — this module is deferred, so the window 'load' event may
