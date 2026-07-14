@@ -208,8 +208,8 @@ export async function renderData(mount, { navigate }) {
     cloudNodes.push(
       el('p', { class: 'muted', text: 'Hands-off sync that works in Safari: your data lives in a PRIVATE gist in your own GitHub account, auto-synced on open and on leave. The token is stored only on this device — never exported, never shared.' }),
       el('ol', { class: 'gist-steps' }, [
-        el('li', {}, [el('span', { text: 'Create a token: ' }), el('a', { href: 'https://github.com/settings/tokens?type=beta', target: '_blank', rel: 'noopener', text: 'github.com/settings/tokens' }), el('span', { text: ' → Fine-grained → Account permissions → Gists: Read and write. (Or a classic token with only the “gist” scope.)' })]),
-        el('li', { text: 'Paste it below and Connect — Guruji makes one private gist and keeps guruji.json in it.' }),
+        el('li', {}, [el('span', { text: 'Create a CLASSIC token at ' }), el('a', { href: 'https://github.com/settings/tokens/new?scopes=gist&description=guruji-sync', target: '_blank', rel: 'noopener', text: 'github.com/settings/tokens' }), el('span', { text: ' → Generate new token (classic) → check ONLY the “gist” scope. (Fine-grained tokens don’t support gists — this must be a classic token.)' })]),
+        el('li', { text: 'Copy it (starts with ghp_…), paste below, and Connect — Guruji makes one private gist and keeps guruji.json in it.' }),
         el('li', { text: 'On your other device, connect with a token from the same GitHub account; it finds the same gist.' }),
       ]),
       el('div', { class: 'field', style: 'margin-top:6px' }, [gistTokenInput]),
