@@ -125,6 +125,8 @@ body { overscroll-behavior-y: none; }
 /* Extra module tabs only earn their place on the wide desktop nav; on the phone
    they'd overflow the bar, so they stay in the Now dashboard's quick row. */
 .nav-desktop { display: none; }
+/* Plan is the phone's tab into the readable study guides; the desktop omits it. */
+.nav-mobile { display: inline-block; }
 
 /* ---------- Typography ---------- */
 .eyebrow {
@@ -954,6 +956,8 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
   }
   /* Surface the modules as real tabs now that the bar spans the screen. */
   .nav-desktop { display: inline-block; }
+  /* Plan stays off the desktop nav (opened from its own surfaces there). */
+  .nav-mobile { display: none; }
 
   /* The Plan/study route runs edge-to-edge; align its own header rows with the
      panes (the study grid already full-bleeds itself). */
