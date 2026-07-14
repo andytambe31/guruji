@@ -7,6 +7,7 @@
 import { STORES, getAll, put, bulkPut } from './db.js';
 import { CSF_TCP_TLS_GUIDE } from './csf-tcptls.js';
 import { CSF_ENCODING_GUIDE } from './csf-encoding.js';
+import { CSF_LLM_PATTERNS_GUIDE } from './csf-llm-patterns.js';
 
 const TRACK_ID = 'csf';
 const PHASE_ID = 'csf-core';
@@ -15,18 +16,20 @@ const PHASE_ID = 'csf-core';
 const GUIDES = [
   { id: 'csf-tcp-tls', title: 'TCP & TLS Handshakes', group: 'Networking', notes: CSF_TCP_TLS_GUIDE },
   { id: 'csf-encoding', title: 'Character Encoding (charset, Unicode, UTF-8)', group: 'Networking', notes: CSF_ENCODING_GUIDE },
+  { id: 'csf-llm-patterns', title: 'Design Patterns: LLM-in-the-loop Event Pipeline', group: 'Architecture', notes: CSF_LLM_PATTERNS_GUIDE },
 ];
 
 export async function seedCSFundamentalsContent() {
   try {
-    const phases = await getAll(STORES.phases);
-    // Already seeded (and not wiped) — cheap early out on every normal boot.
-    if (phases.some((p) => p.id === PHASE_ID)) return { ran: false };
-
-    const [plansRec, items] = await Promise.all([
-      getAll(STORES.kv).then((rows) => rows.find((r) => r.k === 'plans')),
+    const [phases, items, plansRec] = await Promise.all([
+      getAll(STORES.phases),
       getAll(STORES.items),
+      getAll(STORES.kv).then((rows) => rows.find((r) => r.k === 'plans')),
     ]);
+    // Cheap early out once the track exists AND every guide is present — but new
+    // guides added in later versions still get seeded into an existing install.
+    const haveItem = new Set(items.map((it) => it.id));
+    if (phases.some((p) => p.id === PHASE_ID) && GUIDES.every((g) => haveItem.has(g.id))) return { ran: false };
 
     const maxItemOrder = items.reduce((m, it) => Math.max(m, it.order ?? 0), 0);
     const maxPhaseOrder = phases.reduce((m, p) => Math.max(m, p.order ?? 0), 0);
@@ -40,11 +43,14 @@ export async function seedCSFundamentalsContent() {
       await put(STORES.kv, { k: 'plans', v: plans });
     }
 
-    // 2) Ensure the phase exists.
-    await put(STORES.phases, {
-      id: PHASE_ID, name: 'CS Fundamentals', weeks: [], dateRange: '',
-      track: TRACK_ID, order: maxPhaseOrder + 1,
-    });
+    // 2) Ensure the phase exists (don't re-put an existing one — that would
+    // reshuffle its order when we're only adding a new guide).
+    if (!phases.some((p) => p.id === PHASE_ID)) {
+      await put(STORES.phases, {
+        id: PHASE_ID, name: 'CS Fundamentals', weeks: [], dateRange: '',
+        track: TRACK_ID, order: maxPhaseOrder + 1,
+      });
+    }
 
     // 3) Add each guide as an item (skip any that already exist).
     const newItems = [];
