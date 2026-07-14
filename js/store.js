@@ -7,6 +7,29 @@ import { SCHEMA_VERSION } from './migrations.js';
 import { seedSystemDesignContent } from './sdi-content.js';
 import { seedCSFundamentalsContent } from './csf-content.js';
 
+// Wall-clock stamp for sync merges (browser clock). Isolated so a test can
+// control it via page.clock and so the intent reads clearly at each call site.
+const nowISO = () => new Date().toISOString();
+
+// ---------- Device role (phone / desktop) — the sync authority axis ----------
+// Content (study guides) is desktop-authoritative; the daily schedule/log is
+// phone-owned. Each install needs to know which it is. Default: auto-detect from
+// screen width on first read (wide = desktop), persisted so it's stable, and
+// overridable from the Data screen.
+export async function getDeviceRole() {
+  const rec = await get(STORES.kv, 'deviceRole');
+  if (rec && (rec.v === 'phone' || rec.v === 'desktop')) return rec.v;
+  let role = 'phone';
+  try { if (typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(min-width: 900px)').matches) role = 'desktop'; } catch { /* default phone */ }
+  await put(STORES.kv, { k: 'deviceRole', v: role });
+  return role;
+}
+export async function setDeviceRole(role) {
+  const v = role === 'desktop' ? 'desktop' : 'phone';
+  await put(STORES.kv, { k: 'deviceRole', v });
+  return v;
+}
+
 // ---------- Routine settings (bedtime, goal countdown) ----------
 const DEFAULT_SETTINGS = {
   bedtime: '23:30', wake: null, freshenMinutes: 30, goalDate: null, goalLabel: '',
@@ -24,7 +47,7 @@ export async function getSettings() {
 }
 export async function setSettings(patch) {
   const cur = await getSettings();
-  const next = { ...cur, ...(patch || {}) };
+  const next = { ...cur, ...(patch || {}), updatedAt: nowISO() };
   await put(STORES.kv, { k: 'settings', v: next });
   return next;
 }
@@ -38,8 +61,9 @@ export async function getReading() {
   return { ...DEFAULT_READING, ...(rec ? rec.v : {}) };
 }
 export async function setReading(v) {
-  await put(STORES.kv, { k: 'reading', v });
-  return v;
+  const stamped = { ...v, updatedAt: nowISO() };
+  await put(STORES.kv, { k: 'reading', v: stamped });
+  return stamped;
 }
 export async function setCurrentBook({ title, author, intent, totalPages } = {}) {
   const r = await getReading();
@@ -124,6 +148,9 @@ export async function runStartupMigrations() {
     // fresh-start purge above — they run on every boot but no-op once present).
     await seedSystemDesignContent();
     await seedCSFundamentalsContent();
+    // Establish this install's sync role (phone/desktop) on first boot so it's
+    // known before any snapshot is exported or merged.
+    await getDeviceRole();
   }
 }
 
@@ -192,6 +219,7 @@ export async function setItemStatus(id, status) {
   const item = await get(STORES.items, id);
   if (!item) return null;
   item.status = status;
+  item.statusAt = nowISO(); // progress syncs both ways, newest-edit wins
   await put(STORES.items, item);
   // Finishing a piece of content auto-marks the catalog concepts it covers as
   // studied, so its nuggets (and any drills) start surfacing right away — no
@@ -211,6 +239,7 @@ export async function toggleObjective(id, text) {
   const at = done.indexOf(text);
   if (at >= 0) done.splice(at, 1); else done.push(text);
   item.doneObjectives = done;
+  item.objAt = nowISO();
   await put(STORES.items, item);
   return done;
 }
@@ -225,6 +254,7 @@ export async function setObjectives(id, list, done = []) {
   item.objectives = clean;
   const keep = new Set(clean);
   item.doneObjectives = (Array.isArray(done) ? done : []).map((s) => String(s).trim()).filter((s) => keep.has(s));
+  item.objAt = nowISO();
   await put(STORES.items, item);
   return item;
 }
@@ -235,6 +265,7 @@ export async function setItemNotes(id, notes) {
   const item = await get(STORES.items, id);
   if (!item) return null;
   item.notes = notes || '';
+  item.notesAt = nowISO(); // content is desktop-authored; stamp so newest desktop edit wins
   await put(STORES.items, item);
   return item;
 }
@@ -1595,6 +1626,11 @@ export async function buildExport() {
       status: it.status || 'todo',
       notes: it.notes || undefined, // desktop-authored study content
       coach: it.coach || undefined, // per-topic focus-mode coaching
+      // Sync stamps: when status / notes / objectives last changed on this device.
+      statusAt: it.statusAt || undefined,
+      notesAt: it.notesAt || undefined,
+      objAt: it.objAt || undefined,
+      doneObjectives: (it.doneObjectives && it.doneObjectives.length) ? it.doneObjectives : undefined,
     });
   }
 
@@ -1633,10 +1669,118 @@ export async function buildExport() {
     reading,
     log,
     activeSession: await getActiveSession(), // so another device sees a live session
-    exportedAt: new Date().toISOString(),
+    studiedConcepts: await getStudiedConcepts(),
+    drillState: (await get(STORES.kv, 'drillState'))?.v || {},
+    nuggetState: (await get(STORES.kv, 'nuggetState'))?.v || {},
+    device: await getDeviceRole(), // which side authored this snapshot
+    exportedAt: nowISO(),
     app: 'guruji',
     schemaVersion: SCHEMA_VERSION,
   };
+}
+
+// ---------- Cross-device sync merge ----------
+// Merge a remote snapshot (guruji.json from the other device) into local state
+// under the authority model:
+//   • content (notes/coach)     — DESKTOP wins (only a desktop snapshot changes it)
+//   • status / progress         — newest-edit wins, either device
+//   • schedule + session log     — PHONE-owned (adopted only from a phone snapshot)
+//   • settings / reading / ctx   — newest-edit wins
+//   • studied concepts           — union;  drill/nugget state — newest per card
+// Never deletes: unknown-locally remote items are added; local-only items stay.
+const _t = (x) => (x ? Date.parse(x) || 0 : 0);
+
+export async function mergeRemote(remote) {
+  if (!remote || typeof remote !== 'object') return { ok: false };
+  const localRole = await getDeviceRole();
+  const remoteRole = (remote.device === 'desktop' || remote.device === 'phone')
+    ? remote.device
+    // Back-compat: an untagged snapshot. A daily-driver copy (has schedule/log)
+    // reads as the phone; otherwise treat it as a content source (desktop).
+    : ((Array.isArray(remote.blocks) || Array.isArray(remote.log)) ? 'phone' : 'desktop');
+
+  // Flatten remote plan items.
+  const remoteItems = [];
+  for (const pl of (remote.plans || [])) for (const ph of (pl.phases || [])) for (const it of (ph.items || [])) {
+    remoteItems.push({ ...it, phase: it.phase || ph.id, track: pl.id });
+  }
+  const localItems = await getAll(STORES.items);
+  const localById = new Map(localItems.map((i) => [i.id, i]));
+  let maxOrder = localItems.reduce((m, it) => Math.max(m, it.order ?? 0), 0);
+
+  const counts = { status: 0, notes: 0, obj: 0, added: 0 };
+  const toPut = [];
+  for (const ri of remoteItems) {
+    const li = localById.get(ri.id);
+    if (!li) {
+      toPut.push({
+        id: ri.id, title: ri.title || '(untitled)', phase: ri.phase, track: ri.track,
+        week: ri.week ?? null, area: ri.area || null, group: ri.group || null, mode: ri.mode,
+        estMinutes: ri.estMinutes ?? null, recurring: !!ri.recurring,
+        dependsOn: Array.isArray(ri.dependsOn) ? ri.dependsOn : [],
+        status: ri.status || 'todo', statusAt: ri.statusAt,
+        notes: ri.notes || '', notesAt: ri.notesAt, coach: ri.coach || null,
+        doneObjectives: Array.isArray(ri.doneObjectives) ? ri.doneObjectives : [], objAt: ri.objAt,
+        objectives: ri.objectives, order: ++maxOrder,
+      });
+      counts.added++;
+      continue;
+    }
+    let changed = false;
+    // Status + objectives — newest-edit wins.
+    if (_t(ri.statusAt) > _t(li.statusAt)) { li.status = ri.status || 'todo'; li.statusAt = ri.statusAt; counts.status++; changed = true; }
+    if (_t(ri.objAt) > _t(li.objAt)) { li.doneObjectives = Array.isArray(ri.doneObjectives) ? ri.doneObjectives : []; li.objAt = ri.objAt; counts.obj++; changed = true; }
+    // Content — desktop-authoritative: only a desktop snapshot may change it.
+    if (remoteRole === 'desktop' && _t(ri.notesAt) >= _t(li.notesAt) && (ri.notes || '') !== (li.notes || '')) {
+      li.notes = ri.notes || ''; li.notesAt = ri.notesAt; if (ri.coach) li.coach = ri.coach; counts.notes++; changed = true;
+    }
+    if (changed) toPut.push(li);
+  }
+  if (toPut.length) await bulkPut(STORES.items, toPut);
+
+  // Schedule + log — phone-owned: adopt only from a phone snapshot.
+  let scheduleAdopted = false;
+  if (remoteRole === 'phone') {
+    const sched = [];
+    for (const b of (remote.blocks || [])) sched.push({ kind: 'block', ...b });
+    for (const bz of (remote.busy || [])) sched.push({ kind: 'busy', ...bz });
+    await replaceStores({ [STORES.schedule]: sched });
+    if (Array.isArray(remote.log)) await replaceStores({ [STORES.log]: remote.log.map((l) => ({ id: l.id || uid('log'), ...l })) });
+    if ('activeSession' in remote) await setActiveSession(remote.activeSession || null);
+    scheduleAdopted = true;
+  }
+
+  // Settings / reading / context — newest-edit wins.
+  const ls = await get(STORES.kv, 'settings');
+  if (remote.settings && _t(remote.settings.updatedAt) > _t(ls?.v?.updatedAt)) await put(STORES.kv, { k: 'settings', v: remote.settings });
+  const lr = await get(STORES.kv, 'reading');
+  if (remote.reading && _t(remote.reading.updatedAt) > _t(lr?.v?.updatedAt)) await put(STORES.kv, { k: 'reading', v: remote.reading });
+  if (remote.context && _t(remote.context.setAt) > _t((await getContext())?.setAt)) await setContext(remote.context);
+
+  // Studied concepts — union.
+  if (remote.studiedConcepts && typeof remote.studiedConcepts === 'object') {
+    const cur = await getStudiedConcepts();
+    let cc = false;
+    for (const k of Object.keys(remote.studiedConcepts)) if (remote.studiedConcepts[k] && !cur[k]) { cur[k] = true; cc = true; }
+    if (cc) await setStudiedConcepts(cur);
+  }
+  // Drill / nugget spaced-rep — newest per card.
+  await mergeCardState('drillState', remote.drillState);
+  await mergeCardState('nuggetState', remote.nuggetState);
+
+  return { ok: true, ...counts, remoteRole, localRole, scheduleAdopted };
+}
+
+async function mergeCardState(key, incoming) {
+  if (!incoming || typeof incoming !== 'object') return;
+  const rec = await get(STORES.kv, key);
+  const cur = { ...(rec?.v || {}) };
+  let changed = false;
+  for (const id of Object.keys(incoming)) {
+    const inc = incoming[id];
+    if (!cur[id] || _t(inc?.at) > _t(cur[id]?.at)) { cur[id] = inc; changed = true; }
+  }
+  if (changed) await put(STORES.kv, { k: key, v: cur });
 }
 
 export async function wipeAll() {

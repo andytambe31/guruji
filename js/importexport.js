@@ -1,6 +1,6 @@
 // Import / export plumbing. Parse + validate a plan, ingest it, and build a
 // downloadable backup. No network — everything is local file / clipboard.
-import { ingestPlan, buildExport, buildContentPatch, normalizePlans, hasPlan, getAppliedPatches, markPatchApplied } from './store.js';
+import { ingestPlan, mergeRemote, buildExport, buildContentPatch, normalizePlans, hasPlan, getAppliedPatches, markPatchApplied } from './store.js';
 import { MODES } from './util.js';
 import { migrate, isPatch, validatePatch, applyPatchOps } from './migrations.js';
 
@@ -52,6 +52,14 @@ export function validatePlan(raw) {
   return { ok: errors.length === 0, errors, plan: raw };
 }
 
+// A full device snapshot from the app (guruji.json) — carries live tracking
+// (log / schedule) or a device tag, unlike a bare authored plan.json. These get
+// merged, not restored.
+export function isSyncSnapshot(v) {
+  return !!(v && typeof v === 'object' && v.app === 'guruji' && Array.isArray(v.plans)
+    && ('device' in v || Array.isArray(v.log) || Array.isArray(v.blocks)));
+}
+
 export function parseJSON(text) {
   try {
     return { value: JSON.parse(text), error: null };
@@ -81,6 +89,15 @@ export async function importFromText(text, opts = {}) {
   if (error) return { ok: false, errors: [`Invalid JSON: ${error}`], summary: null };
 
   if (isPatch(value)) { await step({ phase: 'patch' }); return applyPatch(value); }
+
+  // A full device snapshot (guruji.json) is *merged* under the sync authority
+  // model — not wholesale-restored — so loading the desktop's copy never wipes
+  // the phone's day, and vice versa. `replace:true` forces a full restore.
+  if (!opts.replace && isSyncSnapshot(value)) {
+    await step({ phase: 'merge' });
+    const res = await mergeRemote(value);
+    return { ok: !!res.ok, errors: res.ok ? [] : ['Could not merge snapshot.'], summary: res, kind: 'sync' };
+  }
 
   // Bring any older file up to the current schema before validating/ingesting.
   const { data, from, to, applied } = migrate(value);

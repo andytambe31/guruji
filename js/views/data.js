@@ -2,11 +2,12 @@
 // migration patch), dated backup, and a wipe.
 import { el, clear, toast, todayISO } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch } from '../importexport.js';
-import { wipeAll, hasPlan } from '../store.js';
+import { wipeAll, hasPlan, getDeviceRole, setDeviceRole } from '../store.js';
 import { SCHEMA_VERSION } from '../migrations.js';
 
 export async function renderData(mount, { navigate }) {
   const planLoaded = await hasPlan();
+  const role = await getDeviceRole();
 
   const fileInput = el('input', {
     type: 'file',
@@ -97,7 +98,15 @@ export async function renderData(mount, { navigate }) {
     }
     await delay(Math.max(0, 480 - (Date.now() - started))); // avoid a flash for tiny files
     hideImport(veil);
-    if (res.kind === 'patch') {
+    if (res.kind === 'sync') {
+      const s = res.summary || {};
+      const bits = [];
+      if (s.status) bits.push(`${s.status} status`);
+      if (s.notes) bits.push(`${s.notes} note${s.notes === 1 ? '' : 's'}`);
+      if (s.added) bits.push(`${s.added} new`);
+      if (s.scheduleAdopted) bits.push('schedule');
+      toast(bits.length ? `Synced · ${bits.join(', ')} updated` : 'Synced — already up to date');
+    } else if (res.kind === 'patch') {
       toast(res.already ? 'Migration already applied' : `Migration applied${res.description ? ': ' + res.description : ''}`);
     } else {
       const bumped = res.migrated && res.migrated.length ? ` · upgraded v${res.from}→v${res.to}` : '';
@@ -160,13 +169,34 @@ export async function renderData(mount, { navigate }) {
     },
   });
 
+  // --- This device's sync role ---
+  // Content (study guides) is desktop-authoritative; the daily schedule + log is
+  // phone-owned. Loading a snapshot merges under those rules, so the role matters.
+  const roleBtn = (r, label) => el('button', {
+    class: 'btn ' + (role === r ? 'btn-primary' : 'btn-ghost'),
+    text: label,
+    onclick: async () => { if (role !== r) { await setDeviceRole(r); navigate('/data'); } },
+  });
+  const roleRow = el('div', { class: 'row', style: 'gap:10px;margin-top:6px' }, [
+    roleBtn('phone', '📱 This is my phone'),
+    roleBtn('desktop', '🖥️ This is my desktop'),
+  ]);
+
   mount.append(
     el('p', { class: 'eyebrow', text: `Backup & sync · schema v${SCHEMA_VERSION}` }),
     el('h1', { text: 'Data' }),
     el('p', {
       class: 'muted',
-      text: 'Everything lives on this device. To sync: Save to iCloud here, keep guruji.json in iCloud Drive, then Load it on your other device. Overwriting the same file each time keeps every device in step.',
+      text: 'Everything lives on this device. To sync: Save to iCloud here, keep guruji.json in iCloud Drive, then Load it on your other device — Guruji merges the two smartly rather than overwriting.',
     }),
+
+    el('hr', { class: 'sep' }),
+
+    el('h2', { text: 'This device' }),
+    el('p', { class: 'muted', text: role === 'desktop'
+      ? 'Set as your desktop — it owns your study-guide content (your notes win when you sync). Your phone stays in charge of the daily schedule and session log.'
+      : 'Set as your phone — it owns your daily schedule and session log (they’re never overwritten by a desktop snapshot). Study-guide content flows in from the desktop. Progress like “done” syncs both ways, newest change winning.' }),
+    roleRow,
 
     el('hr', { class: 'sep' }),
 
@@ -177,7 +207,7 @@ export async function renderData(mount, { navigate }) {
     el('hr', { class: 'sep' }),
 
     el('h2', { text: 'Load' }),
-    el('p', { class: 'muted', text: 'A plan, a full backup, or a migration file — Guruji detects which. Older files are upgraded to the current schema automatically.' }),
+    el('p', { class: 'muted', text: 'A plan, another device’s guruji.json, or a migration file — Guruji detects which. A device snapshot is merged under the sync rules above (never a blind overwrite); a fresh plan is loaded outright. Older files are upgraded automatically.' }),
     resetRow,
     el('div', { class: 'field' }, [
       el('label', { text: 'From a file (iCloud Drive, Files…)' }),
