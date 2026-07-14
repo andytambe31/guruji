@@ -741,6 +741,34 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .plan-item.skipped .t { color: var(--text-faint); }
 .plan-item .sub { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
 .plan-item .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+/* ---------- Plan topic search ---------- */
+.plan-search-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 14px; }
+.plan-search {
+  flex: 1; box-sizing: border-box; font: inherit; font-size: 14.5px;
+  padding: 11px 14px; border-radius: 12px;
+  background: var(--bg-soft); border: 1px solid var(--line); color: var(--text);
+  -webkit-appearance: none; appearance: none;
+}
+.plan-search:focus { outline: none; border-color: var(--text-dim); background: var(--bg); }
+.plan-search::placeholder { color: var(--text-faint); }
+.plan-search-x { appearance: none; background: none; border: none; color: var(--text-faint); font-size: 15px; cursor: pointer; padding: 6px 8px; }
+.plan-search-x:hover { color: var(--text); }
+.plan-search-head { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); margin: 2px 0 10px; }
+.plan-search-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  padding: 11px 6px; border: none; background: none; border-bottom: 1px solid var(--line-soft);
+  font: inherit; color: var(--text);
+}
+.plan-search-item.clickable { cursor: pointer; border-radius: 10px; transition: background .12s; }
+.plan-search-item.clickable:hover { background: var(--bg-soft); }
+.psi-body { flex: 1; min-width: 0; }
+.psi-title { font-size: 14.5px; line-height: 1.35; }
+.psi-meta { font-size: 12px; color: var(--text-faint); margin-top: 2px; }
+.psi-guide { color: var(--accent, #3b5bd9); font-weight: 700; flex: 0 0 auto; }
+.psi-status { font-size: 11px; letter-spacing: .03em; text-transform: uppercase; color: var(--text-faint); flex: 0 0 auto; }
+.psi-status.s-done { color: var(--ok, #0f9d6b); }
+.psi-status.s-skipped { color: var(--text-faint); text-decoration: line-through; }
+
 .mini-btn { font-size: 12.5px; padding: 8px 12px; border-radius: 9px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; transition: color .15s, background .15s; }
 .mini-btn:hover { color: var(--text); background: var(--bg-soft); }
 .mini-btn.active-done { color: var(--text); font-weight: 650; }

@@ -33,6 +33,8 @@ export async function renderPlan(mount, { navigate }) {
   const groupKeyOf = (it) => `${it.phase}|${it.area || 'Study'}|${it.group || 'Other'}`;
   const toggleGroup = (key) => { if (expanded.has(key)) expanded.delete(key); else expanded.add(key); paint(); };
   let editing = false; // desktop study pane: reading vs editing the content
+  let query = '';      // topic search across every track/area/group
+  let pane = null;     // content area below the header + search (filled by fillPane)
   let activeSession = null; // a focus session in progress (shown live on desktop)
   let studyTimer = null;    // interval ticking the "studying now" banner
   const stopStudyTimer = () => { if (studyTimer) { clearInterval(studyTimer); studyTimer = null; } };
@@ -93,14 +95,74 @@ export async function renderPlan(mount, { navigate }) {
       ]));
     }
 
-    if (view === 'list') {
-      if (mq.matches) paintStudy(planList, phasesByTrack, itemsByPhase, items, statusById);
-      else paintList(planList, phasesByTrack, itemsByPhase, statusById);
+    // Search across every topic — type to see matches from any track/area/group
+    // (the fast way to check "was this added?"). Only refills the pane, so typing
+    // never loses focus. `query` persists across repaints (e.g. after a toggle).
+    const search = el('input', {
+      type: 'search', class: 'plan-search', placeholder: 'Search all topics…',
+      spellcheck: false, autocapitalize: 'off', value: query,
+    });
+    const clearBtn = el('button', { class: 'plan-search-x', 'aria-label': 'Clear search', text: '✕', onclick: () => { query = ''; search.value = ''; fillPane(); search.focus(); } });
+    mount.append(el('div', { class: 'plan-search-row' }, [search, clearBtn]));
+    pane = el('div', { class: 'plan-pane' });
+    mount.append(pane);
+
+    const fillPane = () => {
+      clear(pane);
+      clearBtn.style.visibility = query ? 'visible' : 'hidden';
+      if (query) { paintSearch(planList, phases, items, statusById); return; }
+      if (view === 'list') {
+        if (mq.matches) paintStudy(planList, phasesByTrack, itemsByPhase, items, statusById);
+        else paintList(planList, phasesByTrack, itemsByPhase, statusById);
+        return;
+      }
+      if (zoomArea && zoomGroup) paintItemLevel(items, statusById);
+      else if (zoomArea) paintGroupLevel(items, statusById);
+      else paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById);
+    };
+    search.addEventListener('input', () => { query = search.value.trim(); fillPane(); });
+    fillPane();
+  }
+
+  // Flat, cross-track search results — every topic whose title / area / group
+  // matches, with where it lives and its status, so you can confirm at a glance
+  // that a topic exists. On desktop a result opens in the study pane.
+  function paintSearch(planList, phases, items, statusById) {
+    const q = query.toLowerCase();
+    const trackName = new Map(planList.map((p) => [p.id, p.name]));
+    const hit = (it) => (it.title || '').toLowerCase().includes(q)
+      || (it.area || '').toLowerCase().includes(q)
+      || (it.group || '').toLowerCase().includes(q)
+      || (trackName.get(it.track) || '').toLowerCase().includes(q);
+    const matches = items.filter(hit);
+    pane.append(el('div', { class: 'plan-search-head', text: `${matches.length} topic${matches.length === 1 ? '' : 's'} matching “${query}”` }));
+    if (!matches.length) {
+      pane.append(el('p', { class: 'muted', style: 'margin-top:8px', text: 'No topics match — check the spelling, or clear the search.' }));
       return;
     }
-    if (zoomArea && zoomGroup) paintItemLevel(items, statusById);
-    else if (zoomArea) paintGroupLevel(items, statusById);
-    else paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById);
+    for (const it of matches) {
+      const loc = [trackName.get(it.track), it.area, it.group]
+        .filter(Boolean)
+        .filter((seg, i, a) => seg !== a[i - 1]) // drop a segment that repeats the one before it
+        .join(' · ');
+      const hasNotes = !!(it.notes && it.notes.trim());
+      const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+      const kids = [
+        el('span', { class: `pdot ${it.mode || ''}` }),
+        el('div', { class: 'psi-body' }, [
+          el('div', { class: 'psi-title', text: it.title }),
+          el('div', { class: 'psi-meta', text: loc || '—' }),
+        ]),
+        hasNotes ? el('span', { class: 'psi-guide', title: 'Has a study guide', text: '•' }) : null,
+        el('span', { class: `psi-status s-${it.status}`, text: locked ? 'locked' : it.status }),
+      ];
+      // Desktop: click opens the topic in the two-pane study view.
+      if (mq.matches) {
+        pane.append(el('button', { class: 'plan-search-item clickable', onclick: () => { selected = it.id; query = ''; view = 'list'; paint(); } }, kids));
+      } else {
+        pane.append(el('div', { class: 'plan-search-item' }, kids));
+      }
+    }
   }
 
   // ---------------- Desktop: two-pane study view (topic list | content) -----
@@ -167,7 +229,7 @@ export async function renderPlan(mount, { navigate }) {
 
     const main = el('div', { class: 'study-main' });
     const wrap = el('div', { class: 'study desktop-only' }, [navList, main]);
-    mount.append(wrap);
+    pane.append(wrap);
 
     function markActive() {
       navList.querySelectorAll('.study-navrow').forEach((r) => r.classList.toggle('on', r.dataset.id === selected));
@@ -283,7 +345,7 @@ export async function renderPlan(mount, { navigate }) {
           }
         }
       }
-      mount.append(section);
+      pane.append(section);
     }
   }
 
@@ -319,25 +381,25 @@ export async function renderPlan(mount, { navigate }) {
 
   // ---------------- Map level 1: areas ----------------
   function paintAreaLevel(planList, phasesByTrack, itemsByPhase, statusById) {
-    mount.append(el('p', { class: 'muted', style: 'margin:-4px 0 4px;font-size:13px', text: 'Your tracks at a glance. Tap an area to open it.' }));
+    pane.append(el('p', { class: 'muted', style: 'margin:-4px 0 4px;font-size:13px', text: 'Your tracks at a glance. Tap an area to open it.' }));
     for (const pl of planList) {
       const planPhases = phasesByTrack.get(pl.id) || [];
       const planItems = planPhases.flatMap((ph) => itemsByPhase.get(ph.id) || []);
       if (!planItems.length) continue;
       const { keys, dep } = clusterDeps(planItems, (i) => i.area || 'Study');
       const byKey = groupBy(planItems, (i) => i.area || 'Study');
-      mount.append(el('h2', { class: 'plan-name', style: 'margin-top:16px', text: pl.name }));
-      mount.append(clusterGraph(keys, byKey, dep, (a) => areaColor(a), (a) => { zoomArea = a; zoomGroup = null; selected = null; paint(); }));
+      pane.append(el('h2', { class: 'plan-name', style: 'margin-top:16px', text: pl.name }));
+      pane.append(clusterGraph(keys, byKey, dep, (a) => areaColor(a), (a) => { zoomArea = a; zoomGroup = null; selected = null; paint(); }));
     }
   }
 
   // ---------------- Map level 2: groups within an area ----------------
   function paintGroupLevel(items, statusById) {
     const areaItems = items.filter((i) => (i.area || 'Study') === zoomArea);
-    mount.append(crumbBar());
+    pane.append(crumbBar());
     const { keys, dep } = clusterDeps(areaItems, (i) => i.group || 'Other');
     const byKey = groupBy(areaItems, (i) => i.group || 'Other');
-    mount.append(clusterGraph(keys, byKey, dep, () => areaColor(zoomArea), (g) => { zoomGroup = g; selected = null; scale = 1; paint(); }));
+    pane.append(clusterGraph(keys, byKey, dep, () => areaColor(zoomArea), (g) => { zoomGroup = g; selected = null; scale = 1; paint(); }));
   }
 
   // ---------------- Map level 3: items within a group ----------------
@@ -347,11 +409,11 @@ export async function renderPlan(mount, { navigate }) {
       el('button', { class: 'zoom-btn', text: '−', onclick: () => { scale = Math.max(0.6, +(scale - 0.2).toFixed(2)); paint(); } }),
       el('button', { class: 'zoom-btn', text: '+', onclick: () => { scale = Math.min(1.8, +(scale + 0.2).toFixed(2)); paint(); } }),
     ]);
-    mount.append(crumbBar(zoomCtl));
+    pane.append(crumbBar(zoomCtl));
     const detail = el('div', { class: 'dag-detail' });
-    mount.append(detail);
+    pane.append(detail);
     renderDetail(detail);
-    mount.append(itemDag(groupItems, statusById, scale));
+    pane.append(itemDag(groupItems, statusById, scale));
   }
 
   function renderDetail(detail) {
