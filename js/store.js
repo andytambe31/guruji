@@ -419,18 +419,22 @@ export async function reclaimStaleBlocks(date, now = new Date()) {
   // Only ever touches today: past days are history, and a future day's plan is
   // freshly built from the correct wake time, so there's nothing to reclaim.
   if (date !== todayISO(now)) return 0;
-  const [blocks, settings, studiedByBlock] = await Promise.all([
-    getBlocksForDate(date), getSettings(), studiedMinutesByBlock(),
+  const [blocks, settings, studiedByBlock, active] = await Promise.all([
+    getBlocksForDate(date), getSettings(), studiedMinutesByBlock(), getActiveSession(),
   ]);
   const wakeStart = settings.wake != null ? toMinutes(settings.wake) : null;
   const nowMin = nowMinutes(now);
+  const activeId = active && active.blockId;
   let removed = 0;
   for (const b of blocks) {
     if (b.status === 'done') continue;                       // already done — keep
     if ((studiedByBlock.get(b.id) || 0) > 0) continue;       // real time logged — keep
+    if (b.id === activeId) continue;                         // you're in it right now — keep
     const beforeWake = wakeStart != null && b.start < wakeStart;
-    const fullyPast = (b.start + (b.minutes || 0)) <= nowMin;
-    if (beforeWake || fullyPast) { await sDel(b.id); removed += 1; }
+    // A session can't begin in the past: a slot whose START has passed and you
+    // never engaged is lapsed — reclaim it rather than show it backdated.
+    const startedPast = b.start < nowMin;
+    if (beforeWake || startedPast) { await sDel(b.id); removed += 1; }
   }
   return removed;
 }
@@ -631,11 +635,33 @@ export async function arrangeCommitments(date) {
 
 // Re-pack a day so nothing overlaps: pinned/done blocks and commitments keep
 // their time, the rest flow around them.
-export async function reflowDate(date) {
+export async function reflowDate(date, now = new Date()) {
   const [blocks, busy] = await Promise.all([getBlocksForDate(date), getBusyForDate(date)]);
   if (!blocks.length) return [];
+  const isToday = date === todayISO(now);
+  // On today, a study session can't begin in the past. Drop any planned slot that
+  // now starts before "now" and that you never engaged (no logged time, not the
+  // live session, not done) — a re-pack must never leave or create a backdated
+  // block — then flow the rest forward from a now-floor.
+  const nowMin = nowMinutes(now);
+  const floor = isToday ? Math.max(DAY_START, Math.ceil(nowMin / 15) * 15) : DAY_START;
+  let live = blocks;
+  if (isToday) {
+    const [studied, active] = await Promise.all([studiedMinutesByBlock(), getActiveSession()]);
+    const activeId = active && active.blockId;
+    const keep = [];
+    for (const b of blocks) {
+      const engaged = b.status === 'done' || (studied.get(b.id) || 0) > 0 || b.id === activeId;
+      // Lapsed only if it actually started in the PAST (before now) — not merely
+      // before the 9am packing floor, or an early-morning slot would vanish.
+      if (!engaged && b.start < nowMin) { await sDel(b.id); continue; }
+      keep.push(b);
+    }
+    live = keep;
+    if (!live.length) return [];
+  }
   // Done commitments are no longer obstacles — study may flow through their time.
-  const packed = reflow(blocks, busy.filter((b) => b.status !== 'done'));
+  const packed = reflow(live, busy.filter((b) => b.status !== 'done'), floor);
   await sBulkPut(packed.map((b) => ({ ...b, kind: 'block' })));
   return packed;
 }

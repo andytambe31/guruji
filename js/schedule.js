@@ -203,14 +203,16 @@ export function sequence(blocks, { startMin = DAY_START, busy = [] } = {}) {
 
 // Re-pack a day: pinned/done blocks and `obstacles` (commitments) keep their
 // time; floating blocks flow into the earliest free slots around them.
-export function reflow(blocks, obstacles = []) {
+export function reflow(blocks, obstacles = [], floor = DAY_START) {
   const fixedBlocks = blocks.filter((b) => b.pinned).sort((a, b) => a.start - b.start);
   const floating = blocks.filter((b) => !b.pinned).sort((a, b) => a.start - b.start);
   const fixed = [...fixedBlocks, ...obstacles].map((x) => ({ start: x.start, minutes: x.minutes }));
 
-  let cursor = DAY_START;
+  // `floor` is the earliest a floating block may land — DAY_START for a future
+  // day, but "now" for today so a re-pack never drops study into the past.
+  let cursor = Math.max(DAY_START, floor);
   for (const b of floating) {
-    let start = Math.max(cursor, DAY_START);
+    let start = Math.max(cursor, DAY_START, floor);
     start = pushPastFixed(start, b.minutes, fixed);
     b.start = start;
     cursor = start + b.minutes + GAP;
