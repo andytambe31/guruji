@@ -156,11 +156,11 @@ export async function renderPlan(mount, { navigate }) {
         hasNotes ? el('span', { class: 'psi-guide', title: 'Has a study guide', text: '•' }) : null,
         el('span', { class: `psi-status s-${it.status}`, text: locked ? 'locked' : it.status }),
       ];
-      // Desktop: click opens the topic in the two-pane study view.
+      // Desktop opens the two-pane study view; the phone opens the read-only reader.
       if (mq.matches) {
         pane.append(el('button', { class: 'plan-search-item clickable', onclick: () => { selected = it.id; query = ''; view = 'list'; paint(); } }, kids));
       } else {
-        pane.append(el('div', { class: 'plan-search-item' }, kids));
+        pane.append(el('button', { class: 'plan-search-item clickable', onclick: () => navigate(`/topic/${it.id}`) }, kids));
       }
     }
   }
@@ -353,10 +353,15 @@ export async function renderPlan(mount, { navigate }) {
   // the desktop-only two-pane study view, not here.)
   function listRow(it, statusById) {
     const locked = it.status === 'todo' && !depsSatisfied(it, statusById);
+    const hasNotes = !!(it.notes && it.notes.trim());
     return el('div', { class: `plan-item ${it.status}${locked ? ' locked' : ''}` }, [
       el('span', { class: `pdot ${it.mode || ''}` }),
-      el('div', { class: 'body' }, [
-        el('div', { class: 't', text: it.title }),
+      // Tap the body to read the topic's study guide (read-only on the phone).
+      el('button', { class: 'body body-read', onclick: () => navigate(`/topic/${it.id}`) }, [
+        el('div', { class: 't' }, [
+          el('span', { text: it.title }),
+          hasNotes ? el('span', { class: 'read-dot', title: 'Has a study guide', text: ' •' }) : null,
+        ]),
         it.estMinutes ? el('div', { class: 'sub', text: `~${it.estMinutes} min` }) : null,
       ]),
       el('div', { class: 'row-actions' }, [
@@ -526,6 +531,36 @@ export async function renderPlan(mount, { navigate }) {
 
   await paint();
   return () => { mq.removeEventListener('change', onMq); stopStudyTimer(); };
+}
+
+// Read-only topic reader — the phone way to READ a study guide. Renders the
+// guide's Markdown with a Back link; there is deliberately NO edit affordance
+// here (authoring stays desktop-only). Reachable from the Plan list + search.
+export async function renderTopic(mount, { arg, navigate }) {
+  const items = await getItems();
+  const it = items.find((i) => i.id === arg);
+  const wrap = el('div', { class: 'topic-reader' });
+  mount.append(wrap);
+  wrap.append(el('button', { class: 'topic-back', text: '‹ Plan', onclick: () => navigate('/plan') }));
+  if (!it) {
+    wrap.append(el('div', { class: 'center-state' }, [el('h1', { text: 'Topic not found' })]));
+    return;
+  }
+  wrap.append(el('div', { class: 'topic-eyebrow' }, [
+    el('span', { class: 'topic-area', text: it.area || 'Study' }),
+    it.group ? el('span', { class: 'topic-meta', text: it.group }) : null,
+    it.estMinutes ? el('span', { class: 'topic-meta', text: `~${it.estMinutes} min` }) : null,
+  ]));
+  wrap.append(el('h1', { class: 'topic-reader-title', text: it.title }));
+  const hasNotes = !!(it.notes && it.notes.trim());
+  if (hasNotes) {
+    wrap.append(el('div', { class: 'study-content' }, [mdToDom(it.notes)]));
+  } else {
+    wrap.append(el('div', { class: 'topic-empty' }, [
+      el('p', { text: 'No study guide for this topic yet.' }),
+      el('p', { class: 'muted', text: 'Guides are written on the desktop — once added there, they sync here to read.' }),
+    ]));
+  }
 }
 
 // Minimal, dependency-free Markdown → DOM for study guides. Supports headings

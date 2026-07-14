@@ -7,7 +7,7 @@ import { isGistConfigured, syncGist, pushGist } from './gistsync.js';
 import { renderNow } from './views/now.js';
 import { renderPrep } from './views/prep.js';
 import { renderFocus } from './views/focus.js';
-import { renderPlan } from './views/plan.js';
+import { renderPlan, renderTopic } from './views/plan.js';
 import { renderDay } from './views/day.js';
 import { renderReading } from './views/reading.js';
 import { renderData } from './views/data.js';
@@ -25,6 +25,7 @@ const ROUTES = {
   now: renderNow,
   prep: renderPrep,
   plan: renderPlan,
+  topic: renderTopic,
   day: renderDay,
   reading: renderReading,
   data: renderData,

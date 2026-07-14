@@ -741,6 +741,34 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .plan-item.skipped .t { color: var(--text-faint); }
 .plan-item .sub { font-size: 12px; color: var(--text-faint); margin-top: 3px; }
 .plan-item .row-actions { display: flex; gap: 4px; flex-shrink: 0; }
+/* ---------- Mobile topic reader (read-only study guide) ---------- */
+.topic-reader { animation: viewIn .3s ease both; padding-bottom: 24px; }
+.topic-back { appearance: none; background: none; border: none; color: var(--text-faint); font-size: 14px; cursor: pointer; padding: 6px 0; margin-bottom: 4px; }
+.topic-back:hover { color: var(--text); }
+.topic-eyebrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 12px; color: var(--text-faint); }
+.topic-area { color: var(--text-dim); font-weight: 650; }
+.topic-reader-title { font-size: 23px; font-weight: 650; letter-spacing: -.02em; line-height: 1.25; margin: 6px 0 16px; }
+.topic-empty { color: var(--text-faint); padding: 20px 0; }
+.topic-empty p { margin: 0 0 6px; }
+.read-dot { color: var(--accent, #3b5bd9); font-weight: 700; }
+.plan-item .body-read { display: block; width: 100%; text-align: left; background: none; border: none; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+/* Content styling for the reader — scoped so the desktop study pane is untouched. */
+.topic-reader .study-content { font-size: 15.5px; line-height: 1.7; color: var(--text-dim); }
+.topic-reader .study-content h2 { font-size: 19px; color: var(--text); margin: 24px 0 8px; letter-spacing: -.01em; line-height: 1.3; }
+.topic-reader .study-content h3 { font-size: 16px; color: var(--text); margin: 20px 0 6px; }
+.topic-reader .study-content h4 { font-size: 14px; color: var(--text); margin: 15px 0 4px; }
+.topic-reader .study-content p { margin: 0 0 12px; }
+.topic-reader .study-content ul, .topic-reader .study-content ol { margin: 0 0 14px; padding-left: 20px; }
+.topic-reader .study-content li { margin: 5px 0; }
+.topic-reader .study-content strong { color: var(--text); }
+.topic-reader .study-content code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .88em; background: var(--bg-soft); padding: 1px 5px; border-radius: 5px; color: var(--text); overflow-wrap: anywhere; }
+.topic-reader .study-content pre { background: var(--bg-soft); border: 1px solid var(--line-soft); border-radius: 10px; padding: 12px 14px; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 0 14px; }
+.topic-reader .study-content pre code { background: none; padding: 0; font-size: 12.5px; line-height: 1.55; white-space: pre; overflow-wrap: normal; }
+.topic-reader .study-content table { border-collapse: collapse; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 0 15px; font-size: 13.5px; }
+.topic-reader .study-content th, .topic-reader .study-content td { border: 1px solid var(--line); padding: 6px 12px; text-align: left; }
+.topic-reader .study-content th { background: var(--bg-soft); color: var(--text); font-weight: 650; white-space: nowrap; }
+.topic-reader .study-content td { color: var(--text-dim); }
+
 /* ---------- Plan topic search ---------- */
 .plan-search-row { display: flex; align-items: center; gap: 8px; margin: 6px 0 14px; }
 .plan-search {
