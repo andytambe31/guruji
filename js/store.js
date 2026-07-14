@@ -680,9 +680,15 @@ export async function autoPlanDay(date, { now = new Date(), focusArea = null, ma
     startMin, endMin, busy: activeBusy.filter((b) => !b.transit), context, pinned, focusArea, maxStudyMinutes, loadBias,
     ...(weekend ? { itemCap: 2, areaCapDefault: 4, deep: true } : {}),
   };
-  // If it's too late for anything to fit today, still propose from the day start.
+  const isToday = date === todayISO(now);
   let fresh = planDay(date, cands, planOpts);
-  if (!fresh.length && cands.length) fresh = planDay(date, cands, { ...planOpts, startMin: undefined });
+  // If a tight window fit nothing, propose from the day's natural start — but ONLY
+  // for a future day. On today that would conjure sessions in the past (a 7pm
+  // reassess must not produce a 9am plan), so an empty evening stays empty instead.
+  if (!fresh.length && cands.length && !isToday) fresh = planDay(date, cands, { ...planOpts, startMin: undefined });
+  // Hard guard: never schedule a session that starts before now on today, whatever
+  // planDay returned — study only ever lands from the current moment forward.
+  if (isToday) fresh = fresh.filter((b) => b.start >= startMin);
   const rows = [...commuteBlocks, ...fresh.map((b) => ({ kind: 'block', id: uid('blk'), ...b }))];
   // No final reflow here — planDay already lays a clean, break-scaled layout
   // that respects the wake start and routes around commitments + pinned blocks.
