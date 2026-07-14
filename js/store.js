@@ -1091,6 +1091,22 @@ export async function clearDeckSession(key) {
   return del(STORES.kv, 'deckSession:' + key);
 }
 
+// ---- "Solved this week" checklist (Path · This week) ----
+// Which named problems you've ticked off this week. Auto-resets when the week
+// number rolls over, so each week starts a clean list.
+export async function getWeekSolved(week) {
+  const rec = await get(STORES.kv, 'weekSolved');
+  const v = rec ? rec.v : null;
+  return (v && v.week === week && v.done) ? v.done : {};
+}
+export async function toggleWeekSolved(week, title) {
+  const cur = await getWeekSolved(week);
+  const done = { ...cur };
+  if (done[title]) delete done[title]; else done[title] = true;
+  await put(STORES.kv, { k: 'weekSolved', v: { week, done } });
+  return done;
+}
+
 // ---- Studied concepts (the Drills catalog gate) ----
 // You tell the app which concepts you've actually studied; drills for a concept
 // only unlock once it's marked. { [conceptId]: true }.

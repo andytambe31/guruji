@@ -1,7 +1,7 @@
 /* Guruji service worker — offline app shell.
    Cache-first for the shell so the app opens with no network. Bump
    CACHE_VERSION on any shell change to force clients to refresh. */
-const CACHE_VERSION = 'guruji-v128';
+const CACHE_VERSION = 'guruji-v129';
 const SHELL = [
   './',
   './index.html',
@@ -24,6 +24,7 @@ const SHELL = [
   './js/gistsync.js',
   './js/util.js',
   './js/objectives.js',
+  './js/problems.js',
   './js/views/now.js',
   './js/views/prep.js',
   './js/views/focus.js',

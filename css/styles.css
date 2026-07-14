@@ -754,16 +754,31 @@ p  { color: var(--text-dim); line-height: 1.55; }
 .tw-verdict.ok { background: rgba(15,157,107,.12); color: #0f9d6b; }
 .tw-verdict.behind { background: rgba(194,72,61,.12); color: #c2483d; }
 .tw-verdict-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-.tw-rows { display: flex; flex-direction: column; gap: 16px; }
-.tw-row-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 7px; }
-.tw-label { font-size: 14.5px; font-weight: 600; color: var(--text); }
-.tw-val { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
-.tw-val b { color: var(--text); font-size: 15px; }
-.tw-track { height: 8px; border-radius: 999px; background: var(--bg-soft); overflow: hidden; }
-.tw-fill { height: 100%; border-radius: 999px; background: var(--desk, #3b5bd9); transition: width .4s ease; }
-.tw-row.met .tw-fill { background: var(--ok, #0f9d6b); }
-.tw-row.met .tw-label::after { content: ' ✓'; color: var(--ok, #0f9d6b); }
-.tw-sub { font-size: 12px; color: var(--text-faint); margin-top: 6px; line-height: 1.5; }
+.tw-h { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.tw-count { font-size: 13px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* Concept groups + their named problems */
+.tw-concept { margin-bottom: 18px; }
+.tw-concept-top { display: flex; align-items: center; gap: 10px; margin: 0 0 8px; }
+.tw-concept-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.tw-concept-tag { font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-faint); border: 1px solid var(--line); border-radius: 999px; padding: 2px 8px; }
+.tw-concept-tag.studied { color: #0f9d6b; border-color: rgba(15,157,107,.4); }
+.tw-prob {
+  display: flex; align-items: center; gap: 11px; width: 100%; text-align: left;
+  background: none; border: none; border-bottom: 1px solid var(--line-soft);
+  padding: 11px 2px; font: inherit; color: var(--text); cursor: pointer;
+}
+.tw-prob:active { background: var(--bg-soft); }
+.tw-box { font-size: 17px; color: var(--text-faint); flex: 0 0 auto; line-height: 1; }
+.tw-prob.done .tw-box { color: var(--ok, #0f9d6b); }
+.tw-prob-t { flex: 1; min-width: 0; font-size: 14.5px; }
+.tw-prob.done .tw-prob-t { color: var(--text-faint); text-decoration: line-through; }
+.tw-prob .lc-diff { flex: 0 0 auto; }
+/* Repetition tiles */
+.tw-reps { display: flex; gap: 12px; }
+.tw-rep { flex: 1; display: flex; flex-direction: column; gap: 3px; align-items: flex-start; background: var(--bg-soft); border: none; border-radius: 14px; padding: 14px 16px; cursor: pointer; font: inherit; }
+.tw-rep:active { opacity: .85; }
+.tw-rep-n { font-size: 26px; font-weight: 700; color: var(--text); letter-spacing: -.02em; }
+.tw-rep-l { font-size: 12.5px; color: var(--text-faint); }
 
 /* ---------- Mobile topic reader (read-only study guide) ---------- */
 .topic-reader { animation: viewIn .3s ease both; padding-bottom: 24px; }
