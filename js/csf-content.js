@@ -8,6 +8,7 @@ import { STORES, getAll, put, bulkPut } from './db.js';
 import { CSF_TCP_TLS_GUIDE } from './csf-tcptls.js';
 import { CSF_ENCODING_GUIDE } from './csf-encoding.js';
 import { CSF_LLM_PATTERNS_GUIDE } from './csf-llm-patterns.js';
+import { CSF_DYNAMODB_GUIDE } from './csf-dynamodb.js';
 
 const TRACK_ID = 'csf';
 const PHASE_ID = 'csf-core';
@@ -17,6 +18,7 @@ const GUIDES = [
   { id: 'csf-tcp-tls', title: 'TCP & TLS Handshakes', group: 'Networking', notes: CSF_TCP_TLS_GUIDE },
   { id: 'csf-encoding', title: 'Character Encoding (charset, Unicode, UTF-8)', group: 'Networking', notes: CSF_ENCODING_GUIDE },
   { id: 'csf-llm-patterns', title: 'Design Patterns: LLM-in-the-loop Event Pipeline', group: 'Architecture', notes: CSF_LLM_PATTERNS_GUIDE },
+  { id: 'csf-dynamodb', title: 'DynamoDB: how it works (OneTable, GSI, PITR)', group: 'Databases', notes: CSF_DYNAMODB_GUIDE },
 ];
 
 export async function seedCSFundamentalsContent() {
