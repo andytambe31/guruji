@@ -192,6 +192,10 @@ export async function setItemStatus(id, status) {
   if (!item) return null;
   item.status = status;
   await put(STORES.items, item);
+  // Finishing a piece of content auto-marks the catalog concepts it covers as
+  // studied, so its nuggets (and any drills) start surfacing right away — no
+  // separate trip to the concept catalog. "Read the article → keep me fresh."
+  if (status === 'done') { try { await markConceptsStudied(conceptsForItem(item)); } catch { /* non-fatal */ } }
   return item;
 }
 
@@ -1008,6 +1012,35 @@ export async function toggleStudiedConcept(id) {
   if (cur[id]) delete cur[id]; else cur[id] = true;
   await setStudiedConcepts(cur);
   return cur;
+}
+
+// Which catalog concepts a finished study item counts as "studied", inferred from
+// its area + title. Non-DSA concepts (system-design, networking, databases,
+// concurrency, security, behavioral) have no drills, so this only unlocks their
+// nuggets. DSA is intentionally excluded — its concepts are per-pattern, too
+// granular to guess from a title, and we don't want to over-unlock drills.
+const ITEM_CONCEPT_KEYWORDS = [
+  ['networking', /\b(url|https?|dns|tcp|tls|ssl|network|request|latency|cdn|rest|api|browser)\b/i],
+  ['databases', /\b(database|sql|nosql|index(?:ing)?|query|acid|transaction|replicat\w*|shard\w*|normaliz\w*|cache|caching)\b/i],
+  ['concurrency', /\b(thread|concurren\w*|async|parallel\w*|mutex|deadlock|race\scondition|semaphore)\b/i],
+  ['security', /\b(security|auth\w*|password|jwt|csrf|xss|oauth|encrypt\w*)\b/i],
+];
+export function conceptsForItem(item) {
+  if (!item) return [];
+  const out = new Set();
+  if (item.area === 'System Design') out.add('system-design');
+  if (item.area === 'Behavioral') out.add('behavioral');
+  const title = String(item.title || '');
+  for (const [cid, re] of ITEM_CONCEPT_KEYWORDS) if (re.test(title)) out.add(cid);
+  return [...out];
+}
+export async function markConceptsStudied(ids) {
+  if (!ids || !ids.length) return false;
+  const cur = await getStudiedConcepts();
+  let changed = false;
+  for (const id of ids) if (!cur[id]) { cur[id] = true; changed = true; }
+  if (changed) await setStudiedConcepts(cur);
+  return changed;
 }
 
 // ---- "How did I do?" — a single day score ----
