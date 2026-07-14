@@ -1076,6 +1076,21 @@ export async function setDrillState(v) {
   return put(STORES.kv, { k: 'drillState', v: v || {} });
 }
 
+// ---- Resumable deck sessions (nuggets / drills) ----
+// The in-progress deck order + position, so you can leave the UI to check the
+// day / progress and come back to the same card. Local-only (not synced): a
+// half-finished deck shouldn't teleport across devices.
+export async function getDeckSession(key) {
+  const rec = await get(STORES.kv, 'deckSession:' + key);
+  return rec ? rec.v : null;
+}
+export async function setDeckSession(key, v) {
+  return put(STORES.kv, { k: 'deckSession:' + key, v: v || null });
+}
+export async function clearDeckSession(key) {
+  return del(STORES.kv, 'deckSession:' + key);
+}
+
 // ---- Studied concepts (the Drills catalog gate) ----
 // You tell the app which concepts you've actually studied; drills for a concept
 // only unlock once it's marked. { [conceptId]: true }.

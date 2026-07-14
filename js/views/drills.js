@@ -4,8 +4,11 @@
 // to a "why it fits" so you learn the reasoning, not the keystroke. Card-based
 // like Revise, but multiple-choice — no swiping. Missed cards resurface first
 // (spaced-rep memory), so the ones you don't understand come back around.
-import { el, clear, todayISO } from '../util.js';
-import { getDrillState, setDrillState, computeDeck, getStudiedConcepts } from '../store.js';
+import { el, clear, todayISO, toast } from '../util.js';
+import { getDrillState, setDrillState, computeDeck, getStudiedConcepts, getDeckSession, setDeckSession, clearDeckSession } from '../store.js';
+
+const SESSION_KEY = 'drills';
+const SESSION_TTL = 12 * 3600 * 1000; // a deck older than this starts fresh
 
 // The blank marker embedded in each snippet — replaced by the chosen fragment.
 const BLANK = '▢';
@@ -1017,11 +1020,31 @@ export async function renderDrills(mount, { arg, navigate }) {
   const rnd = new Map(pool.map((d) => [d.id, Math.random()]));
   let cards = pool.slice().sort((a, b) => pri(a) - pri(b) || (rnd.get(a.id) - rnd.get(b.id)));
 
-  // ---- session state ----
+  // ---- session state (resume where you left off) ----
   let idx = 0;
   let got = 0; let missed = 0;
   let seedBase = 7;
   let retrySeed = 0;
+  // On the main deck, restore a saved in-progress run: same order + position, so
+  // leaving to check the day/progress and returning continues the same deck.
+  if (!scope) {
+    const saved = await getDeckSession(SESSION_KEY);
+    const fresh = saved && saved.savedAt && (Date.now() - Date.parse(saved.savedAt) < SESSION_TTL);
+    if (fresh && Array.isArray(saved.ids) && saved.idx > 0 && saved.idx < saved.ids.length) {
+      const byId = new Map(cards.map((d) => [d.id, d]));
+      const ordered = saved.ids.map((id) => byId.get(id)).filter(Boolean);
+      if (ordered.length) {
+        const savedSet = new Set(saved.ids);
+        cards = [...ordered, ...cards.filter((d) => !savedSet.has(d.id))];
+        idx = Math.min(saved.idx, cards.length);
+        got = saved.got || 0; missed = saved.missed || 0;
+        if (idx < cards.length) setTimeout(() => toast('Resumed where you left off'), 100);
+      }
+    } else if (saved) {
+      await clearDeckSession(SESSION_KEY);
+    }
+  }
+  const persist = () => { if (!scope) setDeckSession(SESSION_KEY, { ids: cards.map((d) => d.id), idx, got, missed, savedAt: new Date().toISOString() }); };
 
   const head = el('div', { class: 'revise-head' });
   const stack = el('div', { class: 'revise-stack drill-stack' });
@@ -1118,7 +1141,7 @@ export async function renderDrills(mount, { arg, navigate }) {
       feedback.append(el('button', {
         class: 'btn btn-primary btn-block drill-next', style: 'margin-top:10px',
         text: idx + 1 >= cards.length ? 'Finish' : 'Next',
-        onclick: () => { idx++; paint(); },
+        onclick: () => { idx++; persist(); paint(); },
       }));
       feedback.classList.add('show');
     }
@@ -1150,6 +1173,7 @@ export async function renderDrills(mount, { arg, navigate }) {
   async function finish() {
     clear(stack);
     await setDrillState(state);
+    if (!scope) await clearDeckSession(SESSION_KEY); // deck complete — nothing to resume
     head.querySelector('.revise-count')?.remove();
     const total = got + missed;
     stack.append(el('div', { class: 'revise-done' }, [

@@ -7,8 +7,11 @@
 // you've marked as studied in the catalog — so you reinforce what you've actually
 // covered, not operating-systems trivia you haven't touched. Swipe right on the
 // ones you've got (they fade back), left to keep one coming around.
-import { el, clear, todayISO } from '../util.js';
-import { getNuggetState, setNuggetState, computeDeck, getStudiedConcepts } from '../store.js';
+import { el, clear, todayISO, toast } from '../util.js';
+import { getNuggetState, setNuggetState, computeDeck, getStudiedConcepts, getDeckSession, setDeckSession, clearDeckSession } from '../store.js';
+
+const SESSION_KEY = 'nuggets';
+const SESSION_TTL = 12 * 3600 * 1000; // a deck older than this starts fresh
 
 // Which catalog concept each nugget belongs to — the Nuggets deck gates on the
 // same "studied concepts" list as Drills, so you only get bite-sized knowledge for
@@ -179,9 +182,30 @@ export async function renderNuggets(mount, { arg, navigate }) {
   };
   deckCards.sort((a, b) => pri(a) - pri(b) || (String(state[a.id]?.at || '') < String(state[b.id]?.at || '') ? -1 : 1));
 
-  // ---- session state ----
+  // ---- session state (resume where you left off) ----
   let idx = 0;
   let got = 0; let again = 0;
+  // On the main deck, restore a saved in-progress session: same order, same
+  // position — so leaving to check the day/progress and coming back continues.
+  // Newly-unlocked cards get appended after the remembered order.
+  if (!scope) {
+    const saved = await getDeckSession(SESSION_KEY);
+    const fresh = saved && saved.savedAt && (Date.now() - Date.parse(saved.savedAt) < SESSION_TTL);
+    if (fresh && Array.isArray(saved.ids) && saved.idx > 0 && saved.idx < saved.ids.length) {
+      const byId = new Map(deckCards.map((c) => [c.id, c]));
+      const ordered = saved.ids.map((id) => byId.get(id)).filter(Boolean);
+      if (ordered.length) {
+        const savedSet = new Set(saved.ids);
+        deckCards = [...ordered, ...deckCards.filter((c) => !savedSet.has(c.id))];
+        idx = Math.min(saved.idx, deckCards.length);
+        got = saved.got || 0; again = saved.again || 0;
+        if (idx < deckCards.length) setTimeout(() => toast('Resumed where you left off'), 100);
+      }
+    } else if (saved) {
+      await clearDeckSession(SESSION_KEY); // stale/finished — drop it
+    }
+  }
+  const persist = () => { if (!scope) setDeckSession(SESSION_KEY, { ids: deckCards.map((c) => c.id), idx, got, again, savedAt: new Date().toISOString() }); };
 
   const focusLabel = scope || [...new Set(deckCards.map((c) => c.area))].join(', ');
   const head = el('div', { class: 'revise-head' });
@@ -243,6 +267,7 @@ export async function renderNuggets(mount, { arg, navigate }) {
     const top = stack.querySelector('.revise-card');
     if (top) { top.style.transition = 'transform .25s ease, opacity .25s ease'; top.style.transform = `translateX(${conf === 'got' ? 420 : -420}px) rotate(${conf === 'got' ? 16 : -16}deg)`; top.style.opacity = '0'; }
     idx++;
+    persist(); // remember position so leaving mid-deck resumes here
     setTimeout(paint, 180);
   }
 
@@ -267,6 +292,7 @@ export async function renderNuggets(mount, { arg, navigate }) {
   async function finish() {
     clear(stack); clear(acts);
     await setNuggetState(state);
+    if (!scope) await clearDeckSession(SESSION_KEY); // deck complete — nothing to resume
     head.querySelector('.revise-count')?.remove();
     stack.append(el('div', { class: 'revise-done' }, [
       el('div', { class: 'revise-done-mark', text: '✓' }),
