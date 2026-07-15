@@ -66,6 +66,48 @@ Each hop earns its place: **Streams** is the native change feed; **Pipes** own p
 
 8. **Boundary validation.** External IDs, storage-integration bindings, and other cross-system handles must be non-empty. Empty defaults silently propagate to trust-policy mismatches that only surface on the **first file delivery** — hours after apply, far from the change that caused them.
 
+## How Snowpipe works (the S3 → table hop)
+
+Snowpipe is Snowflake's **serverless, continuous micro-batch loader**. It's the difference between "run a big \`COPY\` on a schedule" and "files get ingested within seconds of landing, with no warehouse running." In this pipeline it's what turns a stream of Firehose objects in S3 into rows in the landing table.
+
+**The pieces**
+
+- A **stage** — a named pointer at the S3 location (bucket + prefix) plus the storage integration (§4) that grants access.
+- A **pipe** — a first-class object wrapping a \`COPY INTO\` statement with auto-ingest on:
+\`\`\`
+CREATE PIPE landing_pipe AUTO_INGEST = TRUE AS
+  COPY INTO landing_table (raw, _ingest_ts, ...)
+  FROM @cdc_stage
+  FILE_FORMAT = (TYPE = JSON)   -- Firehose writes GZIP'd JSON here
+  MATCH_BY_COLUMN_NAME = CASE_INSENSITIVE;
+\`\`\`
+
+**The auto-ingest flow**
+
+\`\`\`
+Firehose writes object ─► S3 ─► S3 Event Notification ─► SNS/SQS ─► Snowpipe queue
+                                                                        │
+                                                          Snowflake-managed serverless
+                                                          compute runs the pipe's COPY
+                                                                        │
+                                                                        ▼
+                                                                 landing table
+\`\`\`
+
+1. Firehose delivers a new object to the S3 prefix.
+2. S3 emits an **event notification** to the SQS queue Snowflake provisioned for the pipe (you wire the bucket's notification to that queue's ARN once).
+3. Snowpipe dequeues the event and runs the pipe's \`COPY\` against **just that file**, on **Snowflake-managed serverless compute** — no virtual warehouse spins up, and you're billed **per-file processed** (a small overhead per file + the compute), not by warehouse-second.
+4. Rows land, typically within **seconds to about a minute** of the file arriving.
+
+**Why the details in this design matter**
+
+- **\`LOAD_HISTORY\` is the dedup ledger.** Snowpipe records every file it has already loaded (retained ~14 days) and **skips a file it has seen before**, so the same S3 object is never ingested twice. This is *why* decision #6 puts \`prevent_destroy\` on the pipe/stage: recreating the pipe wipes that ledger, and the next notification re-loads files it already loaded → **duplicates**.
+- **File sizing is the main performance lever.** Snowpipe has per-file overhead, so millions of tiny 1-KB files are slow and expensive — which is exactly why **Firehose sits in front, batching events into larger, time-partitioned objects** (aim for ~100–250 MB). Fewer, fatter files = cheaper, faster ingestion.
+- **It's near-real-time, not streaming.** Latency is seconds-to-a-minute and it's file-driven. If you need sub-second row-level ingestion, that's **Snowpipe Streaming** (a rowset API that writes rows directly, no S3 file hop) — a different tool with a different cost model; this pipeline deliberately chooses the file-based path for buffering and replayability.
+- **Auto-ingest can miss events.** S3 notifications are best-effort; if one is dropped (or the pipe was paused), the file sits in S3 un-ingested. That's the failure mode the runbook covers: \`SELECT SYSTEM$PIPE_STATUS('landing_pipe')\` to inspect the queue, and \`ALTER PIPE landing_pipe REFRESH\` to re-scan the stage and pick up anything the notifications missed. \`COPY\` history / \`VALIDATE_PIPE_LOAD\` surfaces per-file load errors.
+
+**Snowpipe vs bulk \`COPY\`** — bulk \`COPY\` runs on *your* warehouse, on demand, for large scheduled batches; Snowpipe runs serverless, continuously, on file arrival. This pipeline wants freshness without babysitting a warehouse, so it's Snowpipe.
+
 ## Observability
 
 Every pipe carries its **own** alarm set — no shared alarms across pipes, even when they share the enrichment function — so a fault localizes to one source table.
