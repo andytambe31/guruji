@@ -10,6 +10,7 @@ import { CSF_ENCODING_GUIDE } from './csf-encoding.js';
 import { CSF_LLM_PATTERNS_GUIDE } from './csf-llm-patterns.js';
 import { CSF_DYNAMODB_GUIDE } from './csf-dynamodb.js';
 import { CSF_SNOWFLAKE_GUIDE } from './csf-snowflake.js';
+import { CSF_WIF_GUIDE } from './csf-wif.js';
 
 const TRACK_ID = 'csf';
 const PHASE_ID = 'csf-core';
@@ -21,6 +22,7 @@ const GUIDES = [
   { id: 'csf-llm-patterns', title: 'Design Patterns: LLM-in-the-loop Event Pipeline', group: 'Architecture', notes: CSF_LLM_PATTERNS_GUIDE },
   { id: 'csf-dynamodb', title: 'DynamoDB: how it works (OneTable, GSI, PITR)', group: 'Databases', notes: CSF_DYNAMODB_GUIDE },
   { id: 'csf-snowflake', title: 'Snowflake: how it works (warehouses, micro-partitions, Time Travel)', group: 'Databases', notes: CSF_SNOWFLAKE_GUIDE },
+  { id: 'csf-wif', title: 'Workload Identity Federation (WIF)', group: 'Security & Auth', notes: CSF_WIF_GUIDE },
 ];
 
 export async function seedCSFundamentalsContent() {
