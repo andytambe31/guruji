@@ -74,12 +74,18 @@ export async function seedSystemDesignContent() {
       getAll(STORES.items),
     ]);
     const existingIds = new Set(items.map((it) => it.id));
+    const itemsById = new Map(items.map((it) => [it.id, it]));
     // Cheap early out once the phase exists AND every chapter + pattern guide is
-    // present — but new pattern guides added in later versions still get seeded
-    // into an existing install.
-    const allPresent = CHAPTERS.every((_, idx) => existingIds.has(chapterId(idx)))
-      && PATTERN_GUIDES.every((g) => existingIds.has(g.id));
-    if (phases.some((p) => p.id === PHASE_ID) && allPresent) return { ran: false };
+    // present AND no bundled pattern guide's authored text has drifted — but new
+    // guides (and edits to an existing guide's canonical text) still reach an
+    // already-seeded install. Pattern guides are shipped reference content keyed
+    // on a stable id, so when the authored copy changes we refresh it in place.
+    const guidesToWrite = PATTERN_GUIDES.filter((g) => {
+      const ex = itemsById.get(g.id);
+      return !ex || ex.notes !== g.notes || ex.title !== g.title || ex.group !== g.group;
+    });
+    const allChapters = CHAPTERS.every((_, idx) => existingIds.has(chapterId(idx)));
+    if (phases.some((p) => p.id === PHASE_ID) && allChapters && guidesToWrite.length === 0) return { ran: false };
 
     // Append after everything else so our chapters never outrank real topics.
     const maxItemOrder = items.reduce((m, it) => Math.max(m, it.order ?? 0), 0);
@@ -129,32 +135,40 @@ export async function seedSystemDesignContent() {
       });
     });
 
-    // 4) Add each standalone pattern guide (skip any that already exist).
-    for (const g of PATTERN_GUIDES) {
-      if (existingIds.has(g.id)) continue;
-      newItems.push({
-        id: g.id,
-        title: g.title,
-        phase: PHASE_ID,
-        track: TRACK_ID,
-        week: null,
-        area: 'System Design',
-        group: g.group,
-        mode: 'TRANSIT',
-        estMinutes: 30,
-        recurring: false,
-        dependsOn: [],
-        status: 'todo',
-        notes: g.notes,
-        coach: null,
-        doneObjectives: [],
-        objectives: undefined,
-        order: order++,
-      });
+    // 4) Add missing standalone pattern guides, and refresh any whose canonical
+    // text drifted (new install → create; edited guide → overwrite in place,
+    // preserving the item's status / order / progress).
+    let refreshed = 0;
+    for (const g of guidesToWrite) {
+      const ex = itemsById.get(g.id);
+      if (ex) {
+        newItems.push({ ...ex, title: g.title, group: g.group, area: 'System Design', notes: g.notes });
+        refreshed += 1;
+      } else {
+        newItems.push({
+          id: g.id,
+          title: g.title,
+          phase: PHASE_ID,
+          track: TRACK_ID,
+          week: null,
+          area: 'System Design',
+          group: g.group,
+          mode: 'TRANSIT',
+          estMinutes: 30,
+          recurring: false,
+          dependsOn: [],
+          status: 'todo',
+          notes: g.notes,
+          coach: null,
+          doneObjectives: [],
+          objectives: undefined,
+          order: order++,
+        });
+      }
     }
     if (newItems.length) await bulkPut(STORES.items, newItems);
 
-    return { ran: true, added: newItems.length };
+    return { ran: true, added: newItems.length - refreshed, refreshed };
   } catch {
     return { ran: false };
   }
