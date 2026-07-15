@@ -11,6 +11,7 @@
 // double-adds or clobbers a chapter whose guide you've since edited.
 import { STORES, getAll, put, bulkPut } from './db.js';
 import { CH02_SCALE_GUIDE } from './sdi-ch02.js';
+import { SDI_CDC_PATTERN_GUIDE } from './sdi-cdc-pattern.js';
 
 const TRACK_ID = 'sdi';
 const PHASE_ID = 'sdi-book';
@@ -53,6 +54,13 @@ const CHAPTERS = [
 // The one chapter that ships with a full authored study guide today.
 const GUIDES = { 2: CH02_SCALE_GUIDE };
 
+// Standalone architecture-pattern guides (not book chapters) under a "Patterns"
+// group in the same track. Kept in their own list so new ones seed into an
+// existing install, not just a fresh one.
+const PATTERN_GUIDES = [
+  { id: 'sdi-cdc-pattern', title: 'Pattern: NoSQL → Warehouse CDC Pipeline', group: 'Patterns', notes: SDI_CDC_PATTERN_GUIDE },
+];
+
 const pad = (n) => String(n).padStart(2, '0');
 // idx 0 is the un-numbered Foreword; 1..30 are chapters "01".."30".
 const chapterId = (idx) => `sdi-${pad(idx)}`;
@@ -60,19 +68,22 @@ const chapterTitle = (idx, name) => (idx === 0 ? name : `${pad(idx)} · ${name}`
 
 export async function seedSystemDesignContent() {
   try {
-    const phases = await getAll(STORES.phases);
-    // Already seeded (and not wiped) — cheap early out on every normal boot.
-    if (phases.some((p) => p.id === PHASE_ID)) return { ran: false };
-
-    const [plansRec, items] = await Promise.all([
+    const [phases, plansRec, items] = await Promise.all([
+      getAll(STORES.phases),
       getAll(STORES.kv).then((rows) => rows.find((r) => r.k === 'plans')),
       getAll(STORES.items),
     ]);
+    const existingIds = new Set(items.map((it) => it.id));
+    // Cheap early out once the phase exists AND every chapter + pattern guide is
+    // present — but new pattern guides added in later versions still get seeded
+    // into an existing install.
+    const allPresent = CHAPTERS.every((_, idx) => existingIds.has(chapterId(idx)))
+      && PATTERN_GUIDES.every((g) => existingIds.has(g.id));
+    if (phases.some((p) => p.id === PHASE_ID) && allPresent) return { ran: false };
 
     // Append after everything else so our chapters never outrank real topics.
     const maxItemOrder = items.reduce((m, it) => Math.max(m, it.order ?? 0), 0);
     const maxPhaseOrder = phases.reduce((m, p) => Math.max(m, p.order ?? 0), 0);
-    const existingIds = new Set(items.map((it) => it.id));
 
     // 1) Ensure the track exists in the plans list.
     const plans = (plansRec && Array.isArray(plansRec.v)) ? plansRec.v.slice() : [];
@@ -82,13 +93,16 @@ export async function seedSystemDesignContent() {
       await put(STORES.kv, { k: 'plans', v: plans });
     }
 
-    // 2) Ensure the phase (the book itself) exists.
-    await put(STORES.phases, {
-      id: PHASE_ID, name: 'System Design Interview', weeks: [], dateRange: '',
-      track: TRACK_ID, order: maxPhaseOrder + 1,
-    });
+    // 2) Ensure the phase (the book itself) exists — but don't re-put an existing
+    // one, which would reshuffle its order when we're only adding a new guide.
+    if (!phases.some((p) => p.id === PHASE_ID)) {
+      await put(STORES.phases, {
+        id: PHASE_ID, name: 'System Design Interview', weeks: [], dateRange: '',
+        track: TRACK_ID, order: maxPhaseOrder + 1,
+      });
+    }
 
-    // 3) Add each chapter as an item (skip any that somehow already exist).
+    // 3) Add each chapter as an item (skip any that already exist).
     const newItems = [];
     let order = maxItemOrder + 1;
     CHAPTERS.forEach((name, idx) => {
@@ -114,6 +128,30 @@ export async function seedSystemDesignContent() {
         order: order++,
       });
     });
+
+    // 4) Add each standalone pattern guide (skip any that already exist).
+    for (const g of PATTERN_GUIDES) {
+      if (existingIds.has(g.id)) continue;
+      newItems.push({
+        id: g.id,
+        title: g.title,
+        phase: PHASE_ID,
+        track: TRACK_ID,
+        week: null,
+        area: 'System Design',
+        group: g.group,
+        mode: 'TRANSIT',
+        estMinutes: 30,
+        recurring: false,
+        dependsOn: [],
+        status: 'todo',
+        notes: g.notes,
+        coach: null,
+        doneObjectives: [],
+        objectives: undefined,
+        order: order++,
+      });
+    }
     if (newItems.length) await bulkPut(STORES.items, newItems);
 
     return { ran: true, added: newItems.length };
