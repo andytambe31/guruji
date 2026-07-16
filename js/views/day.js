@@ -536,8 +536,16 @@ export async function renderDay(mount, { navigate }) {
     const acts = el('div', { class: 'blk-acts' });
     const normalActs = () => [
       // A commute/transit block can't do deep work on mobile — it launches the
-      // Nuggets deck (relevant bite-sized study) instead of the timer.
-      done ? null : el('button', { class: 'blk-start', text: b.onCommute ? 'Nuggets' : 'Start', onclick: () => navigate(b.onCommute ? `/nuggets/${encodeURIComponent(b.area || '')}` : `/prep/${b.itemId}/${b.id}`) }),
+      // Nuggets deck (relevant bite-sized study) instead of the timer. Reading is
+      // the exception: on a commute you just read your book, so it opens the
+      // reading flow (there are no "Reading" nuggets to swipe).
+      done ? null : (() => {
+        const commuteReading = b.onCommute && b.area === 'Reading';
+        return el('button', { class: 'blk-start', text: commuteReading ? 'Read' : (b.onCommute ? 'Nuggets' : 'Start'), onclick: () => navigate(
+          commuteReading ? '/reading'
+            : b.onCommute ? `/nuggets/${encodeURIComponent(b.area || '')}`
+              : `/prep/${b.itemId}/${b.id}`) });
+      })(),
       el('button', { class: 'blk-act', text: 'Log', title: 'Studied without the timer? Log the time you put in', onclick: () => fill(clear(acts), logActs()) }),
       b.area === 'DSA' ? el('button', { class: 'blk-act', text: 'Problems', title: 'Log the LeetCode problems you did in this session', onclick: () => openLeetcodeWizard({ onSave: async (e) => { if (e.length) { await logLeetcodeForBlock(b, e); toast(`Logged ${e.length} problem${e.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,
       (b.area === 'CS Fundamentals' && concepts.length) ? el('button', { class: 'blk-act', text: 'Concepts', title: 'Rate your confidence on this topic’s key concepts', onclick: () => openConceptWizard({ concepts, onSave: async (r) => { if (r.length) { await logConceptsForBlock(b, r); toast(`Rated ${r.length} concept${r.length > 1 ? 's' : ''}`); await paint(); } } }) }) : null,

@@ -161,8 +161,20 @@ export async function renderNuggets(mount, { arg, navigate }) {
   const seenIds = new Set();
   let deckCards = cards.filter((c) => (seenIds.has(c.id) ? false : (seenIds.add(c.id), true)));
 
-  // Nothing unlocked → point at the concept catalog (same gate as Drills).
+  // Nothing to show. A scoped commute deck (/nuggets/:area) has no gate — if it's
+  // empty, there simply are no nuggets for that area, so say that plainly rather
+  // than sending the reader to the concept catalog (which is the main-deck fix).
   if (!deckCards.length) {
+    if (scope) {
+      wrap.append(el('div', { class: 'center-state' }, [
+        el('p', { class: 'eyebrow', text: 'Nuggets' }),
+        el('h1', { text: `No ${scope} nuggets yet.` }),
+        el('p', { class: 'muted', text: 'There’s nothing bite-sized to swipe for this block right now — carry on with the block itself.' }),
+        el('button', { class: 'btn btn-ghost btn-block', style: 'margin-top:16px;max-width:320px', text: 'Back', onclick: exit }),
+      ]));
+      return;
+    }
+    // Main deck (concept-gated) → point at the catalog to unlock nuggets.
     wrap.append(el('div', { class: 'center-state' }, [
       el('p', { class: 'eyebrow', text: 'Nuggets' }),
       el('h1', { text: 'Mark what you’ve studied.' }),
