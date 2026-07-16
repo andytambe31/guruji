@@ -34,14 +34,20 @@ export async function seedCSFundamentalsContent() {
       getAll(STORES.items),
       getAll(STORES.kv).then((rows) => rows.find((r) => r.k === 'plans')),
     ]);
-    // Cheap early out once the track exists AND every guide is present — but new
-    // guides added in later versions still get seeded into an existing install.
-    const haveItem = new Set(items.map((it) => it.id));
-    if (phases.some((p) => p.id === PHASE_ID) && GUIDES.every((g) => haveItem.has(g.id))) return { ran: false };
+    // Cheap early out once the track exists, every guide is present, AND no
+    // guide's authored text has drifted — but new guides (and edits to an
+    // existing guide's canonical text) still reach an already-seeded install.
+    // These guides are shipped reference content keyed on a stable id, so when
+    // the authored copy changes we refresh it in place.
+    const itemsById = new Map(items.map((it) => [it.id, it]));
+    const guidesToWrite = GUIDES.filter((g) => {
+      const ex = itemsById.get(g.id);
+      return !ex || ex.notes !== g.notes || ex.title !== g.title || ex.group !== g.group;
+    });
+    if (phases.some((p) => p.id === PHASE_ID) && guidesToWrite.length === 0) return { ran: false };
 
     const maxItemOrder = items.reduce((m, it) => Math.max(m, it.order ?? 0), 0);
     const maxPhaseOrder = phases.reduce((m, p) => Math.max(m, p.order ?? 0), 0);
-    const existingIds = new Set(items.map((it) => it.id));
 
     // 1) Ensure the track exists in the plans list.
     const plans = (plansRec && Array.isArray(plansRec.v)) ? plansRec.v.slice() : [];
@@ -60,34 +66,42 @@ export async function seedCSFundamentalsContent() {
       });
     }
 
-    // 3) Add each guide as an item (skip any that already exist).
+    // 3) Add missing guides, and refresh any whose canonical text drifted
+    // (new install → create; edited guide → overwrite in place, preserving the
+    // item's status / order / progress).
     const newItems = [];
     let order = maxItemOrder + 1;
-    for (const g of GUIDES) {
-      if (existingIds.has(g.id)) continue;
-      newItems.push({
-        id: g.id,
-        title: g.title,
-        phase: PHASE_ID,
-        track: TRACK_ID,
-        week: null,
-        area: 'CS Fundamentals',
-        group: g.group,
-        mode: 'TRANSIT', // reading / concept work
-        estMinutes: 40,
-        recurring: false,
-        dependsOn: [],
-        status: 'todo',
-        notes: g.notes,
-        coach: null,
-        doneObjectives: [],
-        objectives: undefined,
-        order: order++,
-      });
+    let refreshed = 0;
+    for (const g of guidesToWrite) {
+      const ex = itemsById.get(g.id);
+      if (ex) {
+        newItems.push({ ...ex, title: g.title, group: g.group, area: 'CS Fundamentals', notes: g.notes });
+        refreshed += 1;
+      } else {
+        newItems.push({
+          id: g.id,
+          title: g.title,
+          phase: PHASE_ID,
+          track: TRACK_ID,
+          week: null,
+          area: 'CS Fundamentals',
+          group: g.group,
+          mode: 'TRANSIT', // reading / concept work
+          estMinutes: 40,
+          recurring: false,
+          dependsOn: [],
+          status: 'todo',
+          notes: g.notes,
+          coach: null,
+          doneObjectives: [],
+          objectives: undefined,
+          order: order++,
+        });
+      }
     }
     if (newItems.length) await bulkPut(STORES.items, newItems);
 
-    return { ran: true, added: newItems.length };
+    return { ran: true, added: newItems.length - refreshed, refreshed };
   } catch {
     return { ran: false };
   }

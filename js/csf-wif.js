@@ -75,7 +75,53 @@ The pattern is universal; only the nouns change.
 - **Azure:** add a **federated identity credential** to an app registration / managed identity, matching on issuer + subject; the workload gets an Entra access token — no client secret.
 - **GKE / EKS Workload Identity** is the same idea *inside* Kubernetes: a pod's service-account token is federated so the pod acts as a cloud identity without a node-wide key.
 
-## 5. Why the token can't just be replayed
+## 5. WIF in practice — connecting to Snowflake with no keys
+
+The examples above federate a workload into *its own cloud*. But a SaaS product can be the **relying party** too: Snowflake accepts WIF, so an app, container, VM, or CI job connects to it using its cloud platform's native identity — no password, no static API key, no self-managed key-pair. In Snowflake this is the \`WORKLOAD_IDENTITY\` authenticator (surfaced as \`authenticator = "WORKLOAD_IDENTITY"\` in a connector, or \`snowflake_auth_mode = "workload_identity"\` in some tooling — same handshake either way).
+
+**The passwordless flow**
+
+\`\`\`
+[ your app ] ──1. request token──► [ cloud IdP: AWS / GCP / Azure / GitHub ]
+      │                                          │
+      │                             2. short-lived JWT (proves the workload)
+      ▼                                          ▼
+[ Snowflake driver ] ──3. send JWT + connect──► [ Snowflake verifies + logs in as the service user ]
+\`\`\`
+
+1. **Request identity** — on connect, the Snowflake driver reaches out to the host's native metadata / identity service.
+2. **Retrieve token** — the cloud IdP issues a short-lived JWT proving the workload's identity.
+3. **Verify with Snowflake** — the driver sends the JWT; Snowflake validates it against its established cryptographic trust with that provider and logs you in as the mapped **service user**.
+
+**Supported identity providers** — **AWS** (IAM roles via EKS / EC2 / Lambda), **GCP** (service accounts via GKE / Compute Engine), **Azure** (Managed Identities), and any **OIDC** provider such as **GitHub Actions** (passwordless CI/CD).
+
+**Why reach for it** — no secret rotation (tokens live minutes, so there's nothing to encrypt, rotate, or leak), lower overhead (it reuses identity systems you already own — AWS IAM, Azure Entra ID), and secure-by-default zero-trust posture.
+
+**Configure it — the two halves**
+
+\`\`\`
+-- 1) In Snowflake: a SERVICE user mapped to the cloud resource's identity (ARN / subject)
+CREATE USER wif_service_user
+  TYPE = SERVICE
+  WORKLOAD_IDENTITY = ( TYPE = AWS
+                        ARN = 'arn:aws:iam::123456789012:role/MyApplicationRole' )
+  DEFAULT_ROLE = MY_APP_ROLE;
+\`\`\`
+
+\`\`\`
+# 2) In the client: pick the WORKLOAD_IDENTITY authenticator + your provider
+import snowflake.connector
+conn = snowflake.connector.connect(
+    account = 'your_account_identifier',
+    user    = 'wif_service_user',
+    authenticator = 'WORKLOAD_IDENTITY',   # == auth_mode "workload_identity"
+    workload_identity_provider = 'AWS',    # or 'GCP', 'AZURE', 'OIDC'
+)
+\`\`\`
+
+The property name varies by tool (Terraform / dbt / the Snowflake providers may say \`snowflake_auth_mode = "workload_identity"\`), but they all drive the same handshake. Note the two sides mirror the general model: the \`CREATE USER ... WORKLOAD_IDENTITY = (TYPE = AWS ARN = ...)\` mapping is Snowflake's **attribute condition** — it pins *which* cloud identity may log in as this user, exactly like the GCP/AWS conditions in §3–§4.
+
+## 6. Why the token can't just be replayed
 
 The security rests on the token being **narrow and short-lived**:
 
@@ -84,7 +130,7 @@ The security rests on the token being **narrow and short-lived**:
 - **Subject & custom claims (\`sub\`, \`repository\`, \`ref\`, …)** — pinned by the attribute condition, so "my CI" doesn't become "any CI." A token from a fork, a PR branch, or a different repo fails the condition.
 - **Expiry (\`exp\`)** — minutes. A leaked token is useless almost immediately, and there's no static key behind it to leak at all.
 
-## 6. Gotchas — the security-review checklist
+## 7. Gotchas — the security-review checklist
 
 - **Over-broad attribute condition** — matching only \`assertion.repository_owner\` (or nothing) lets **any repo in the org**, or *any* repo on GitHub, assume your identity. Pin the **full** \`repository\` and usually the \`ref\`/environment. This is the #1 WIF misconfiguration.
 - **Forgetting the audience check** — if \`aud\` isn't constrained, a token minted for a different relying party may be accepted. Always validate audience.
@@ -95,7 +141,7 @@ The security rests on the token being **narrow and short-lived**:
 - **Granting the mapped principal too much** — WIF controls *who can assume*; IAM still controls *what they can do*. Scope the assumed role/SA to least privilege — federation is authentication, not authorization.
 - **Clock skew / expiry too tight** — very short token lifetimes plus skew can cause flaky exchanges; rely on the platform defaults rather than shrinking blindly.
 
-## 7. The one-paragraph version
+## 8. The one-paragraph version
 
 "Instead of a long-lived service-account key in a CI secret, the workload presents a short-lived OIDC token its own platform signs — with claims like \`repository\` and \`ref\`. The target cloud has a federation config (GCP Workload Identity Pool provider / AWS IAM OIDC provider / Azure federated credential) that trusts that issuer, verifies the token's signature against the issuer's JWKS, checks the claims against a condition (e.g. \`repository == 'org/repo' && ref == 'refs/heads/main'\`), and exchanges it for temporary credentials via STS. Nothing long-lived exists to leak; the only credential is a minutes-long token bound to a specific workload."
 `;
