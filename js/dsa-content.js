@@ -6,6 +6,7 @@
 // install in place, preserving the item's status/order/progress).
 import { STORES, getAll, put, bulkPut } from './db.js';
 import { DSA_HEAPS_GUIDE } from './dsa-heaps.js';
+import { DSA_LINKEDLIST_GUIDE } from './dsa-linkedlist.js';
 
 const TRACK_ID = 'dsa';
 const PHASE_ID = 'dsa-patterns';
@@ -13,6 +14,7 @@ const PHASE_ID = 'dsa-patterns';
 // Each authored guide: a browsable study item under the DSA Patterns track.
 const GUIDES = [
   { id: 'dsa-heaps', title: 'Heaps & Top-K on LeetCode', group: 'Heaps', notes: DSA_HEAPS_GUIDE },
+  { id: 'dsa-linkedlist', title: 'Linked Lists on LeetCode (cycles, midpoint, hard problems)', group: 'Linked Lists', notes: DSA_LINKEDLIST_GUIDE },
 ];
 
 export async function seedDSAContent() {
