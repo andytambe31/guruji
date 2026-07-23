@@ -2,7 +2,8 @@
 // migration patch), dated backup, and a wipe.
 import { el, clear, toast, todayISO } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch, snapshotText } from '../importexport.js';
-import { wipeAll, hasPlan, getDeviceRole, setDeviceRole } from '../store.js';
+import { wipeAll, hasPlan, getDeviceRole, setDeviceRole, reseedContentPacks } from '../store.js';
+import { APP_BUILD } from '../build.js';
 import { fsaSupported, isLinked, linkedName, linkFile, unlink, writeLinked, readLinked, getLastSync, setLastSync, getAutoSync, setAutoSync, shareSnapshot } from '../fsync.js';
 import { isGistConfigured, connectGist, disconnectGist, syncGist, getLastCloudSync } from '../gistsync.js';
 import { SCHEMA_VERSION } from '../migrations.js';
@@ -412,25 +413,63 @@ export async function renderData(mount, { navigate }) {
 }
 
 async function renderDiagnostics(mount) {
-  let build = 'unknown';
+  // The cached build (what the service worker precached) vs the RUNNING build
+  // (what this JS bundle actually is). On an installed PWA these can diverge —
+  // the cache updates but the old code keeps executing — which is exactly how
+  // "diagnostics says v145 but the new content isn't here" happens.
+  let cached = 'unknown';
   try {
     const keys = (await caches.keys()) || [];
-    const v = keys.find((k) => /^guruji-v\d+/.test(k));
-    if (v) build = v;
+    // Pick the HIGHEST guruji version present — the newest installed worker —
+    // so stray older caches don't mask a pending update.
+    const guru = keys.filter((k) => /^guruji-v\d+/.test(k))
+      .map((k) => ({ k, n: parseInt((k.match(/v(\d+)/) || [])[1] || '0', 10) }))
+      .sort((a, b) => b.n - a.n);
+    if (guru.length) cached = guru[0].k;
   } catch { /* caches unavailable */ }
+  const running = APP_BUILD;
+  const stale = cached !== 'unknown' && cached !== running;
   const tz = (() => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '—'; } catch { return '—'; } })();
   const now = new Date();
-  const line = (k, v) => el('div', { class: 'diag-row' }, [
+  const line = (k, v, cls) => el('div', { class: 'diag-row' }, [
     el('span', { class: 'diag-k', text: k }),
-    el('span', { class: 'diag-v', text: v }),
+    el('span', { class: 'diag-v' + (cls ? ' ' + cls : ''), text: v }),
   ]);
+
+  // Force a genuine update: drop caches + unregister the worker, then reload from
+  // network. The reliable escape hatch when a PWA is stuck on an old bundle.
+  const forceUpdate = async () => {
+    try {
+      if ('caches' in window) { for (const k of await caches.keys()) await caches.delete(k); }
+      if ('serviceWorker' in navigator) { for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister(); }
+    } catch { /* best effort */ }
+    location.reload();
+  };
+  // Recovery: re-run the bundled content-pack seeders now (adds anything missing,
+  // e.g. a study guide that didn't appear).
+  const rebuildGuides = async () => {
+    try {
+      const r = await reseedContentPacks();
+      toast(r.added || r.refreshed ? `Study guides rebuilt · ${r.added} added, ${r.refreshed} refreshed` : 'Study guides already up to date');
+    } catch { toast('Rebuild failed', true); }
+  };
+
   clear(mount).append(
     el('p', { class: 'eyebrow', text: 'Diagnostics' }),
-    line('App build', build),
+    line('Running build', running, stale ? 'diag-warn' : null),
+    line('Cached build', cached, stale ? 'diag-warn' : null),
     line('App’s “today”', todayISO(now)),
     line('Device time', now.toLocaleString()),
     line('Timezone', tz),
-    el('p', { class: 'muted', style: 'margin-top:8px;font-size:12px', text: 'If “App build” isn’t the latest, close the app fully and reopen while online to update. If “App’s today” doesn’t match your phone’s date, tell me — but it should now use your device’s local day.' }),
+    stale
+      ? el('div', { style: 'margin-top:10px' }, [
+        el('p', { class: 'muted', style: 'font-size:12px;color:var(--wind,#d98324)', text: 'A newer build is cached but this older code is still running — that’s why new content may be missing. Tap Update to force it.' }),
+        el('button', { class: 'btn btn-primary', style: 'margin-top:8px', text: 'Update to the latest build', onclick: forceUpdate }),
+      ])
+      : el('p', { class: 'muted', style: 'margin-top:8px;font-size:12px', text: 'Running and cached builds match. If a study guide still isn’t showing, tap Rebuild study guides below.' }),
+    el('div', { style: 'margin-top:10px' }, [
+      el('button', { class: 'btn btn-ghost', text: 'Rebuild study guides', onclick: rebuildGuides }),
+    ]),
   );
 }
 

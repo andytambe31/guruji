@@ -175,6 +175,19 @@ export async function runStartupMigrations() {
   }
 }
 
+// Force-run the bundled content-pack seeders on demand (a recovery path when a
+// user is on new code but a guide isn't showing). Idempotent: adds what's
+// missing, refreshes drifted guide text, and reports the totals.
+export async function reseedContentPacks() {
+  const results = await Promise.all([
+    seedSystemDesignContent(), seedCSFundamentalsContent(), seedDSAContent(),
+  ]);
+  return results.reduce((acc, r) => ({
+    added: acc.added + (r.added || 0),
+    refreshed: acc.refreshed + (r.refreshed || 0),
+  }), { added: 0, refreshed: 0 });
+}
+
 // ---------- Cognitive-load context (office / commute / …) ----------
 export async function getContext() {
   const rec = await get(STORES.kv, 'context');
