@@ -6,6 +6,7 @@ import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './sched
 import { SCHEMA_VERSION } from './migrations.js';
 import { seedSystemDesignContent } from './sdi-content.js';
 import { seedCSFundamentalsContent } from './csf-content.js';
+import { seedDSAContent } from './dsa-content.js';
 import { isReadySolve } from './outcomes.js';
 
 // Wall-clock stamp for sync merges (browser clock). Isolated so a test can
@@ -167,6 +168,7 @@ export async function runStartupMigrations() {
     // fresh-start purge above — they run on every boot but no-op once present).
     await seedSystemDesignContent();
     await seedCSFundamentalsContent();
+    await seedDSAContent();
     // Establish this install's sync role (phone/desktop) on first boot so it's
     // known before any snapshot is exported or merged.
     await getDeviceRole();
