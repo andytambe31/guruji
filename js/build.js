@@ -3,4 +3,4 @@
 // (older) code is still executing — the classic installed-PWA staleness trap,
 // where "App build" looked current yet new content (e.g. seeded study guides)
 // never ran. Keep this in lockstep with CACHE_VERSION in sw.js on every deploy.
-export const APP_BUILD = 'guruji-v146';
+export const APP_BUILD = 'guruji-v147';
