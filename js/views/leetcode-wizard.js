@@ -3,17 +3,10 @@
 // outcome. Only the note is free text, and it's optional. Used after a DSA focus
 // session and retroactively from a Day block.
 import { el, clear, toast } from '../util.js';
+import { LC_OUTCOMES, LC_OUTCOME_LABEL } from '../outcomes.js';
 
+export { LC_OUTCOMES, LC_OUTCOME_LABEL } from '../outcomes.js';
 export const LC_DIFFICULTIES = ['Easy', 'Medium', 'Hard'];
-// The outcome doubles as a confidence verdict: only "confident" counts as truly
-// completed. Anything else is effort that's logged as *attempted* — you spent
-// the time, it just isn't cold yet.
-export const LC_OUTCOMES = [
-  { key: 'solved', label: 'Solved · confident' },
-  { key: 'hint', label: 'Solved · shaky' },
-  { key: 'stuck', label: 'Attempted' },
-];
-export const LC_OUTCOME_LABEL = Object.fromEntries(LC_OUTCOMES.map((o) => [o.key, o.label]));
 // The ~15 patterns from the DSA pattern catalog, so the by-pattern view is clean.
 export const LC_PATTERNS = [
   'Two pointers', 'Sliding window', 'Prefix sum', 'Hashing',
@@ -86,7 +79,7 @@ export function openLeetcodeWizard({ initial = [], onSave } = {}) {
     if (!p.title) { toast('Paste a URL or type the problem', true); return false; }
     // Confidence gate: confirm how it went before it's logged. "Confident" is the
     // only thing that counts as done — everything else is logged as attempted.
-    if (!outcome) { toast('How did it go? Confident, shaky, or attempted', true); return false; }
+    if (!outcome) { toast('How did it go? Attempted → cold re-solve', true); return false; }
     entries.push({ slug: p.slug, title: p.title, url: p.url, difficulty: diff, pattern: pattern || null, outcome, note: noteInput.value.trim() || null });
     renderList(); resetForm(); syncSave(); urlInput.focus();
     return true;
@@ -108,7 +101,7 @@ export function openLeetcodeWizard({ initial = [], onSave } = {}) {
       el('div', { class: 'lc-field' }, [urlInput, preview]),
       el('div', { class: 'lc-flabel', text: 'Difficulty' }), diffRow.row,
       el('div', { class: 'lc-flabel', text: 'Pattern' }), patternSel,
-      el('div', { class: 'lc-flabel', text: 'How confident? (required)' }), outRow.row,
+      el('div', { class: 'lc-flabel', text: 'How did it go? (required — only independent+ counts as done)' }), outRow.row,
       noteInput,
       el('button', { class: 'btn btn-ghost btn-block lc-add', type: 'button', text: '＋ Add problem', onclick: addProblem }),
     ]),

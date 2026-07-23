@@ -6,6 +6,7 @@ import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
 import { computeRoadmap, getDrillState, getNuggetState, getItems, getStudiedConcepts, getLog } from '../store.js';
 import { PROBLEM_BANK, conceptsForTitles, ALL_CONCEPT_KEYS } from '../problems.js';
 import { CONCEPTS } from './drills.js';
+import { isReadySolve } from '../outcomes.js';
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 
@@ -92,7 +93,7 @@ export async function renderRoadmap(mount, { navigate }) {
     const lcStatus = new Map();
     for (const e of weekLog) for (const pr of (e.leetcode || [])) {
       const key = norm(pr.slug || pr.title); if (!key) continue;
-      const st = pr.outcome === 'solved' ? 'completed' : 'attempted';
+      const st = isReadySolve(pr.outcome) ? 'completed' : 'attempted';
       if (st === 'completed' || !lcStatus.has(key)) lcStatus.set(key, st);
     }
     // The week at a glance: how many distinct problems solved / attempted.

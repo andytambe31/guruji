@@ -8,8 +8,8 @@ import {
   computeRoadmap, getItems, getLog, getStudiedConcepts, getDrillState,
   getNuggetState, getReading, getPlans, getPhases,
 } from './store.js';
+import { isReadySolve, normalizeOutcome } from './outcomes.js';
 
-const OUTCOME = { solved: 'solved-confident', hint: 'solved-shaky', stuck: 'attempted' };
 const pct = (n) => (n == null ? '—' : `${n}%`);
 const repsIn = (st, since) => Object.values(st || {}).filter((s) => s && s.at && String(s.at) >= since).length;
 
@@ -23,13 +23,13 @@ export async function buildLLMReport() {
   const weekLog = (log || []).filter((e) => String(e.date || '') >= weekAgo);
 
   // ---- This week's real effort, straight from the log ----
-  let focusMin = 0; const byPattern = {}; let solved = 0, shaky = 0, attempted = 0;
+  let focusMin = 0; const byPattern = {}; let ready = 0, nonReady = 0, attempted = 0;
   const conceptRatings = [];
   for (const e of weekLog) {
     focusMin += e.focusMinutes || 0;
     for (const p of (e.leetcode || [])) {
-      const o = OUTCOME[p.outcome] || 'attempted';
-      if (o === 'solved-confident') solved++; else if (o === 'solved-shaky') shaky++; else attempted++;
+      const o = normalizeOutcome(p.outcome);
+      if (isReadySolve(o)) ready++; else if (o === 'attempted' || !o) attempted++; else nonReady++;
       const k = p.pattern || 'unlabelled';
       byPattern[k] = (byPattern[k] || 0) + 1;
     }
@@ -65,7 +65,7 @@ export async function buildLLMReport() {
   L.push(`Self-assessed on-track: ${r.onTrack ? 'yes' : 'NO — behind pace'}.`);
   L.push('');
   L.push('== PACING (remaining work vs the deadline) ==');
-  if (p.lc) L.push(`LeetCode: ${p.lc.done}/${p.lc.goal} solved (${pct(p.lc.pct)}); ${p.lc.remaining} left; need ~${p.lc.perWeek || 0}/wk; did ${p.lc.actualPerWeek || 0} this week.`);
+  if (p.lc) L.push(`LeetCode: ${p.lc.done}/${p.lc.goal} attempted (volume); ${p.lc.ready ?? '?'} solved independently+ (readiness); ${p.lc.remaining} to goal; need ~${p.lc.perWeek || 0}/wk; did ${p.lc.actualPerWeek || 0} this week.`);
   if (p.topics) L.push(`Topics: ${p.topics.done}/${p.topics.total} done (${pct(p.topics.pct)}); ${p.topics.remaining} left; need ~${p.topics.perWeek || 0}/wk.`);
   if (p.concepts) L.push(`Concepts: ${p.concepts.solid} solid · ${p.concepts.shaky} shaky · ${p.concepts.noyet} not-yet-rated (of ${p.concepts.total}).`);
   if (p.hours) L.push(`Study time: ~${p.hours.actual}h logged this week vs ~${p.hours.needed ?? '—'}h/wk needed.`);
@@ -77,7 +77,7 @@ export async function buildLLMReport() {
   L.push('');
   L.push('== THIS WEEK’S ACTUAL EFFORT (last 7 days, from the log) ==');
   L.push(`Logged sessions: ${sessions}; focus time: ${Math.round(focusMin)} min.`);
-  L.push(`LeetCode: ${solved} solved-confident, ${shaky} solved-shaky, ${attempted} attempted.`);
+  L.push(`LeetCode: ${ready} solved independently+ (counts toward readiness), ${nonReady} solved with hints/solution, ${attempted} attempted.`);
   const patLines = Object.entries(byPattern).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ×${n}`);
   L.push(`By pattern: ${patLines.length ? patLines.join(', ') : '—'}`);
   L.push(`Concepts rated: ${conceptRatings.length ? conceptRatings.join(', ') : '—'}`);

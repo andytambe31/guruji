@@ -6,6 +6,7 @@ import { planDay, reflow, sequence, clampDur, DAY_START, DAY_END } from './sched
 import { SCHEMA_VERSION } from './migrations.js';
 import { seedSystemDesignContent } from './sdi-content.js';
 import { seedCSFundamentalsContent } from './csf-content.js';
+import { isReadySolve } from './outcomes.js';
 
 // Wall-clock stamp for sync merges (browser clock). Isolated so a test can
 // control it via page.clock and so the intent reads clearly at each call site.
@@ -1399,7 +1400,8 @@ export async function computeStats(now = new Date()) {
     topicsDone: items.filter((i) => i.status === 'done').length,
     topicsTotal: items.length,
     lcTotal: lc.length,          // every logged attempt (activity — revisits count)
-    lcUnique: lcUniqueMap.size,  // distinct problems solved (revisits don't double-count)
+    lcUnique: lcUniqueMap.size,  // distinct problems touched (revisits don't double-count) — volume
+    lcReady: lcUniqueList.filter((p) => isReadySolve(p.outcome)).length, // distinct problems solved independently+ — readiness
     lcGoal: 500,                 // the aggressive FAANG-ready bar; only new problems move it
     lcToday, lcWeek,
     lcByDifficulty: LC_DIFF_ORDER.map((d) => ({ difficulty: d, count: lcDiff.get(d) || 0 })).filter((x) => x.count),
@@ -1560,7 +1562,7 @@ export async function computeRoadmap() {
     onTrack: onTrackLC && onTrackTopics,
     feasibility, execution, weekSessions,
     pacing: {
-      lc: { done: stats.lcUnique, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek, pct: lcPct, onTrack: onTrackLC },
+      lc: { done: stats.lcUnique, ready: stats.lcReady, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek, pct: lcPct, onTrack: onTrackLC },
       topics: { done: topicsDone, total: topicsTotal, remaining: topicsRemaining, perWeek: topicsPerWeek, pct: topicPct, onTrack: onTrackTopics },
       concepts: { solid: stats.conceptConfidence.solid, shaky: stats.conceptConfidence.shaky, noyet: stats.conceptConfidence.noyet, total: stats.conceptsTotal },
       hours: { needed: hoursNeeded, actual: hoursActual },

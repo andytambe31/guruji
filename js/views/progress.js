@@ -3,6 +3,7 @@
 // planned), and item statuses. No new tracking, just a mirror of your effort.
 import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
 import { computeStats } from '../store.js';
+import { isReadySolve, normalizeOutcome } from '../outcomes.js';
 
 export async function renderProgress(mount, { navigate }) {
   const s = await computeStats();
@@ -60,7 +61,9 @@ export async function renderProgress(mount, { navigate }) {
       if (iso === addDaysISO(t, -1)) return 'Yesterday';
       return new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     };
-    const OUT = { solved: 'solved', hint: 'hint', stuck: 'stuck' };
+    // Dot colour by outcome tier: ready (green), a non-independent solve (amber),
+    // attempted (red). Works across the new ladder and legacy keys.
+    const dotClass = (o) => { const k = normalizeOutcome(o); if (!k) return ''; if (isReadySolve(k)) return 'o-solved'; return k === 'attempted' ? 'o-stuck' : 'o-hint'; };
     const lc = el('div', { class: 'prog-section' });
     lc.append(el('div', { class: 'prog-top' }, [
       el('p', { class: 'eyebrow', text: 'LeetCode' }),
@@ -129,7 +132,7 @@ export async function renderProgress(mount, { navigate }) {
       el('div', { class: 'prog-subh', text: 'Recent' }),
       el('div', { class: 'lc-plist' }, s.lcRecent.map((p) => el('div', { class: 'lc-prow' }, [
         el('div', { class: 'lc-pmain' }, [
-          el('span', { class: `lc-dot ${p.outcome ? 'o-' + OUT[p.outcome] : ''}` }),
+          el('span', { class: `lc-dot ${dotClass(p.outcome)}` }),
           el('span', { class: 'lc-pname', text: p.title || p.slug || '(problem)' }),
         ]),
         el('span', { class: 'lc-pmeta', text: [p.difficulty, p.pattern, rel(p.date)].filter(Boolean).join(' · ') }),
