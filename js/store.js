@@ -1426,8 +1426,8 @@ const LC_DIFF_ORDER = ['Easy', 'Medium', 'Hard'];
 // (LeetCode solves, concepts, topics, effort) into one "are we on track, and what
 // does each week/month/quarter demand?" model. Pure derivation — no new tracking.
 export async function computeRoadmap() {
-  const [meta, settings, plans, phases, items, stats] = await Promise.all([
-    getMeta(), getSettings(), getPlans(), getPhases(), getItems(), computeStats(),
+  const [meta, settings, plans, phases, items, stats, log] = await Promise.all([
+    getMeta(), getSettings(), getPlans(), getPhases(), getItems(), computeStats(), getLog(),
   ]);
   const today = todayISO();
   const goalDate = settings.goalDate || (meta && meta.goalDate) || null;
@@ -1522,12 +1522,43 @@ export async function computeRoadmap() {
     endDate: addDaysISO(today, Math.round(weeks * 7)),
   });
 
+  // ---- Computed status: two separate reads, not one manual "on track" ----
+  // (1) Deadline feasibility — a forecast: can the remaining work still fit
+  // before the goal at a sane weekly pace? Driven by the per-week hours the
+  // remaining work demands. (2) Current execution — how THIS week is actually
+  // going vs the weekly expectation, so a zero-effort week can't read "on track".
+  const weekAgoISO = addDaysISO(today, -6);
+  const weekSessions = (log || []).filter((e) => String(e.date || '') >= weekAgoISO).length;
+  const expectHours = hoursNeeded; // per-week hours to clear remaining work by the deadline
+
+  let feasibility;
+  if (!goalDate || hoursNeeded == null) feasibility = { status: 'unknown', label: '—', reason: 'Set a goal date to forecast feasibility.' };
+  else if (hoursNeeded <= 12) feasibility = { status: 'ok', label: 'Achievable', reason: `~${hoursNeeded}h/wk clears the remaining work by ${goalDate}.` };
+  else if (hoursNeeded <= 20) feasibility = { status: 'tight', label: 'Tight but achievable', reason: `Needs ~${hoursNeeded}h/wk — a heavy but doable load.` };
+  else if (hoursNeeded <= 35) feasibility = { status: 'risk', label: 'At risk', reason: `Needs ~${hoursNeeded}h/wk — more than most sustain; trim scope or move the date.` };
+  else feasibility = { status: 'off', label: 'Unrealistic', reason: `Needs ~${hoursNeeded}h/wk — the scope or the deadline has to move.` };
+
+  let execution;
+  if (weekSessions === 0) {
+    execution = { status: 'off', label: 'Off track', ratio: 0, reason: `No sessions logged this week — 0 of ~${expectHours ?? '?'} planned hours.` };
+  } else {
+    const ratio = expectHours && expectHours > 0 ? hoursActual / expectHours : (hoursActual > 0 ? 1 : 0);
+    const st = ratio >= 0.85 ? 'on' : ratio >= 0.6 ? 'risk' : 'off';
+    execution = {
+      status: st,
+      label: st === 'on' ? 'On track' : st === 'risk' ? 'At risk' : 'Off track',
+      ratio: Math.round(ratio * 100),
+      reason: `${hoursActual} of ~${expectHours ?? '?'} planned hours completed this week`,
+    };
+  }
+
   return {
     goalDate, goalLabel, target, startDate,
     daysLeft, daysTotal, daysElapsed, pctTime,
     weeksLeft: weeksLeft != null ? Math.round(weeksLeft) : null, currentWeek,
     phases: roadPhases, currentPhase,
     onTrack: onTrackLC && onTrackTopics,
+    feasibility, execution, weekSessions,
     pacing: {
       lc: { done: stats.lcUnique, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek, pct: lcPct, onTrack: onTrackLC },
       topics: { done: topicsDone, total: topicsTotal, remaining: topicsRemaining, perWeek: topicsPerWeek, pct: topicPct, onTrack: onTrackTopics },

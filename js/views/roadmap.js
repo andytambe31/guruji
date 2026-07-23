@@ -61,6 +61,24 @@ export async function renderRoadmap(mount, { navigate }) {
     else renderFull();
   }
 
+  // Two separate reads: can the deadline still be hit (a forecast), and how is
+  // THIS week actually going (from the log). Replaces the single manual verdict,
+  // so a zero-effort week can never show "on pace".
+  function statusBlock() {
+    const f = r.feasibility || {}; const e = r.execution || {};
+    return el('div', { class: 'road-status' }, [
+      el('div', { class: 'rs-row' }, [
+        el('span', { class: 'rs-k', text: 'Deadline' }),
+        el('span', { class: `rs-v rs-${f.status || 'unknown'}`, text: f.label || '—' }),
+      ]),
+      el('div', { class: 'rs-row' }, [
+        el('span', { class: 'rs-k', text: 'This week' }),
+        el('span', { class: `rs-v rs-${e.status || 'unknown'}`, text: e.label || '—' }),
+      ]),
+      e.reason ? el('div', { class: 'rs-reason', text: e.reason }) : null,
+    ]);
+  }
+
   // =================== THIS WEEK — a mirror of the week's effort ===================
   // Nothing here is editable: everything reflects what you actually logged this
   // week. Each item is Completed (logged + confident), Attempted (logged, not
@@ -101,8 +119,8 @@ export async function renderRoadmap(mount, { navigate }) {
         el('span', { class: 'tw-week-n', text: `Week ${r.currentWeek}` }),
         el('span', { class: 'tw-week-win', text: ph ? ph.name : `${r.daysLeft} days to ${r.goalLabel}` }),
       ]),
-      el('div', { class: 'tw-note', text: 'Reflects what you logged this week — keep putting the time in.' }),
     ]));
+    wrap.append(statusBlock());
 
     // ---------- Progress at the top — problems solved / attempted this week ----------
     const pctDone = weekTarget > 0 ? Math.min(100, Math.round((weekDone / weekTarget) * 100)) : (weekDone > 0 ? 100 : 0);
@@ -208,10 +226,7 @@ export async function renderRoadmap(mount, { navigate }) {
       el('span', { text: `${r.pctTime || 0}% of the runway used` }),
       el('span', { text: `by ${fmtDate(r.goalDate)}` }),
     ]),
-    el('div', { class: 'road-verdict ' + (r.onTrack ? 'ok' : 'behind') }, [
-      el('span', { class: 'road-verdict-dot' }),
-      el('span', { text: r.onTrack ? 'On track — keep the pace.' : 'Behind pace — tighten up this week.' }),
-    ]),
+    statusBlock(),
   ]);
   wrap.append(head);
 

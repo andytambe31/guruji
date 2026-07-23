@@ -1187,6 +1187,16 @@ hr.sep { border: none; border-top: 1px solid var(--line); margin: 24px 0; }
 .road-verdict.ok { color: var(--ok, #0f9d6b); background: rgba(15,157,107,.10); }
 .road-verdict.behind { color: var(--wind, #d98324); background: rgba(217,131,36,.12); }
 .road-verdict-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+/* Computed two-part status: deadline feasibility + this-week execution */
+.road-status { margin: 16px 0 20px; display: flex; flex-direction: column; gap: 8px; }
+.rs-row { display: flex; align-items: center; gap: 10px; }
+.rs-k { font-size: 12px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); min-width: 74px; }
+.rs-v { font-size: 14px; font-weight: 700; padding: 4px 12px; border-radius: 999px; }
+.rs-ok, .rs-on { color: var(--ok, #0f9d6b); background: rgba(15,157,107,.12); }
+.rs-tight, .rs-risk { color: #c98a2e; background: rgba(201,138,46,.14); }
+.rs-off { color: #c2483d; background: rgba(194,72,61,.12); }
+.rs-unknown { color: var(--text-faint); background: var(--bg-soft); }
+.rs-reason { font-size: 13px; color: var(--text-dim); line-height: 1.4; }
 
 .road-section { margin-bottom: 30px; }
 .road-h { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--text-faint); margin-bottom: 14px; }
