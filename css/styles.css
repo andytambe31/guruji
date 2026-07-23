@@ -879,6 +879,7 @@ textarea {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; resize: vertical;
 }
 input[type="file"] { color: var(--text-dim); font-size: 14px; }
+.llm-out { margin-top: 12px; min-height: 180px; font-size: 12px; line-height: 1.5; white-space: pre; }
 
 .toast {
   position: fixed; left: 50%; bottom: calc(84px + var(--safe-bottom));

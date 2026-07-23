@@ -6,6 +6,7 @@ import { wipeAll, hasPlan, getDeviceRole, setDeviceRole } from '../store.js';
 import { fsaSupported, isLinked, linkedName, linkFile, unlink, writeLinked, readLinked, getLastSync, setLastSync, getAutoSync, setAutoSync, shareSnapshot } from '../fsync.js';
 import { isGistConfigured, connectGist, disconnectGist, syncGist, getLastCloudSync } from '../gistsync.js';
 import { SCHEMA_VERSION } from '../migrations.js';
+import { buildLLMReport } from '../llm-report.js';
 
 // "3 hours ago" style relative time for the last-synced nudge.
 function agoText(iso) {
@@ -284,6 +285,31 @@ export async function renderData(mount, { navigate }) {
     },
   });
 
+  // --- LLM analysis prompt ---
+  // Summarises the whole plan + progress into a prompt you paste into an LLM,
+  // which then analyses your prep and can hand back an importable content patch.
+  const llmOut = el('textarea', { class: 'llm-out', readonly: true, spellcheck: false, placeholder: 'Your generated prompt appears here — copy it into ChatGPT or Claude.', style: 'display:none' });
+  const llmCopyBtn = el('button', { class: 'btn btn-ghost', text: 'Copy prompt', style: 'display:none', onclick: async () => {
+    try { await navigator.clipboard.writeText(llmOut.value); toast('Prompt copied — paste it into your LLM'); }
+    catch { llmOut.select(); toast('Select-all + copy the text above', true); }
+  } });
+  const llmBtn = el('button', {
+    class: 'btn btn-primary',
+    text: 'Generate analysis prompt',
+    disabled: !planLoaded,
+    onclick: async () => {
+      try {
+        const text = await buildLLMReport();
+        llmOut.value = text;
+        llmOut.style.display = ''; llmCopyBtn.style.display = '';
+        try { await navigator.clipboard.writeText(text); toast('Prompt generated & copied'); }
+        catch { toast('Prompt generated — copy it below'); }
+      } catch (err) {
+        toast('Could not build the prompt', true);
+      }
+    },
+  });
+
   const wipeBtn = el('button', {
     class: 'btn btn-danger',
     text: 'Erase all local data',
@@ -353,6 +379,15 @@ export async function renderData(mount, { navigate }) {
     el('h2', { text: 'Backup' }),
     el('p', { class: 'muted', text: planLoaded ? 'A dated, never-overwritten copy — for keeping history.' : 'Nothing to back up yet.' }),
     backupBtn,
+
+    el('hr', { class: 'sep' }),
+
+    el('h2', { text: 'Coach with an LLM' }),
+    el('p', { class: 'muted', text: planLoaded
+      ? 'Generate a prompt that summarizes your goal, pacing and progress. Paste it into ChatGPT or Claude for an outside read on where you stand — it can hand back an importable “content patch” you load right here to adjust the plan.'
+      : 'Load a plan first, then you can generate an analysis prompt.' }),
+    el('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, [llmBtn, llmCopyBtn]),
+    llmOut,
 
     // Content sync — desktop only, since content is authored on the desktop.
     el('div', { class: 'desktop-only' }, [
