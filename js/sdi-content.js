@@ -12,6 +12,7 @@
 import { STORES, getAll, put, bulkPut } from './db.js';
 import { CH02_SCALE_GUIDE } from './sdi-ch02.js';
 import { SDI_CDC_PATTERN_GUIDE } from './sdi-cdc-pattern.js';
+import { SDI_SCALE1M_GUIDE } from './sdi-scale1m.js';
 
 const TRACK_ID = 'sdi';
 const PHASE_ID = 'sdi-book';
@@ -59,6 +60,7 @@ const GUIDES = { 2: CH02_SCALE_GUIDE };
 // existing install, not just a fresh one.
 const PATTERN_GUIDES = [
   { id: 'sdi-cdc-pattern', title: 'Pattern: NoSQL → Warehouse CDC Pipeline', group: 'Patterns', notes: SDI_CDC_PATTERN_GUIDE },
+  { id: 'sdi-scale1m', title: 'Scaling to 1 Million Users — a capacity walkthrough', group: 'Patterns', notes: SDI_SCALE1M_GUIDE },
 ];
 
 const pad = (n) => String(n).padStart(2, '0');
