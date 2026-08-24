@@ -2,7 +2,7 @@
 // migration patch), dated backup, and a wipe.
 import { el, clear, toast, todayISO } from '../util.js';
 import { importFromText, readFile, exportCanonical, exportToFile, exportContentPatch, snapshotText } from '../importexport.js';
-import { wipeAll, hasPlan, getDeviceRole, setDeviceRole, reseedContentPacks } from '../store.js';
+import { wipeAll, hasPlan, getDeviceRole, setDeviceRole, reseedContentPacks, getWeeklyCommitments, setWeeklyCommitments } from '../store.js';
 import { APP_BUILD } from '../build.js';
 import { fsaSupported, isLinked, linkedName, linkFile, unlink, writeLinked, readLinked, getLastSync, setLastSync, getAutoSync, setAutoSync, shareSnapshot } from '../fsync.js';
 import { isGistConfigured, connectGist, disconnectGist, syncGist, getLastCloudSync } from '../gistsync.js';
@@ -24,6 +24,7 @@ function agoText(iso) {
 
 export async function renderData(mount, { navigate }) {
   const planLoaded = await hasPlan();
+  const commitments = await getWeeklyCommitments();
   const role = await getDeviceRole();
   const supported = fsaSupported();
   const linked = await isLinked();
@@ -311,6 +312,28 @@ export async function renderData(mount, { navigate }) {
     },
   });
 
+  // --- Weekly commitments editor (the sustainable floor, not deadline demand) ---
+  const CM_FIELDS = [
+    ['focusHours', 'Focus hours / week'],
+    ['freshProblems', 'Fresh LeetCode / week'],
+    ['readySolves', 'Independent+ solves / week'],
+    ['coldResolves', 'Cold re-solves / week'],
+    ['systemDesignSessions', 'System Design sessions / week'],
+    ['fundamentalsSessions', 'CS Fundamentals sessions / week'],
+  ];
+  const cmInputs = {};
+  const cmRows = CM_FIELDS.map(([k, label]) => {
+    const input = el('input', { type: 'number', min: '0', value: String(commitments[k] ?? 0), class: 'cm-edit-in' });
+    cmInputs[k] = input;
+    return el('label', { class: 'cm-edit-row' }, [el('span', { text: label }), input]);
+  });
+  const cmSave = el('button', { class: 'btn btn-primary', text: 'Save commitments', onclick: async () => {
+    const patch = {};
+    for (const [k] of CM_FIELDS) patch[k] = Math.max(0, parseInt(cmInputs[k].value, 10) || 0);
+    await setWeeklyCommitments(patch);
+    toast('Weekly commitments saved');
+  } });
+
   const wipeBtn = el('button', {
     class: 'btn btn-danger',
     text: 'Erase all local data',
@@ -389,6 +412,12 @@ export async function renderData(mount, { navigate }) {
       : 'Load a plan first, then you can generate an analysis prompt.' }),
     el('div', { class: 'row', style: 'gap:10px;flex-wrap:wrap' }, [llmBtn, llmCopyBtn]),
     llmOut,
+
+    el('hr', { class: 'sep' }),
+
+    el('h2', { text: 'Weekly commitments' }),
+    el('p', { class: 'muted', text: 'What you’re committing to sustain each week — the floor the Path view measures you against, kept separate from the mathematical “deadline demand”. Defaults suit a steady rebuild.' }),
+    el('div', { class: 'cm-edit' }, [...cmRows, cmSave]),
 
     // Content sync — desktop only, since content is authored on the desktop.
     el('div', { class: 'desktop-only' }, [

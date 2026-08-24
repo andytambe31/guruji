@@ -2,7 +2,9 @@
 // localStorage (iOS evicts localStorage for home-screen PWAs after ~7 days).
 
 const DB_NAME = 'guruji';
-const DB_VERSION = 1;
+// v2 adds the `pipeline` store (recruiting). The upgrade is additive and guarded
+// by contains() checks, so existing data is untouched.
+const DB_VERSION = 2;
 
 // Object stores. keyPath-based so records carry their own id.
 export const STORES = {
@@ -11,6 +13,7 @@ export const STORES = {
   items: 'items',       // { id, title, phase, week, mode, estMinutes, dependsOn, status, order }
   schedule: 'schedule', // { id, day, start, end, mode }
   log: 'log',           // { id, itemId, ... session record }
+  pipeline: 'pipeline', // { id, company, role, status, ... recruiting entry }
 };
 
 let _dbPromise = null;
@@ -39,6 +42,10 @@ export function openDB() {
       if (!db.objectStoreNames.contains(STORES.log)) {
         const s = db.createObjectStore(STORES.log, { keyPath: 'id' });
         s.createIndex('date', 'date', { unique: false });
+      }
+      if (!db.objectStoreNames.contains(STORES.pipeline)) {
+        const s = db.createObjectStore(STORES.pipeline, { keyPath: 'id' });
+        s.createIndex('status', 'status', { unique: false });
       }
     };
     req.onsuccess = () => resolve(req.result);

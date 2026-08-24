@@ -3,6 +3,7 @@
 // The topic + how is revealed later, in prep.
 import { el, clear, fill, habitStats, todayISO, addDaysISO, daysBetween, nowMinutes, toMinutes, fmtTimeOfDay, fmtDur, estimateCognitiveLoad, loadStatus, withinCapacity, CONTEXTS } from '../util.js';
 import { hasPlan, getItems, getLog, depsSatisfied, getContext, setContext, getSettings, getReading } from '../store.js';
+import { reviewsDue } from '../lc-metrics.js';
 
 // At or above this cognitive load, real study (deep or concept work) stops
 // being the confident default: the coach eases off, reframes the screen, and
@@ -83,6 +84,19 @@ export async function renderNow(mount, { navigate }) {
   const wrap = el('div', { class: 'now-wrap' });
   mount.append(wrap);
   render();
+
+  // Cold reviews due — surface a nudge to re-solve from a blank editor. These are
+  // known slugs, so re-solving never inflates unique volume.
+  try {
+    const due = reviewsDue(log, today);
+    if (due.length) {
+      const names = due.slice(0, 3).map((d) => d.title).join(', ');
+      wrap.prepend(el('button', { class: 'now-review-nudge', onclick: () => navigate('/roadmap') }, [
+        el('span', { class: 'nrn-n', text: String(due.length) }),
+        el('span', { class: 'nrn-t', text: `cold review${due.length === 1 ? '' : 's'} due — re-solve from memory: ${names}${due.length > 3 ? '…' : ''}` }),
+      ]));
+    }
+  } catch { /* reviews are best-effort */ }
 
   function isHabit(area) { const i = nextForArea(area); return !!(i && i.recurring); }
   function modeWord(mode) { return mode === 'DESK' ? 'deep work' : mode === 'TRANSIT' ? 'concept work' : 'this'; }

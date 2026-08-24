@@ -3,7 +3,7 @@
 // the countdown, and everything captured (LeetCode, concepts, topics, effort)
 // into "here's the plan to land a FAANG offer in N days."
 import { el, clear, fmtDur, todayISO, addDaysISO } from '../util.js';
-import { computeRoadmap, getDrillState, getNuggetState, getItems, getStudiedConcepts, getLog } from '../store.js';
+import { computeRoadmap, getDrillState, getNuggetState, getItems, getStudiedConcepts, getLog, resumeAfterBreak, clearStudyCycle } from '../store.js';
 import { PROBLEM_BANK, conceptsForTitles, ALL_CONCEPT_KEYS } from '../problems.js';
 import { CONCEPTS } from './drills.js';
 import { isReadySolve } from '../outcomes.js';
@@ -62,21 +62,137 @@ export async function renderRoadmap(mount, { navigate }) {
     else renderFull();
   }
 
-  // Two separate reads: can the deadline still be hit (a forecast), and how is
-  // THIS week actually going (from the log). Replaces the single manual verdict,
-  // so a zero-effort week can never show "on pace".
+  // Map feasibility/execution statuses onto the shared colour classes.
+  // (function declarations so they hoist above the build() call at mount.)
+  function rsClass(s) {
+    return ({
+      comfortable: 'ok', achievable: 'ok', ok: 'ok', on: 'on',
+      tight: 'tight', aggressive: 'tight', 'at-risk': 'risk', risk: 'risk',
+      rebuilding: 'rebuilding', unrealistic: 'off', off: 'off', unknown: 'unknown',
+    })[s] || 'unknown';
+  }
+  function fmtDay(iso) {
+    return iso ? new Date(iso + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '';
+  }
+
+  // ---- GOAL: the offer deadline + runway (always calendar/real). ----
+  function goalBlock() {
+    return el('div', { class: 'road-goal' }, [
+      el('div', { class: 'road-goal-k', text: 'Offer deadline' }),
+      el('div', { class: 'road-goal-v', text: fmtDay(r.goalDate) }),
+      el('div', { class: 'road-goal-sub', text: `${r.daysLeft} days remaining · ${r.pctTime || 0}% of runway used` }),
+    ]);
+  }
+
+  // ---- CURRENT STATE: study vs calendar week, execution, feasibility — kept
+  // as SEPARATE reads so a break reads as "rebuilding", not "impossible". ----
   function statusBlock() {
     const f = r.feasibility || {}; const e = r.execution || {};
-    return el('div', { class: 'road-status' }, [
+    const rows = [
       el('div', { class: 'rs-row' }, [
-        el('span', { class: 'rs-k', text: 'Deadline' }),
-        el('span', { class: `rs-v rs-${f.status || 'unknown'}`, text: f.label || '—' }),
+        el('span', { class: 'rs-k', text: 'Study week' }),
+        el('span', { class: 'rs-v rs-plain', text: `Week ${r.currentStudyWeek}` }),
       ]),
       el('div', { class: 'rs-row' }, [
-        el('span', { class: 'rs-k', text: 'This week' }),
-        el('span', { class: `rs-v rs-${e.status || 'unknown'}`, text: e.label || '—' }),
+        el('span', { class: 'rs-k', text: 'Calendar week' }),
+        el('span', { class: 'rs-v rs-plain', text: `Week ${r.currentCalendarWeek}${r.weeksBehindCalendar ? ` (+${r.weeksBehindCalendar} lost to break)` : ''}` }),
       ]),
-      e.reason ? el('div', { class: 'rs-reason', text: e.reason }) : null,
+      el('div', { class: 'rs-row' }, [
+        el('span', { class: 'rs-k', text: 'Execution' }),
+        el('span', { class: `rs-v rs-${rsClass(e.status)}`, text: e.label || '—' }),
+      ]),
+      el('div', { class: 'rs-row' }, [
+        el('span', { class: 'rs-k', text: 'Feasibility' }),
+        el('span', { class: `rs-v rs-${rsClass(f.status)}`, text: f.label || '—' }),
+      ]),
+    ];
+    if (f.reason) rows.push(el('div', { class: 'rs-reason', text: f.reason }));
+    return el('div', { class: 'road-status' }, rows);
+  }
+
+  // ---- Resume after break: re-anchor the STUDY sequence to today without
+  // touching the deadline. Lets the user pick which curriculum week to resume. ----
+  function resumeControl() {
+    const box = el('div', { class: 'road-resume' });
+    const render = () => {
+      clear(box);
+      if (r.studyCycle && r.studyCycle.anchorDate) {
+        box.append(el('div', { class: 'road-resume-on' }, [
+          el('span', { text: `Resumed from study week ${r.studyCycle.anchorWeek} · anchored ${fmtDay(r.studyCycle.anchorDate)}` }),
+          el('button', { class: 'btn-link', text: 'Re-anchor', onclick: openPicker }),
+          el('button', { class: 'btn-link', text: 'Clear', onclick: async () => { await clearStudyCycle(); location.reload(); } }),
+        ]));
+      } else {
+        box.append(el('button', { class: 'btn btn-ghost road-resume-btn', text: 'Resume after break', onclick: openPicker }));
+      }
+    };
+    function openPicker() {
+      clear(box);
+      const dflt = (r.currentPhase && r.currentPhase.weekStart) || r.currentStudyWeek || 1;
+      const wk = el('input', { type: 'number', min: '1', value: String(dflt), class: 'road-resume-wk' });
+      box.append(el('div', { class: 'road-resume-pick' }, [
+        el('span', { text: 'Resume from curriculum week' }),
+        wk,
+        el('button', { class: 'btn btn-primary', text: 'Resume', onclick: async () => { await resumeAfterBreak(parseInt(wk.value, 10) || dflt); location.reload(); } }),
+        el('button', { class: 'btn-link', text: 'Cancel', onclick: render }),
+      ]));
+    }
+    render();
+    return box;
+  }
+
+  // ---- THIS WEEK'S COMMITMENTS: what you're committing to (not deadline demand). ----
+  function commitmentsBlock() {
+    const cp = r.commitmentProgress || {};
+    const dd = r.deadlineDemand || {};
+    const row = (key, label) => {
+      const p = cp[key] || { actual: 0, target: 0, met: false };
+      return el('div', { class: 'cm-row' + (p.met ? ' met' : '') }, [
+        el('span', { class: 'cm-l', text: label }),
+        el('span', { class: 'cm-v' }, [el('b', { text: `${p.actual}` }), el('span', { text: ` / ${p.target}` })]),
+        el('div', { class: 'cm-bar' }, [el('div', { class: 'cm-fill', style: `width:${p.pct}%` })]),
+      ]);
+    };
+    return el('div', { class: 'road-section' }, [
+      el('div', { class: 'road-h', text: 'This week’s commitments' }),
+      row('focusHours', 'Focus hours'),
+      row('freshProblems', 'Fresh LeetCode'),
+      row('readySolves', 'Independent+ solves'),
+      row('coldResolves', 'Cold re-solves'),
+      row('systemDesignSessions', 'System Design sessions'),
+      el('div', { class: 'cm-demand', text: `Deadline demand (for context, not the prescription): ~${dd.lcPerWeek ?? '?'} unique LC/wk · recent execution ~${r.recentWeeklyHours ?? 0}h/wk` }),
+    ]);
+  }
+
+  // ---- READINESS: the primary, un-gameable signal. ----
+  function readinessBlock() {
+    const rd = r.readiness || {};
+    const chips = (rd.patterns || []).filter((p) => p.status !== 'untouched').slice(0, 8)
+      .map((p) => el('span', { class: `pm-chip pm-${p.status}`, text: `${p.name} · ${p.status}` }));
+    const kids = [
+      el('div', { class: 'road-h', text: 'Readiness' }),
+      el('div', { class: 'rd-tiles' }, [
+        el('div', { class: 'rd-tile' }, [el('div', { class: 'rd-n', text: String(rd.ready || 0) }), el('div', { class: 'rd-l', text: 'ready problems (independent+)' })]),
+        el('div', { class: 'rd-tile' }, [el('div', { class: 'rd-n', text: `${rd.readyPatterns || 0}/${rd.patternsTotal || 0}` }), el('div', { class: 'rd-l', text: 'patterns interview-ready' })]),
+        el('div', { class: 'rd-tile' + ((rd.reviewsDue || 0) > 0 ? ' warn' : '') }, [el('div', { class: 'rd-n', text: String(rd.reviewsDue || 0) }), el('div', { class: 'rd-l', text: 'cold reviews due' })]),
+      ]),
+    ];
+    if (chips.length) kids.push(el('div', { class: 'pm-row' }, chips));
+    else kids.push(el('p', { class: 'muted', style: 'font-size:13px', text: 'Log independent solves to build pattern readiness.' }));
+    return el('div', { class: 'road-section' }, kids);
+  }
+
+  // ---- RECRUITING: independent of curriculum completion. ----
+  function recruitingBlock() {
+    const p = r.pipeline || {};
+    return el('div', { class: 'road-section' }, [
+      el('div', { class: 'road-h tw-h' }, [el('span', { text: 'Recruiting' }), el('button', { class: 'btn-link', text: 'Open pipeline →', onclick: () => navigate('/pipeline') })]),
+      el('div', { class: 'rd-tiles' }, [
+        el('div', { class: 'rd-tile' }, [el('div', { class: 'rd-n', text: String(p.byStatus?.target || 0) }), el('div', { class: 'rd-l', text: 'targets' })]),
+        el('div', { class: 'rd-tile' }, [el('div', { class: 'rd-n', text: String(p.applications || 0) }), el('div', { class: 'rd-l', text: 'applications' })]),
+        el('div', { class: 'rd-tile' }, [el('div', { class: 'rd-n', text: String(p.interviewing || 0) }), el('div', { class: 'rd-l', text: 'interview loops' })]),
+        el('div', { class: 'rd-tile' + ((p.offers || 0) > 0 ? ' ok' : '') }, [el('div', { class: 'rd-n', text: String(p.offers || 0) }), el('div', { class: 'rd-l', text: 'offers' })]),
+      ]),
     ]);
   }
 
@@ -114,31 +230,21 @@ export async function renderRoadmap(mount, { navigate }) {
       return parts.join(' · ');
     };
 
-    // Header — just the week + focus.
+    // Dashboard hierarchy: readiness & commitments over raw volume.
     wrap.append(el('div', { class: 'tw-head' }, [
       el('div', { class: 'tw-week' }, [
-        el('span', { class: 'tw-week-n', text: `Week ${r.currentWeek}` }),
+        el('span', { class: 'tw-week-n', text: `Study week ${r.currentStudyWeek}` }),
         el('span', { class: 'tw-week-win', text: ph ? ph.name : `${r.daysLeft} days to ${r.goalLabel}` }),
       ]),
     ]));
+    wrap.append(goalBlock());
     wrap.append(statusBlock());
-
-    // ---------- Progress at the top — problems solved / attempted this week ----------
-    const pctDone = weekTarget > 0 ? Math.min(100, Math.round((weekDone / weekTarget) * 100)) : (weekDone > 0 ? 100 : 0);
-    const pctAtt = weekTarget > 0 ? Math.min(100 - pctDone, Math.round((weekAtt / weekTarget) * 100)) : (weekAtt > 0 && !weekDone ? 12 : 0);
-    wrap.append(el('div', { class: 'tw-prog' }, [
-      el('div', { class: 'tw-prog-top' }, [
-        el('span', { class: 'tw-prog-l', text: 'Problems this week' }),
-        el('span', { class: 'tw-prog-v' }, [
-          el('b', { text: `${weekDone}` }),
-          el('span', { text: ` solved${weekAtt ? ` · ${weekAtt} attempted` : ''}${weekTarget ? ` / ${weekTarget}` : ''}` }),
-        ]),
-      ]),
-      el('div', { class: 'tw-prog-track' }, [
-        el('div', { class: 'tw-prog-fill done', style: `width:${pctDone}%` }),
-        el('div', { class: 'tw-prog-fill att', style: `width:${pctAtt}%` }),
-      ]),
-    ]));
+    wrap.append(resumeControl());
+    wrap.append(commitmentsBlock());
+    wrap.append(readinessBlock());
+    wrap.append(recruitingBlock());
+    // Everything below is the secondary "Volume / curriculum" detail.
+    wrap.append(el('div', { class: 'road-h road-vol-h', text: 'Volume · curriculum' }));
 
     // ---------- DSA — the named problems, status from your logs ----------
     let conceptKeys = conceptsForTitles(items.filter((i) => i.area === 'DSA' && (!ph || i.phase === ph.id)).map((i) => i.title));

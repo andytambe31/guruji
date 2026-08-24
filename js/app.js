@@ -16,6 +16,7 @@ import { renderRoadmap } from './views/roadmap.js';
 import { renderNuggets } from './views/nuggets.js';
 import { renderDrills } from './views/drills.js';
 import { renderConcepts } from './views/concepts.js';
+import { renderPipeline } from './views/pipeline.js';
 
 const viewEl = () => document.getElementById('view');
 const navEl = () => document.getElementById('nav');
@@ -36,6 +37,7 @@ const ROUTES = {
   revise: renderNuggets, // legacy alias — Revise became Nuggets
   drills: renderDrills,
   concepts: renderConcepts,
+  pipeline: renderPipeline,
 };
 
 // Full-screen, distraction-free views hide the app chrome (nav + top bar).

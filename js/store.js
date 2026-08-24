@@ -8,6 +8,11 @@ import { seedSystemDesignContent } from './sdi-content.js';
 import { seedCSFundamentalsContent } from './csf-content.js';
 import { seedDSAContent } from './dsa-content.js';
 import { isReadySolve } from './outcomes.js';
+import { computeStudyCycle } from './study-cycle.js';
+import { weeklyLcAggregates, patternMastery, reviewsDue } from './lc-metrics.js';
+import { withCommitmentDefaults, commitmentProgress, executionState, feasibilityState, recentWeeklyHours } from './execution.js';
+import { PROBLEM_BANK } from './problems.js';
+import { runRecoveryRebase } from './rebase-migration.js';
 
 // Wall-clock stamp for sync merges (browser clock). Isolated so a test can
 // control it via page.clock and so the intent reads clearly at each call site.
@@ -169,10 +174,84 @@ export async function runStartupMigrations() {
     await seedSystemDesignContent();
     await seedCSFundamentalsContent();
     await seedDSAContent();
+    await runRecoveryRebase(); // one-time, id-scoped curriculum re-sequence
     // Establish this install's sync role (phone/desktop) on first boot so it's
     // known before any snapshot is exported or merged.
     await getDeviceRole();
   }
+}
+
+// ---------- Study cycle (re-entry after a break) + weekly commitments ----------
+// Both live inside `settings` (already exported + newest-wins synced), so they're
+// backward-compatible: absent → sensible defaults, and old snapshots import fine.
+export async function getStudyCycle() {
+  const s = await getSettings();
+  return s.studyCycle || null;
+}
+// Re-anchor the ACTIVE study sequence to today at the chosen curriculum week.
+// Never touches startWeekOf or goalDate — the deadline and its runway stay real.
+export async function resumeAfterBreak(anchorWeek, { reason = 'return-from-break', today = todayISO() } = {}) {
+  const wk = Math.max(1, Math.round(anchorWeek || 1));
+  await setSettings({ studyCycle: { anchorDate: today, anchorWeek: wk, reason } });
+  return { anchorDate: today, anchorWeek: wk, reason };
+}
+export async function clearStudyCycle() {
+  const s = await getSettings();
+  const { studyCycle, ...rest } = s; // eslint-disable-line no-unused-vars
+  await put(STORES.kv, { k: 'settings', v: { ...rest, updatedAt: nowISO() } });
+}
+export async function getWeeklyCommitments() {
+  const s = await getSettings();
+  return withCommitmentDefaults(s.weeklyCommitments);
+}
+export async function setWeeklyCommitments(patch) {
+  const cur = await getWeeklyCommitments();
+  await setSettings({ weeklyCommitments: { ...cur, ...(patch || {}) } });
+  return getWeeklyCommitments();
+}
+
+// ---------- Recruiting pipeline (minimal) ----------
+// Independent from curriculum completion — the goal is an offer, not a checked-off
+// syllabus. One flat store of company/role rows with a stage.
+export const PIPELINE_STATUSES = ['target', 'referral', 'applied', 'recruiter', 'oa', 'technical', 'onsite', 'offer', 'rejected', 'withdrawn'];
+export async function getPipeline() {
+  const rows = await getAll(STORES.pipeline);
+  return rows.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+}
+export async function upsertPipelineEntry(entry) {
+  const now = nowISO();
+  const rec = {
+    id: entry.id || uid('pipe'),
+    company: entry.company || '(company)',
+    role: entry.role || '',
+    status: PIPELINE_STATUSES.includes(entry.status) ? entry.status : 'target',
+    source: entry.source || '',
+    referral: !!entry.referral,
+    appliedAt: entry.appliedAt || null,
+    nextStepAt: entry.nextStepAt || null,
+    notes: entry.notes || '',
+    createdAt: entry.createdAt || now,
+    updatedAt: now,
+  };
+  await put(STORES.pipeline, rec);
+  emitChanged();
+  return rec;
+}
+export async function deletePipelineEntry(id) {
+  await del(STORES.pipeline, id);
+  emitChanged();
+}
+// Counts by stage + a few rollups the roadmap surfaces.
+export async function pipelineSummary() {
+  const rows = await getPipeline();
+  const byStatus = {};
+  for (const s of PIPELINE_STATUSES) byStatus[s] = 0;
+  for (const r of rows) byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+  const active = rows.filter((r) => !['rejected', 'withdrawn'].includes(r.status)).length;
+  const applications = rows.filter((r) => ['applied', 'recruiter', 'oa', 'technical', 'onsite', 'offer'].includes(r.status)).length;
+  const interviewing = rows.filter((r) => ['recruiter', 'oa', 'technical', 'onsite'].includes(r.status)).length;
+  const offers = byStatus.offer || 0;
+  return { total: rows.length, byStatus, active, applications, interviewing, offers };
 }
 
 // Force-run the bundled content-pack seeders on demand (a recovery path when a
@@ -1457,7 +1536,14 @@ export async function computeRoadmap() {
   const daysElapsed = daysTotal != null ? Math.max(0, Math.min(daysTotal, daysBetween(startDate, today))) : null;
   const pctTime = daysTotal ? Math.min(100, Math.round((daysElapsed / daysTotal) * 100)) : null;
   const weeksLeft = daysLeft != null ? Math.max(0.5, daysLeft / 7) : null;
-  const currentWeek = Math.max(1, Math.floor(daysBetween(startDate, today) / 7) + 1);
+  // Calendar week = elapsed wall-clock (drives deadline runway). Study week =
+  // where the active curriculum sequence sits — equal to calendar week unless a
+  // "resume after break" anchor was set, which counts forward from the chosen
+  // resume week WITHOUT pretending the lost calendar time never happened.
+  const cycle = computeStudyCycle(startDate, settings.studyCycle, today);
+  const currentCalendarWeek = cycle.currentCalendarWeek;
+  const currentStudyWeek = cycle.currentStudyWeek;
+  const currentWeek = currentStudyWeek; // phase status + "this week" use the study sequence
 
   // The FAANG plan (has the offer goal); Reading/side plans don't drive the arc.
   const primary = plans.find((p) => /offer|job|fang|faang/i.test(`${p.goal || ''} ${p.id}`)) || plans[0];
@@ -1504,7 +1590,7 @@ export async function computeRoadmap() {
     || roadPhases.find((p) => p.status === 'behind')
     || roadPhases.find((p) => p.status !== 'done') || null;
 
-  // Pacing — what the remaining work demands per week to land by the deadline.
+  // Remaining work.
   const statusById = new Map(items.map((i) => [i.id, i.status]));
   const primaryItems = items.filter((i) => !primaryId || i.track === primaryId);
   const topicsTotal = primaryItems.length;
@@ -1514,17 +1600,49 @@ export async function computeRoadmap() {
   const remainTopicMin = todo.reduce((s, i) => s + (i.estMinutes || 45), 0);
   const lcRemaining = Math.max(0, stats.lcGoal - stats.lcUnique);
   const remainLCMin = lcRemaining * 18; // ~18 min per problem, ballpark
-  const hoursNeeded = weeksLeft ? Math.round(((remainTopicMin + remainLCMin) / weeksLeft / 60) * 10) / 10 : null;
-  const hoursActual = Math.round((stats.weekMinutes / 60) * 10) / 10;
-  const lcPerWeek = weeksLeft ? Math.ceil(lcRemaining / weeksLeft) : null;
-  const topicsPerWeek = weeksLeft ? Math.ceil(topicsRemaining / weeksLeft) : null;
 
-  // On track = progress keeping up with elapsed time (small grace).
-  const lcPct = stats.lcGoal ? Math.round((stats.lcUnique / stats.lcGoal) * 100) : 0;
-  const topicPct = topicsTotal ? Math.round((topicsDone / topicsTotal) * 100) : 0;
-  const expected = pctTime != null ? pctTime : 0;
-  const onTrackLC = lcPct >= expected - 8;
-  const onTrackTopics = topicPct >= expected - 8;
+  // DEADLINE DEMAND — the math to finish every stated goal by the deadline.
+  // Kept as a truthful signal, but NOT presented as the recommended workload.
+  const deadlineDemand = {
+    lcPerWeek: weeksLeft ? Math.ceil(lcRemaining / weeksLeft) : null,          // e.g. ~27/wk
+    topicsPerWeek: weeksLeft ? Math.ceil(topicsRemaining / weeksLeft) : null,
+    hoursPerWeek: weeksLeft ? Math.round(((remainTopicMin + remainLCMin) / weeksLeft / 60) * 10) / 10 : null,
+  };
+  const lcPerWeek = deadlineDemand.lcPerWeek; // legacy alias (still exported below)
+  const topicsPerWeek = deadlineDemand.topicsPerWeek;
+  const hoursNeeded = deadlineDemand.hoursPerWeek;
+
+  // ACTUALS — what the user has actually been doing (from the raw log).
+  const hoursActual = Math.round((stats.weekMinutes / 60) * 10) / 10;
+  const agg7 = weeklyLcAggregates(log, today, 7);
+  const agg14 = weeklyLcAggregates(log, today, 14);
+  const minutesInLast = (n) => {
+    const since = addDaysISO(today, -(n - 1));
+    return (log || []).reduce((s, e) => s + ((String(e.date || '') >= since && String(e.date || '') <= today) ? Math.max(0, e.focusMinutes || 0) : 0), 0);
+  };
+  const sessionsByArea = (area, n) => {
+    const since = addDaysISO(today, -(n - 1));
+    return (log || []).filter((e) => (e.focusMinutes || 0) > 0 && (e.area || '') === area && String(e.date || '') >= since && String(e.date || '') <= today).length;
+  };
+  const actuals = {
+    focusHours: hoursActual,
+    freshProblems: agg7.freshUnique,
+    readySolves: agg7.readySolves,
+    coldResolves: agg7.coldResolves,
+    systemDesignSessions: sessionsByArea('System Design', 7),
+    fundamentalsSessions: sessionsByArea('CS Fundamentals', 7),
+  };
+
+  // COMMITMENT — what the user is committing to this week (editable; defaults).
+  const commitments = withCommitmentDefaults(settings.weeklyCommitments);
+
+  // RECENT EXECUTION — sustained weekly hours (a gap never drives this to zero
+  // for planning; the commitment acts as the floor at the feasibility layer).
+  const recentHrs = recentWeeklyHours({
+    last7Hours: Math.round((minutesInLast(7) / 60) * 10) / 10,
+    last14Hours: Math.round((minutesInLast(14) / 60) * 10) / 10,
+    last21Hours: Math.round((minutesInLast(21) / 60) * 10) / 10,
+  });
 
   const nextTopics = todo
     .filter((i) => depsSatisfied(i, statusById))
@@ -1539,46 +1657,44 @@ export async function computeRoadmap() {
     endDate: addDaysISO(today, Math.round(weeks * 7)),
   });
 
-  // ---- Computed status: two separate reads, not one manual "on track" ----
-  // (1) Deadline feasibility — a forecast: can the remaining work still fit
-  // before the goal at a sane weekly pace? Driven by the per-week hours the
-  // remaining work demands. (2) Current execution — how THIS week is actually
-  // going vs the weekly expectation, so a zero-effort week can't read "on track".
-  const weekAgoISO = addDaysISO(today, -6);
-  const weekSessions = (log || []).filter((e) => String(e.date || '') >= weekAgoISO).length;
-  const expectHours = hoursNeeded; // per-week hours to clear remaining work by the deadline
+  // FEASIBILITY (deadline reachability) and EXECUTION (this-week commitment
+  // attainment) are computed as SEPARATE signals — never collapsed into one.
+  const feasibility = feasibilityState({
+    weeksLeft, remainTopicMin, lcRemaining,
+    commitmentHours: commitments.focusHours, recentWeeklyHours: recentHrs,
+  });
+  const execution = executionState(commitments, actuals, cycle.anchorActive ? cycle.anchorAgeDays : null);
 
-  let feasibility;
-  if (!goalDate || hoursNeeded == null) feasibility = { status: 'unknown', label: '—', reason: 'Set a goal date to forecast feasibility.' };
-  else if (hoursNeeded <= 12) feasibility = { status: 'ok', label: 'Achievable', reason: `~${hoursNeeded}h/wk clears the remaining work by ${goalDate}.` };
-  else if (hoursNeeded <= 20) feasibility = { status: 'tight', label: 'Tight but achievable', reason: `Needs ~${hoursNeeded}h/wk — a heavy but doable load.` };
-  else if (hoursNeeded <= 35) feasibility = { status: 'risk', label: 'At risk', reason: `Needs ~${hoursNeeded}h/wk — more than most sustain; trim scope or move the date.` };
-  else feasibility = { status: 'off', label: 'Unrealistic', reason: `Needs ~${hoursNeeded}h/wk — the scope or the deadline has to move.` };
+  // READINESS — the primary, un-gameable interview signal (not the 500 bar).
+  const patterns = patternMastery(log, Object.entries(PROBLEM_BANK).map(([id, v]) => ({ id, name: v.name })));
+  const reviews = reviewsDue(log, today);
+  const readyPatterns = patterns.filter((p) => p.status === 'ready').length;
+  const readiness = {
+    ready: stats.lcReady, volume: stats.lcUnique, goal: stats.lcGoal,
+    independentWeek: agg7.byOutcome.independent + agg7.byOutcome.explained,
+    coldWeek: agg7.coldResolves,
+    patterns, readyPatterns, patternsTotal: patterns.length,
+    reviewsDue: reviews.length, reviews,
+  };
 
-  let execution;
-  if (weekSessions === 0) {
-    execution = { status: 'off', label: 'Off track', ratio: 0, reason: `No sessions logged this week — 0 of ~${expectHours ?? '?'} planned hours.` };
-  } else {
-    const ratio = expectHours && expectHours > 0 ? hoursActual / expectHours : (hoursActual > 0 ? 1 : 0);
-    const st = ratio >= 0.85 ? 'on' : ratio >= 0.6 ? 'risk' : 'off';
-    execution = {
-      status: st,
-      label: st === 'on' ? 'On track' : st === 'risk' ? 'At risk' : 'Off track',
-      ratio: Math.round(ratio * 100),
-      reason: `${hoursActual} of ~${expectHours ?? '?'} planned hours completed this week`,
-    };
-  }
+  const pipeline = await pipelineSummary();
 
   return {
     goalDate, goalLabel, target, startDate,
     daysLeft, daysTotal, daysElapsed, pctTime,
-    weeksLeft: weeksLeft != null ? Math.round(weeksLeft) : null, currentWeek,
+    weeksLeft: weeksLeft != null ? Math.round(weeksLeft) : null,
+    currentWeek: currentStudyWeek, currentStudyWeek, currentCalendarWeek,
+    studyCycle: settings.studyCycle || null, weeksBehindCalendar: cycle.weeksBehindCalendar,
     phases: roadPhases, currentPhase,
-    onTrack: onTrackLC && onTrackTopics,
-    feasibility, execution, weekSessions,
+    feasibility, execution,
+    commitments, actuals, commitmentProgress: commitmentProgress(commitments, actuals), recentWeeklyHours: recentHrs,
+    deadlineDemand,
+    readiness, pipeline,
+    // Legacy `pacing` retained for backward compatibility; `perWeek` is the
+    // DEADLINE DEMAND number, no longer presented as the recommendation.
     pacing: {
-      lc: { done: stats.lcUnique, ready: stats.lcReady, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek, pct: lcPct, onTrack: onTrackLC },
-      topics: { done: topicsDone, total: topicsTotal, remaining: topicsRemaining, perWeek: topicsPerWeek, pct: topicPct, onTrack: onTrackTopics },
+      lc: { done: stats.lcUnique, ready: stats.lcReady, goal: stats.lcGoal, remaining: lcRemaining, perWeek: lcPerWeek, actualPerWeek: stats.lcWeek },
+      topics: { done: topicsDone, total: topicsTotal, remaining: topicsRemaining, perWeek: topicsPerWeek },
       concepts: { solid: stats.conceptConfidence.solid, shaky: stats.conceptConfidence.shaky, noyet: stats.conceptConfidence.noyet, total: stats.conceptsTotal },
       hours: { needed: hoursNeeded, actual: hoursActual },
     },
@@ -1802,6 +1918,7 @@ export async function buildExport() {
     studiedConcepts: await getStudiedConcepts(),
     drillState: (await get(STORES.kv, 'drillState'))?.v || {},
     nuggetState: (await get(STORES.kv, 'nuggetState'))?.v || {},
+    pipeline: await getAll(STORES.pipeline), // recruiting entries (additive)
     device: await getDeviceRole(), // which side authored this snapshot
     exportedAt: nowISO(),
     app: 'guruji',
@@ -1916,6 +2033,19 @@ export async function mergeRemote(remote) {
   await mergeCardState('drillState', remote.drillState);
   await mergeCardState('nuggetState', remote.nuggetState);
 
+  // Recruiting pipeline — union by id, newest-by-updatedAt wins. Never deletes.
+  if (Array.isArray(remote.pipeline) && remote.pipeline.length) {
+    const local = await getAll(STORES.pipeline);
+    const byId = new Map(local.map((r) => [r.id, r]));
+    const put2 = [];
+    for (const r of remote.pipeline) {
+      if (!r || !r.id) continue;
+      const cur = byId.get(r.id);
+      if (!cur || _t(r.updatedAt) > _t(cur.updatedAt)) put2.push(r);
+    }
+    if (put2.length) await bulkPut(STORES.pipeline, put2);
+  }
+
   return { ok: true, ...counts, remoteRole, localRole, scheduleAdopted };
 }
 
@@ -1938,5 +2068,6 @@ export async function wipeAll() {
     clearStore(STORES.items),
     clearStore(STORES.schedule),
     clearStore(STORES.log),
+    clearStore(STORES.pipeline),
   ]);
 }
