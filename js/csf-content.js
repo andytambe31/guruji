@@ -12,6 +12,7 @@ import { CSF_DYNAMODB_GUIDE } from './csf-dynamodb.js';
 import { CSF_SNOWFLAKE_GUIDE } from './csf-snowflake.js';
 import { CSF_WIF_GUIDE } from './csf-wif.js';
 import { CSF_NPM_PEERDEPS_GUIDE } from './csf-npm-peerdeps.js';
+import { CSF_K8S_GUIDE } from './csf-k8s.js';
 
 const TRACK_ID = 'csf';
 const PHASE_ID = 'csf-core';
@@ -25,6 +26,7 @@ const GUIDES = [
   { id: 'csf-snowflake', title: 'Snowflake: how it works (warehouses, micro-partitions, Time Travel)', group: 'Databases', notes: CSF_SNOWFLAKE_GUIDE },
   { id: 'csf-wif', title: 'Workload Identity Federation (WIF)', group: 'Security & Auth', notes: CSF_WIF_GUIDE },
   { id: 'csf-npm-peerdeps', title: 'npm peer dependencies & --legacy-peer-deps', group: 'Tooling', notes: CSF_NPM_PEERDEPS_GUIDE },
+  { id: 'csf-k8s', title: 'Kubernetes fundamentals', group: 'Infrastructure', notes: CSF_K8S_GUIDE },
 ];
 
 export async function seedCSFundamentalsContent() {

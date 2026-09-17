@@ -346,9 +346,11 @@ export async function renderDay(mount, { navigate }) {
       return el('div', { class: 'wz-body' }, nodes);
     }
     function stepWork() {
-      const leave = sel(OFFICE_LEAVE, pl.office.leave);
+      // Leave / return are free time inputs — a commute can fall anytime in the
+      // day (early shift, midday, late), not just a fixed 9-to-5 office pattern.
+      const leave = el('input', { type: 'time', class: 'wz-time', value: minutesToHHMM(pl.office.leave) });
       const commute = sel(COMMUTE, pl.office.commute);
-      const back = sel(OFFICE_BACK, pl.office.back);
+      const back = el('input', { type: 'time', class: 'wz-time', value: minutesToHHMM(pl.office.back) });
       const startS = sel(WORK_START, pl.office.start);
       const endS = sel(WORK_END, pl.office.end);
 
@@ -370,7 +372,10 @@ export async function renderDay(mount, { navigate }) {
         el('p', { class: 'wz-note', text: 'Your work hours get blocked either way, so study routes around them. In-office, the commute becomes transit study.' }),
       ]);
       collect = () => {
-        pl.office.leave = +leave.value; pl.office.commute = +commute.value; pl.office.back = +back.value;
+        const lv = toMinutes(leave.value); const bk = toMinutes(back.value);
+        if (Number.isFinite(lv)) pl.office.leave = lv;
+        if (Number.isFinite(bk)) pl.office.back = bk;
+        pl.office.commute = +commute.value;
         pl.office.start = +startS.value; pl.office.end = +endS.value;
       };
       return el('div', { class: 'wz-body' }, [
