@@ -17,6 +17,8 @@ import { renderNuggets } from './views/nuggets.js';
 import { renderDrills } from './views/drills.js';
 import { renderConcepts } from './views/concepts.js';
 import { renderPipeline } from './views/pipeline.js';
+import { renderLogin } from './views/login.js';
+import { isAuthenticated, handleRedirectCallback, logout, currentEmail } from './auth.js';
 
 const viewEl = () => document.getElementById('view');
 const navEl = () => document.getElementById('nav');
@@ -182,10 +184,63 @@ async function cloudSyncOnOpen() {
   } catch { /* best effort — never block the app */ }
 }
 
+// The login wall. Shown when there's no session — hides all app chrome and
+// mounts the login view. Real security is server-side; this gates the UI.
+function mountLoginWall(bootStart, error) {
+  navEl().hidden = true;
+  topbarEl().hidden = true;
+  document.getElementById('app').dataset.route = 'login';
+  renderLogin(clear(viewEl()), { error, onAuthed: () => location.reload() });
+  hideSplash(bootStart);
+}
+
+// Add a "Sign out" affordance to the top bar once, when authenticated. Groups
+// it with the existing Data action on the right so the brand stays left.
+function mountAccountControl() {
+  const bar = topbarEl();
+  if (!bar || document.getElementById('signout-action')) return;
+  const email = currentEmail();
+  const btn = el('button', {
+    id: 'signout-action', class: 'topbar-action topbar-signout',
+    title: email ? `Signed in as ${email} — sign out` : 'Sign out',
+    'aria-label': 'Sign out',
+  }, ['Sign out']);
+  btn.addEventListener('click', () => {
+    if (confirm('Sign out of Guruji?')) logout();
+  });
+
+  const dataLink = bar.querySelector('.topbar-action[data-route="data"]');
+  const group = el('div', { class: 'topbar-actions' });
+  bar.appendChild(group);
+  if (dataLink) group.appendChild(dataLink); // move existing Data action into the group
+  group.appendChild(btn);
+}
+
 async function boot() {
   const bootStart = Date.now();
   // Failsafe: never leave the splash stuck if boot stalls for any reason.
   const splashFailsafe = setTimeout(() => hideSplash(bootStart), 6000);
+
+  // If we're returning from the Cognito Hosted UI, exchange the code for tokens
+  // before deciding whether to show the app or the login wall.
+  let authError = null;
+  try {
+    const cb = await handleRedirectCallback();
+    if (cb.handled && !cb.ok) authError = cb.error || 'sign-in failed';
+  } catch (e) { authError = String(e.message || e); }
+
+  // The login wall: no session -> stop here and show sign-in.
+  if (!isAuthenticated()) {
+    clearTimeout(splashFailsafe);
+    mountLoginWall(bootStart, authError);
+    return;
+  }
+
+  mountAccountControl();
+  return startApp(bootStart, splashFailsafe);
+}
+
+async function startApp(bootStart, splashFailsafe) {
   // Ask the browser to keep our IndexedDB data durable (iOS/Safari may evict
   // "best-effort" storage for home-screen PWAs). Non-blocking, best effort.
   if (navigator.storage && navigator.storage.persist) {
