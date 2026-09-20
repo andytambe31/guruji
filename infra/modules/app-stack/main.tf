@@ -44,6 +44,14 @@ module "lambda" {
     ENV               = var.env
     COGNITO_USER_POOL = module.cognito.user_pool_id
     COGNITO_CLIENT_ID = module.cognito.client_id
+    COGNITO_ISSUER    = module.cognito.issuer
+
+    # The strong single-user gate: only these principals get past authz, even
+    # with a valid pool token. Fail closed when the list is empty.
+    ALLOWED_SUBS      = join(",", var.allowed_subs)
+    ALLOWED_EMAILS    = join(",", var.allowed_emails)
+    REQUIRE_ALLOWLIST = tostring(var.require_allowlist)
+    CORS_ORIGINS      = join(",", var.app_origins)
   }
   tags = local.tags
 }

@@ -21,6 +21,8 @@ module "stack" {
   frontend_acm_certificate_arn = var.frontend_acm_certificate_arn
   cognito_domain_prefix        = var.cognito_domain_prefix
   deletion_protection          = true
+  allowed_subs                 = var.allowed_subs
+  allowed_emails               = var.allowed_emails
   alert_email                  = var.alert_email
   budget_limit_usd             = var.budget_limit_usd
 }

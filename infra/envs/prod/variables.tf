@@ -32,6 +32,18 @@ variable "cognito_domain_prefix" {
   default     = ""
 }
 
+variable "allowed_subs" {
+  description = "Cognito subject IDs allowed into the app (the single-user gate)."
+  type        = list(string)
+  default     = []
+}
+
+variable "allowed_emails" {
+  description = "Emails allowed into the app (case-insensitive)."
+  type        = list(string)
+  default     = []
+}
+
 variable "alert_email" {
   type    = string
   default = ""

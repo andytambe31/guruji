@@ -18,6 +18,8 @@ module "stack" {
   app_origins         = var.app_origins
   enable_frontend     = var.enable_frontend
   deletion_protection = false # dev can be torn down freely
+  allowed_subs        = var.allowed_subs
+  allowed_emails      = var.allowed_emails
   alert_email         = var.alert_email
   budget_limit_usd    = var.budget_limit_usd
 }

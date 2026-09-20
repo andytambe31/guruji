@@ -3,5 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Guruji server-authoritative API (AWS Lambda). @aws-sdk/* is provided by the nodejs20.x runtime, so no bundling is required yet."
+  "description": "Guruji server-authoritative API (AWS Lambda). @aws-sdk/* is provided by the nodejs20.x runtime, so no bundling is required yet.",
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  }
 }

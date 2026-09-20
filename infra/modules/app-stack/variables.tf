@@ -47,6 +47,24 @@ variable "deletion_protection" {
   default     = true
 }
 
+variable "allowed_subs" {
+  description = "Cognito subject IDs allowed past the app authz gate. The strong single-user allow-list."
+  type        = list(string)
+  default     = []
+}
+
+variable "allowed_emails" {
+  description = "Emails allowed past the app authz gate (case-insensitive). Alternative/addition to allowed_subs."
+  type        = list(string)
+  default     = []
+}
+
+variable "require_allowlist" {
+  description = "Fail closed: reject every principal when no allow-list is configured, rather than admitting any pool member."
+  type        = bool
+  default     = true
+}
+
 variable "alert_email" {
   type    = string
   default = ""
