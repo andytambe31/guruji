@@ -1,0 +1,18 @@
+# Terraform working files — never commit state, secrets, or generated artifacts.
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+
+# Real (non-.example) local config — may contain account-specific values.
+backend.hcl
+*.tfvars
+!*.tfvars.example
+
+# Lambda build zips produced by archive_file.
+modules/lambda/.build/
+**/.build/
+
+# Plan output
+*.tfplan

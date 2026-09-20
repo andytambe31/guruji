@@ -1,0 +1,7 @@
+{
+  "name": "guruji-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Guruji server-authoritative API (AWS Lambda). @aws-sdk/* is provided by the nodejs20.x runtime, so no bundling is required yet."
+}

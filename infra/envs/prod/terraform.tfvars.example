@@ -1,0 +1,9 @@
+# Copy to terraform.tfvars and adjust.
+region           = "us-east-1"
+app_origins      = ["https://andytambe31.github.io"]
+enable_frontend  = true
+alert_email      = "you@example.com"
+budget_limit_usd = 15
+# For a custom domain, create an ACM cert in us-east-1 and set:
+# frontend_domain_aliases      = ["app.example.com"]
+# frontend_acm_certificate_arn = "arn:aws:acm:us-east-1:...:certificate/..."

@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and adjust.
+region           = "us-east-1"
+app_origins      = ["https://andytambe31.github.io"]
+enable_frontend  = false
+alert_email      = "you@example.com"
+budget_limit_usd = 5
