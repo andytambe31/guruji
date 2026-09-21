@@ -14,7 +14,19 @@ variable "api_source_dir" {
 }
 
 variable "app_origins" {
-  description = "Web origins for CORS + Cognito callback/logout (e.g. the CloudFront/Pages URL)."
+  description = "Web origins for API CORS (scheme + host, no path), e.g. https://andytambe31.github.io."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_callback_urls" {
+  description = "Exact OAuth redirect URLs registered on the Cognito app client (full app URL incl. path, e.g. https://andytambe31.github.io/guruji/). Empty disables the Hosted UI flow."
+  type        = list(string)
+  default     = []
+}
+
+variable "auth_logout_urls" {
+  description = "OAuth sign-out redirect URLs. Defaults to auth_callback_urls when empty."
   type        = list(string)
   default     = []
 }

@@ -2,6 +2,7 @@ terraform {
   required_providers {
     aws     = { source = "hashicorp/aws", version = "~> 5.40" }
     archive = { source = "hashicorp/archive", version = "~> 2.4" }
+    random  = { source = "hashicorp/random", version = "~> 3.6" }
   }
 }
 
@@ -24,10 +25,13 @@ module "dynamodb" {
 }
 
 module "cognito" {
-  source                  = "../cognito"
-  name                    = "${local.prefix}-users"
-  callback_urls           = var.app_origins
-  logout_urls             = var.app_origins
+  source = "../cognito"
+  name   = "${local.prefix}-users"
+  # Exact OAuth redirect URLs (full app URL incl. path), NOT bare origins —
+  # Cognito matches these exactly against the SPA's redirect_uri. CORS uses
+  # app_origins separately (see the api module).
+  callback_urls           = var.auth_callback_urls
+  logout_urls             = length(var.auth_logout_urls) > 0 ? var.auth_logout_urls : var.auth_callback_urls
   hosted_ui_domain_prefix = var.cognito_domain_prefix
   tags                    = local.tags
 }

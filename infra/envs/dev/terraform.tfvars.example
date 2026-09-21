@@ -1,9 +1,12 @@
 # Copy to terraform.tfvars and adjust.
-region           = "us-east-1"
-app_origins      = ["https://andytambe31.github.io"]
-enable_frontend  = false
-alert_email      = "you@example.com"
-budget_limit_usd = 5
+region          = "us-east-1"
+app_origins     = ["https://andytambe31.github.io", "http://localhost:8099"]
+enable_frontend = false
+# Exact OAuth redirect URLs (full app URL incl. path). Must match the SPA's
+# redirect_uri exactly — that's origin + path, so the trailing /guruji/ matters.
+auth_callback_urls = ["https://andytambe31.github.io/guruji/", "http://localhost:8099/"]
+alert_email        = "you@example.com"
+budget_limit_usd   = 5
 # The single-user gate. After the first Cognito sign-in, set your subject id
 # here (find it in the ID token `sub` or the Cognito console), or list your
 # email. Leave both empty to bootstrap the very first login, then lock it down.

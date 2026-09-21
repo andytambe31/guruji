@@ -1,8 +1,11 @@
 terraform {
   required_providers {
-    aws = { source = "hashicorp/aws", version = "~> 5.40" }
+    aws    = { source = "hashicorp/aws", version = "~> 5.40" }
+    random = { source = "hashicorp/random", version = "~> 3.6" }
   }
 }
+
+data "aws_region" "current" {}
 
 # Cognito user pool — single user today, but a real identity provider so the API
 # is JWT-guarded and this is multi-tenant-ready. Email sign-in, strong password
@@ -37,8 +40,11 @@ resource "aws_cognito_user_pool" "this" {
   tags = var.tags
 }
 
-# Public SPA client — no client secret (a browser can't keep one), SRP auth,
-# short access/id tokens, longer refresh. Callback/logout URLs are the app origins.
+# Public SPA client — no client secret (a browser can't keep one). The front-end
+# uses the Authorization Code + PKCE flow via the Hosted UI, so we enable the
+# `code` grant and the OIDC scopes the app requests. SRP stays enabled as an
+# alternative (e.g. a future custom login form). Short access/id tokens, longer
+# refresh — matching the client's 30-day session window.
 resource "aws_cognito_user_pool_client" "spa" {
   name         = "${var.name}-spa"
   user_pool_id = aws_cognito_user_pool.this.id
@@ -53,6 +59,7 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   supported_identity_providers = ["COGNITO"]
 
+  # OAuth (Hosted UI + PKCE) is on whenever callback URLs are configured.
   allowed_oauth_flows_user_pool_client = length(var.callback_urls) > 0
   allowed_oauth_flows                  = length(var.callback_urls) > 0 ? ["code"] : []
   allowed_oauth_scopes                 = length(var.callback_urls) > 0 ? ["email", "openid", "profile"] : []
@@ -69,9 +76,28 @@ resource "aws_cognito_user_pool_client" "spa" {
   }
 }
 
-# Optional Hosted UI domain (only when a prefix is given).
+# A short random suffix so the Hosted UI domain prefix is globally unique
+# without the operator having to guess an available name. Stable across applies
+# (only regenerates if the pool name changes). Ignored when an explicit prefix
+# is supplied.
+resource "random_string" "domain_suffix" {
+  length  = 6
+  lower   = true
+  upper   = false
+  numeric = true
+  special = false
+  keepers = { pool = var.name }
+}
+
+locals {
+  # A valid Cognito domain prefix: lowercase, digits, hyphens. Derive one from
+  # the pool name + random suffix unless the operator pinned an explicit prefix.
+  domain_prefix = var.hosted_ui_domain_prefix != "" ? var.hosted_ui_domain_prefix : "${replace(lower(var.name), "_", "-")}-${random_string.domain_suffix.result}"
+}
+
+# Hosted UI domain (the *.auth.<region>.amazoncognito.com login page the SPA
+# redirects to). Always provisioned so the login flow works out of the box.
 resource "aws_cognito_user_pool_domain" "this" {
-  count        = var.hosted_ui_domain_prefix == "" ? 0 : 1
-  domain       = var.hosted_ui_domain_prefix
+  domain       = local.domain_prefix
   user_pool_id = aws_cognito_user_pool.this.id
 }

@@ -71,14 +71,14 @@ resource "aws_iam_role_policy" "perms" {
 }
 
 resource "aws_lambda_function" "this" {
-  function_name = var.name
-  role          = aws_iam_role.lambda.arn
-  runtime       = var.runtime
-  handler       = var.handler
-  filename      = data.archive_file.code.output_path
+  function_name    = var.name
+  role             = aws_iam_role.lambda.arn
+  runtime          = var.runtime
+  handler          = var.handler
+  filename         = data.archive_file.code.output_path
   source_code_hash = data.archive_file.code.output_base64sha256
-  memory_size   = var.memory_size
-  timeout       = var.timeout
+  memory_size      = var.memory_size
+  timeout          = var.timeout
 
   environment {
     variables = merge({

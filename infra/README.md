@@ -72,6 +72,24 @@ aws cognito-idp admin-create-user \
   --username you@example.com --user-attributes Name=email,Value=you@example.com Name=email_verified,Value=true
 ```
 
+### Wire the front-end login wall
+
+Cognito is configured for the browser's **Authorization Code + PKCE** flow via
+the Hosted UI (a `*.auth.<region>.amazoncognito.com` domain is provisioned
+automatically). After `apply`, copy the client settings into the PWA:
+
+```bash
+terraform output -json frontend_auth_config
+# -> { "region", "userPoolId", "clientId", "domain" }
+```
+
+Paste those four values into `js/auth-config.js` (`BUILTIN`) and redeploy the
+PWA, **or** paste them into the login screen's "Configure sign-in" form to test
+before shipping. The app client's callback URLs are `auth_callback_urls` (the
+full app URL incl. path — the SPA's `redirect_uri` must match exactly), and the
+API's CORS uses `app_origins` (bare origins). Lock the app to yourself by setting
+`allowed_subs` / `allowed_emails` (the API fails closed with neither set).
+
 If `enable_frontend = true`, publish the PWA:
 
 ```bash
@@ -93,9 +111,13 @@ nothing deploys until you wire the AWS account and trigger it.
 - **Server-authoritative + Cognito**: the API is the source of truth; the browser
   keeps an IndexedDB read-through cache (client work, not in this repo yet).
 - **DynamoDB single-table** (PK/SK + GSI1) mirrors the app's own DynamoDB guide.
-- **`services/api/index.mjs` is a placeholder** — a `/health` route and a `/state`
-  query prove the wiring; the real CRUD (`/items`, `/log`, `/settings`,
-  `/pipeline` with `If-Match` optimistic concurrency) is the next milestone.
+- **The API is real** (`services/api/`) — cryptographic JWT re-verification, an
+  allow-list authz gate, owner-scoped DynamoDB, and CRUD (`/items`, `/log`,
+  `/settings`, `/pipeline`) with `If-Match` optimistic concurrency. See
+  `services/api/README.md`.
+- **Auth is Hosted UI + PKCE**: the SPA client has no secret; a Cognito domain
+  is auto-created so the login flow works out of the box. The app re-verifies
+  tokens itself, so gateway + app both enforce.
 - **IAM**: the CI role uses `PowerUserAccess` + a scoped IAM grant for `guruji-*`
   roles — tighten for a shared account. Lambda's own role is least-privilege
   (logs + X-Ray + this table only).

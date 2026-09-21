@@ -16,6 +16,8 @@ module "stack" {
   env                 = "dev"
   api_source_dir      = "${path.module}/../../../services/api"
   app_origins         = var.app_origins
+  auth_callback_urls  = var.auth_callback_urls
+  auth_logout_urls    = var.auth_logout_urls
   enable_frontend     = var.enable_frontend
   deletion_protection = false # dev can be torn down freely
   allowed_subs        = var.allowed_subs

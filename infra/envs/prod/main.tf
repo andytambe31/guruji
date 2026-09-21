@@ -16,6 +16,8 @@ module "stack" {
   env                          = "prod"
   api_source_dir               = "${path.module}/../../../services/api"
   app_origins                  = var.app_origins
+  auth_callback_urls           = var.auth_callback_urls
+  auth_logout_urls             = var.auth_logout_urls
   enable_frontend              = var.enable_frontend
   frontend_domain_aliases      = var.frontend_domain_aliases
   frontend_acm_certificate_arn = var.frontend_acm_certificate_arn

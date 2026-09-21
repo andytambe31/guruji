@@ -4,7 +4,19 @@ variable "region" {
 }
 
 variable "app_origins" {
-  description = "Web origins for CORS + Cognito (e.g. https://andytambe31.github.io)."
+  description = "Web origins for API CORS (scheme + host, no path), e.g. https://andytambe31.github.io."
+  type        = list(string)
+  default     = ["https://andytambe31.github.io", "http://localhost:8099"]
+}
+
+variable "auth_callback_urls" {
+  description = "Exact OAuth redirect URLs on the Cognito app client (full app URL incl. path)."
+  type        = list(string)
+  default     = ["https://andytambe31.github.io/guruji/", "http://localhost:8099/"]
+}
+
+variable "auth_logout_urls" {
+  description = "OAuth sign-out redirect URLs (defaults to the callback URLs)."
   type        = list(string)
   default     = []
 }
