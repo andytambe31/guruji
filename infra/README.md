@@ -118,6 +118,18 @@ nothing deploys until you wire the AWS account and trigger it.
 - **Auth is Hosted UI + PKCE**: the SPA client has no secret; a Cognito domain
   is auto-created so the login flow works out of the box. The app re-verifies
   tokens itself, so gateway + app both enforce.
+- **Deploy only through the CI role (guardrail)**: bootstrap also creates a
+  `guruji-deploy-only-guardrail` Deny policy that blocks infra-mutating actions
+  (and IAM changes, to stop escalation) for every principal except the deploy
+  role, your break-glass admin (`guardrail_break_glass_arns`), and AWS
+  service-linked roles. Reads still work. Attach it to your human IAM group(s)
+  via `guardrail_attach_group_names` to enforce — it's created but attached to
+  no one by default. Caveat: this is a **standalone account**, so nothing here
+  can bind the root user or future principals — pair it with giving humans
+  read-only and not creating other admin credentials. For account-wide,
+  root-inclusive, future-proof enforcement, enable **AWS Organizations** and
+  promote this same policy JSON to a **Service Control Policy** attached to the
+  account/OU (an SCP the root user can't override).
 - **Least-privilege deploy role (default)**: the GitHub Actions OIDC role gets a
   hand-scoped policy (`guruji-ci-deploy`) that grants only the services these
   stacks manage — DynamoDB/Lambda/Cognito/API Gateway/S3/CloudFront/SNS/

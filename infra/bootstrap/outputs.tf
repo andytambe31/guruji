@@ -22,3 +22,13 @@ output "ci_deploy_policy_arn" {
   description = "Least-privilege deploy policy attached to the CI role (null when use_power_user_access = true)."
   value       = var.use_power_user_access ? null : aws_iam_policy.ci_deploy[0].arn
 }
+
+output "deploy_guardrail_policy_arn" {
+  description = "Deny policy that blocks infra mutation outside the deploy role. Attach to human IAM groups (guardrail_attach_group_names) to enforce."
+  value       = aws_iam_policy.deploy_guardrail.arn
+}
+
+output "deploy_guardrail_enforced_on" {
+  description = "IAM groups currently subject to the guardrail (empty = created but not enforced)."
+  value       = var.guardrail_attach_group_names
+}

@@ -50,6 +50,28 @@ variable "tags" {
   default     = {}
 }
 
+variable "guardrail_break_glass_arns" {
+  description = <<-EOT
+    Principal ARNs exempt from the "deploy only through the CI role" guardrail,
+    besides the deploy role itself. Put the IAM ROLE or USER ARN of your
+    break-glass admin here (for an assumed role use the role ARN, not the
+    session ARN) so you can always fix or remove the guardrail. Leave empty and
+    the guardrail exempts only the deploy role + AWS service-linked roles.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
+variable "guardrail_attach_group_names" {
+  description = <<-EOT
+    IAM group names to attach the deploy-only guardrail to. Empty (the default)
+    creates the policy but enforces it on no one — review it, then add your human
+    group(s) here to opt in.
+  EOT
+  type        = list(string)
+  default     = []
+}
+
 variable "use_power_user_access" {
   description = <<-EOT
     Escape hatch. When false (the default), the CI role gets a least-privilege
