@@ -118,9 +118,17 @@ nothing deploys until you wire the AWS account and trigger it.
 - **Auth is Hosted UI + PKCE**: the SPA client has no secret; a Cognito domain
   is auto-created so the login flow works out of the box. The app re-verifies
   tokens itself, so gateway + app both enforce.
-- **IAM**: the CI role uses `PowerUserAccess` + a scoped IAM grant for `guruji-*`
-  roles — tighten for a shared account. Lambda's own role is least-privilege
-  (logs + X-Ray + this table only).
+- **Least-privilege deploy role (default)**: the GitHub Actions OIDC role gets a
+  hand-scoped policy (`guruji-ci-deploy`) that grants only the services these
+  stacks manage — DynamoDB/Lambda/Cognito/API Gateway/S3/CloudFront/SNS/
+  CloudWatch/Logs/Budgets — and, where the service supports it, only ARNs under
+  the `guruji-*` namespace (plus the remote-state bucket/lock table and the KMS
+  key reachable through S3). A leaked OIDC credential can't touch EC2, RDS, IAM
+  users, billing, or anything outside the project. IAM management is a separate
+  grant scoped to `role/guruji-*`. If a future resource type isn't yet covered,
+  set `use_power_user_access = true` to fall back to the broad AWS-managed
+  `PowerUserAccess` (admin minus IAM) as an escape hatch. Lambda's own runtime
+  role stays least-privilege (logs + X-Ray + this table only).
 - Run `terraform fmt -recursive` before your first commit to satisfy the (advisory)
   format check.
 ```

@@ -44,3 +44,15 @@ variable "tags" {
   type        = map(string)
   default     = {}
 }
+
+variable "use_power_user_access" {
+  description = <<-EOT
+    Escape hatch. When false (the default), the CI role gets a least-privilege
+    deploy policy scoped to ONLY the services + resource ARNs these stacks
+    manage — a leaked credential can't reach EC2/RDS/IAM-users/billing/etc.
+    Set true to fall back to the broad AWS-managed PowerUserAccess (admin minus
+    IAM) if a future resource type isn't yet covered by the scoped policy.
+  EOT
+  type        = bool
+  default     = false
+}

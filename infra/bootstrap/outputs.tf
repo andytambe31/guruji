@@ -17,3 +17,8 @@ output "github_oidc_provider_arn" {
   description = "The GitHub OIDC provider ARN."
   value       = aws_iam_openid_connect_provider.github.arn
 }
+
+output "ci_deploy_policy_arn" {
+  description = "Least-privilege deploy policy attached to the CI role (null when use_power_user_access = true)."
+  value       = var.use_power_user_access ? null : aws_iam_policy.ci_deploy[0].arn
+}

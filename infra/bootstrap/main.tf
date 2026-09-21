@@ -119,16 +119,188 @@ resource "aws_iam_role" "ci" {
   description        = "Assumed by GitHub Actions (OIDC) to plan/apply the ${var.project} stacks."
 }
 
-# Deliberately broad for a solo project so `terraform apply` can manage the full
-# stack. TIGHTEN THIS for a shared account: scope to the specific services and
-# resource ARNs the stacks manage. Kept explicit so the trade-off is visible.
+# ---------------------------------------------------------------------------
+# Deploy permissions. By default the CI role gets a LEAST-PRIVILEGE policy that
+# grants only the services + resource ARNs these stacks actually manage, so a
+# leaked OIDC credential can never reach unrelated services (EC2, RDS, IAM
+# users, billing, …) or resources outside the guruji-* namespace. Flip
+# use_power_user_access=true for the broad AWS-managed policy as an escape hatch.
+# ---------------------------------------------------------------------------
 resource "aws_iam_role_policy_attachment" "ci_power" {
+  count      = var.use_power_user_access ? 1 : 0
   role       = aws_iam_role.ci.name
   policy_arn = "arn:aws:iam::aws:policy/PowerUserAccess"
 }
 
-# PowerUserAccess can't manage IAM (roles/policies the stacks create), so add a
-# scoped IAM-management grant limited to this project's role name prefix.
+locals {
+  acct   = data.aws_caller_identity.current.account_id
+  region = var.region
+  proj   = var.project
+}
+
+data "aws_iam_policy_document" "ci_deploy" {
+  # --- Remote-state backend: the state bucket, the lock table, and the KMS
+  #     key S3 uses to encrypt state (reachable only through S3). ---
+  statement {
+    sid       = "TerraformStateBucket"
+    effect    = "Allow"
+    actions   = ["s3:ListBucket", "s3:GetBucketVersioning", "s3:GetBucketLocation"]
+    resources = ["arn:aws:s3:::${var.state_bucket_name}"]
+  }
+  statement {
+    sid       = "TerraformStateObjects"
+    effect    = "Allow"
+    actions   = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]
+    resources = ["arn:aws:s3:::${var.state_bucket_name}/*"]
+  }
+  statement {
+    sid       = "TerraformStateLock"
+    effect    = "Allow"
+    actions   = ["dynamodb:GetItem", "dynamodb:PutItem", "dynamodb:DeleteItem", "dynamodb:DescribeTable"]
+    resources = ["arn:aws:dynamodb:${local.region}:${local.acct}:table/${var.lock_table_name}"]
+  }
+  statement {
+    sid       = "StateKmsViaS3"
+    effect    = "Allow"
+    actions   = ["kms:Decrypt", "kms:GenerateDataKey", "kms:DescribeKey"]
+    resources = ["*"]
+    condition {
+      test     = "StringEquals"
+      variable = "kms:ViaService"
+      values   = ["s3.${local.region}.amazonaws.com"]
+    }
+  }
+
+  # --- Application resources, each scoped to the guruji-* namespace where the
+  #     service supports resource-level permissions. ---
+  statement {
+    sid     = "DynamoDBAppTables"
+    effect  = "Allow"
+    actions = ["dynamodb:*"]
+    resources = [
+      "arn:aws:dynamodb:*:${local.acct}:table/${local.proj}-*",
+      "arn:aws:dynamodb:*:${local.acct}:table/${local.proj}-*/index/*",
+    ]
+  }
+  statement {
+    sid       = "DynamoDBList"
+    effect    = "Allow"
+    actions   = ["dynamodb:ListTables", "dynamodb:DescribeLimits"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "LambdaFunctions"
+    effect    = "Allow"
+    actions   = ["lambda:*"]
+    resources = ["arn:aws:lambda:*:${local.acct}:function:${local.proj}-*"]
+  }
+  statement {
+    sid       = "LambdaAccount"
+    effect    = "Allow"
+    actions   = ["lambda:GetAccountSettings", "lambda:ListFunctions"]
+    resources = ["*"]
+  }
+  statement {
+    sid    = "Logs"
+    effect = "Allow"
+    actions = [
+      "logs:CreateLogGroup", "logs:DeleteLogGroup", "logs:PutRetentionPolicy",
+      "logs:DeleteRetentionPolicy", "logs:TagResource", "logs:UntagResource",
+      "logs:ListTagsForResource", "logs:TagLogGroup", "logs:UntagLogGroup",
+      "logs:ListTagsLogGroup", "logs:CreateLogStream", "logs:PutLogEvents",
+    ]
+    resources = [
+      "arn:aws:logs:*:${local.acct}:log-group:/aws/lambda/${local.proj}-*",
+      "arn:aws:logs:*:${local.acct}:log-group:/aws/lambda/${local.proj}-*:*",
+      "arn:aws:logs:*:${local.acct}:log-group:/aws/apigw/${local.proj}-*",
+      "arn:aws:logs:*:${local.acct}:log-group:/aws/apigw/${local.proj}-*:*",
+    ]
+  }
+  statement {
+    sid       = "LogsDescribe"
+    effect    = "Allow"
+    actions   = ["logs:DescribeLogGroups", "logs:DescribeLogStreams"]
+    resources = ["*"]
+  }
+  statement {
+    sid     = "AppS3Buckets"
+    effect  = "Allow"
+    actions = ["s3:*"]
+    resources = [
+      "arn:aws:s3:::${local.proj}-*",
+      "arn:aws:s3:::${local.proj}-*/*",
+    ]
+  }
+  statement {
+    sid       = "SnsAlerts"
+    effect    = "Allow"
+    actions   = ["sns:*"]
+    resources = ["arn:aws:sns:*:${local.acct}:${local.proj}-*"]
+  }
+  statement {
+    sid    = "Budgets"
+    effect = "Allow"
+    # Budgets exposes only these two IAM actions; ModifyBudget covers create/
+    # update/delete, ViewBudget covers read.
+    actions   = ["budgets:ViewBudget", "budgets:ModifyBudget"]
+    resources = ["arn:aws:budgets::${local.acct}:budget/${local.proj}-*"]
+  }
+  statement {
+    sid    = "CloudWatchAlarms"
+    effect = "Allow"
+    actions = [
+      "cloudwatch:PutMetricAlarm", "cloudwatch:DeleteAlarms",
+      "cloudwatch:DescribeAlarms", "cloudwatch:DescribeAlarmsForMetric",
+      "cloudwatch:EnableAlarmActions", "cloudwatch:DisableAlarmActions",
+      "cloudwatch:ListTagsForResource", "cloudwatch:TagResource", "cloudwatch:UntagResource",
+    ]
+    resources = ["*"]
+  }
+
+  # --- Services whose control-plane ARNs aren't predictable / don't support
+  #     fine-grained resource scoping. Still a bounded set of services. ---
+  statement {
+    sid       = "Cognito"
+    effect    = "Allow"
+    actions   = ["cognito-idp:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "ApiGateway"
+    effect    = "Allow"
+    actions   = ["apigateway:*"]
+    resources = ["arn:aws:apigateway:*::/*"]
+  }
+  statement {
+    sid       = "CloudFront"
+    effect    = "Allow"
+    actions   = ["cloudfront:*"]
+    resources = ["*"]
+  }
+  statement {
+    sid       = "CallerIdentity"
+    effect    = "Allow"
+    actions   = ["sts:GetCallerIdentity", "tag:GetResources"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_policy" "ci_deploy" {
+  count       = var.use_power_user_access ? 0 : 1
+  name        = "${var.project}-ci-deploy"
+  description = "Least-privilege Terraform apply permissions for the ${var.project} stacks (scoped to the ${var.project}-* namespace)."
+  policy      = data.aws_iam_policy_document.ci_deploy.json
+}
+
+resource "aws_iam_role_policy_attachment" "ci_deploy" {
+  count      = var.use_power_user_access ? 0 : 1
+  role       = aws_iam_role.ci.name
+  policy_arn = aws_iam_policy.ci_deploy[0].arn
+}
+
+# IAM management for the roles/policies the stacks create — scoped to this
+# project's role name prefix. Needed in BOTH modes (PowerUserAccess excludes
+# IAM), so it's attached unconditionally.
 data "aws_iam_policy_document" "ci_iam" {
   statement {
     effect = "Allow"
