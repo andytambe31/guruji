@@ -82,33 +82,52 @@ resource "aws_iam_openid_connect_provider" "github" {
 }
 
 locals {
-  # sub claims like: repo:owner/repo:ref:refs/heads/main  (or :* for any ref)
-  allowed_subs = [
-    for b in var.github_branches :
-    b == "*" ? "repo:${var.github_owner}/${var.github_repo}:*" : "repo:${var.github_owner}/${var.github_repo}:ref:refs/heads/${b}"
-  ]
+  repo = "repo:${var.github_owner}/${var.github_repo}"
+
+  # Exact branch refs are matched with StringEquals (no wildcard slack); only an
+  # explicit "*" entry opts into a StringLike pattern. sub claims look like:
+  #   repo:owner/repo:ref:refs/heads/main   (exact)
+  #   repo:owner/repo:*                      (any ref — opt-in)
+  exact_subs    = [for b in var.github_branches : "${local.repo}:ref:refs/heads/${b}" if b != "*"]
+  wildcard_subs = [for b in var.github_branches : "${local.repo}:*" if b == "*"]
+
+  # One trust statement per matcher (Allow statements are OR'd). StringEquals and
+  # StringLike can't share a statement or they'd be AND'd and never match.
+  sub_matchers = concat(
+    length(local.exact_subs) > 0 ? [{ test = "StringEquals", values = local.exact_subs }] : [],
+    length(local.wildcard_subs) > 0 ? [{ test = "StringLike", values = local.wildcard_subs }] : [],
+  )
 }
 
+# Trust policy: the role can be assumed ONLY by GitHub Actions runners, and only
+# for this repo on the allowed refs. It permits nothing but
+# sts:AssumeRoleWithWebIdentity from the GitHub OIDC provider (no account-root or
+# IAM-principal trust at all), pins the audience to sts.amazonaws.com, and pins
+# the subject to this repo's allowed refs. A token from any other repo, provider,
+# or audience — or a plain sts:AssumeRole — cannot assume it.
 data "aws_iam_policy_document" "ci_assume" {
-  statement {
-    effect  = "Allow"
-    actions = ["sts:AssumeRoleWithWebIdentity"]
+  dynamic "statement" {
+    for_each = local.sub_matchers
+    content {
+      effect  = "Allow"
+      actions = ["sts:AssumeRoleWithWebIdentity"]
 
-    principals {
-      type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
-    }
+      principals {
+        type        = "Federated"
+        identifiers = [aws_iam_openid_connect_provider.github.arn]
+      }
 
-    condition {
-      test     = "StringEquals"
-      variable = "token.actions.githubusercontent.com:aud"
-      values   = ["sts.amazonaws.com"]
-    }
+      condition {
+        test     = "StringEquals"
+        variable = "token.actions.githubusercontent.com:aud"
+        values   = ["sts.amazonaws.com"]
+      }
 
-    condition {
-      test     = "StringLike"
-      variable = "token.actions.githubusercontent.com:sub"
-      values   = local.allowed_subs
+      condition {
+        test     = statement.value.test
+        variable = "token.actions.githubusercontent.com:sub"
+        values   = statement.value.values
+      }
     }
   }
 }

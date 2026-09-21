@@ -34,9 +34,14 @@ variable "github_repo" {
 }
 
 variable "github_branches" {
-  description = "Branches allowed to assume the CI role via OIDC (sub claim). Use ['*'] to allow any ref."
+  description = "Branches allowed to assume the CI role via OIDC (sub claim). Use ['*'] to allow any ref (discouraged — also lets fork PR workflows assume it)."
   type        = list(string)
   default     = ["main"]
+
+  validation {
+    condition     = length(var.github_branches) > 0
+    error_message = "github_branches must list at least one branch (or [\"*\"]); an empty list would leave the trust policy with no way to assume the role."
+  }
 }
 
 variable "tags" {
